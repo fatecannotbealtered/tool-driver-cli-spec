@@ -56,7 +56,8 @@ python scripts/build_spec_bundle.py
 ```
 
 第一条命令安装校验依赖。第二条检查结构、正反例、状态约束、条款编号和本地链接。
-第三条只在工作树干净时生成规范 ZIP、manifest 和校验清单；产物写入 `dist/`，不会发布 Release 或上传 SkillHub。
+第三条只在工作树干净时，从该提交的文件生成规范 ZIP、manifest 和校验清单。
+产物写入 `dist/`，不会发布 Release 或上传 SkillHub。
 
 这些检查只验证规范仓库自身的一致性，不构成真实应用或设备的验证证据。
 

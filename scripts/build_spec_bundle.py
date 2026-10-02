@@ -19,6 +19,32 @@ def git(*args: str) -> str:
     return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
 
 
+def git_bytes(*args: str) -> bytes:
+    return subprocess.check_output(["git", "-C", str(ROOT), *args])
+
+
+def committed_inputs(source_commit: str) -> dict[str, bytes]:
+    required = {"README.md", "AGENTS.md", "VERSION", "CHANGELOG.md", "requirements-dev.txt"}
+    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}}
+    inputs = {}
+    for record in git_bytes("ls-tree", "-r", "-z", "--full-tree", source_commit).split(b"\0"):
+        if not record:
+            continue
+        metadata, raw_path = record.split(b"\t", 1)
+        mode, kind, object_id = metadata.decode("ascii").split()
+        relative = raw_path.decode("utf-8")
+        path = Path(relative)
+        if relative not in required and not (len(path.parts) > 1 and path.suffix in suffixes.get(path.parts[0], set())):
+            continue
+        if mode not in {"100644", "100755"} or kind != "blob":
+            raise ValueError(f"only regular committed files are specification components: {relative}")
+        inputs[relative] = git_bytes("cat-file", "blob", object_id)
+    missing = required - inputs.keys()
+    if missing:
+        raise ValueError(f"missing committed specification files: {sorted(missing)}")
+    return inputs
+
+
 def publish_local(path: Path, data: bytes) -> None:
     if path.exists():
         if path.read_bytes() != data:
@@ -32,18 +58,10 @@ def build(output: Path) -> dict:
     if git("status", "--porcelain"):
         raise ValueError("commit the intended draft first; release source must be clean")
     source_commit = git("rev-parse", "HEAD")
-    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    files = [ROOT / p for p in ["README.md", "AGENTS.md", "VERSION", "CHANGELOG.md", "requirements-dev.txt"]]
-    for folder, pattern in [("docs", "*.md"), ("schemas", "*.json"), ("examples", "*.json"), ("examples", "*.md"), ("scripts", "*.py")]:
-        files.extend((ROOT / folder).rglob(pattern))
-    inputs = {}
+    inputs = committed_inputs(source_commit)
+    version = inputs["VERSION"].decode("utf-8").strip()
     components = []
-    for file in sorted(set(files)):
-        if file.is_symlink():
-            raise ValueError(f"symlinks are not specification components: {file}")
-        relative = file.relative_to(ROOT).as_posix()
-        payload = file.read_bytes()
-        inputs[relative] = payload
+    for relative, payload in sorted(inputs.items()):
         role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith("examples/") else "validator" if relative.startswith("scripts/") else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
         components.append({"name": relative, "version": version, "path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "role": role})
     manifest = {
@@ -61,10 +79,11 @@ def build(output: Path) -> dict:
     manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     inputs["manifest.json"] = manifest_bytes
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
         for relative, payload in sorted(inputs.items()):
             entry = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
-            entry.compress_type = zipfile.ZIP_DEFLATED
+            entry.create_system = 3
+            entry.compress_type = zipfile.ZIP_STORED
             entry.external_attr = 0o644 << 16
             archive.writestr(entry, payload)
     archive_bytes = buffer.getvalue()
