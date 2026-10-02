@@ -1,0 +1,90 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "request_id": "request-apply-02",
+  "phase": "apply",
+  "data": {
+    "receipt": {
+      "operation_id": "operation-02",
+      "target": {
+        "mode": "session",
+        "engine_id": "editor-engine",
+        "instance_id": "instance-01",
+        "object_id": "document-01",
+        "locator": "session://instance-01/document-01"
+      },
+      "authorization_scope_id": "scope-isolated-01",
+      "effects": [
+        "change"
+      ],
+      "snapshot_before": {
+        "id": "snapshot-01",
+        "source": "live",
+        "revision": "memory-01",
+        "observed_at": "2026-10-02T00:00:00Z",
+        "dependencies": [
+          {
+            "identity": "template-01",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "snapshot_after": {
+        "id": "snapshot-02",
+        "source": "live",
+        "revision": "memory-02",
+        "observed_at": "2026-10-02T00:00:01Z",
+        "dependencies": [
+          {
+            "identity": "template-01",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "outcome": {
+        "execution": "failed",
+        "change": "partial",
+        "persistence": "unsaved",
+        "verification": {
+          "status": "incomplete",
+          "scope": "dependent_workflow",
+          "snapshot_id": "snapshot-02",
+          "coverage": "partial",
+          "checks": [],
+          "not_checked": [
+            {
+              "id": "downstream-step",
+              "required": true,
+              "reason": "Skipped after prerequisite failure."
+            }
+          ],
+          "evidence_refs": []
+        }
+      },
+      "changed_items": [
+        {
+          "id": "object-02",
+          "change": "created",
+          "evidence_ref": "evidence://synthetic/readback-01"
+        }
+      ],
+      "artifacts": [],
+      "recovery": {
+        "action": "inspect",
+        "reason": "A real operation was partially applied.",
+        "supported": true
+      }
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  },
+  "error": {
+    "code": "E_PARTIAL",
+    "message": "One dependent step applied; the next step failed.",
+    "retryable": false,
+    "details": {
+      "next_action": "inspect"
+    }
+  }
+}

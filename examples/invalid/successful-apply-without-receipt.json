@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "schema_version": "1.0",
+  "request_id": "request-apply-01",
+  "phase": "apply",
+  "data": {},
+  "meta": {
+    "duration_ms": 12
+  }
+}

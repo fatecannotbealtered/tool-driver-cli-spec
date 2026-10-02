@@ -1,0 +1,41 @@
+{
+  "evidence_id": "evidence-contract-01",
+  "spec_version": "0.1.0",
+  "schema_version": "1.0",
+  "evidence_context": "release",
+  "kind": "contract",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "source_fingerprint_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "package_sha256": null,
+  "recorded_at": "2026-10-02T00:00:00Z",
+  "environment": {
+    "platform": "synthetic",
+    "arch": "any",
+    "components": [
+      {
+        "name": "fixture-validator",
+        "role": "validator",
+        "version": "1.0.0",
+        "build_id": null,
+        "identity_status": "observed"
+      }
+    ]
+  },
+  "input_fingerprint_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "target": null,
+  "snapshot_id": null,
+  "capabilities": [
+    "response-envelope"
+  ],
+  "checks": [
+    {
+      "id": "parse-json",
+      "status": "passed",
+      "required": true,
+      "evidence_ref": "evidence://synthetic/parse-json"
+    }
+  ],
+  "limitations": [
+    "Synthetic structure only; no real application or device has been verified."
+  ]
+}

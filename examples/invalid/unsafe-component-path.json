@@ -1,0 +1,55 @@
+{
+  "artifact_kind": "cli_product",
+  "name": "demo-driver",
+  "version": "1.2.0",
+  "spec_version": "0.1.0",
+  "status": "draft",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "source_dirty": false,
+  "target": {
+    "os": "windows",
+    "arch": "amd64"
+  },
+  "components": [
+    {
+      "name": "driver",
+      "version": "1.2.0",
+      "path": "../driver.exe",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "role": "cli"
+    },
+    {
+      "name": "bridge",
+      "version": "1.2.0",
+      "path": "plugins/bridge.jar",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "role": "adapter"
+    }
+  ],
+  "compatibility": {
+    "application": [
+      {
+        "identity": "document-editor",
+        "version_range": "3.2.x",
+        "validation": "not_run",
+        "evidence_refs": []
+      }
+    ],
+    "plugin": [],
+    "protocol": [
+      {
+        "identity": "bridge-protocol",
+        "version_range": "1.0",
+        "validation": "not_run",
+        "evidence_refs": []
+      }
+    ],
+    "skill": []
+  },
+  "external_requirements": [
+    "Application installation and runtime are not included."
+  ],
+  "limitations": [
+    "Synthetic manifest; the named component bytes do not exist."
+  ]
+}

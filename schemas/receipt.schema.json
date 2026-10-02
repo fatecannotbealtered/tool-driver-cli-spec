@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:receipt:1.0",
+  "title": "receipt",
+  "type": "object",
+  "properties": {
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+    },
+    "authorization_scope_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "effects": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
+    },
+    "snapshot_before": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "snapshot_after": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "outcome": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/outcome"
+    },
+    "changed_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "change": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "change",
+          "evidence_ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_snapshot_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "sha256",
+          "source_snapshot_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "enum": [
+            "none",
+            "inspect",
+            "resume",
+            "retry",
+            "restore",
+            "human_review"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supported": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "reason",
+        "supported"
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "operation_id",
+    "target",
+    "authorization_scope_id",
+    "effects",
+    "snapshot_before",
+    "snapshot_after",
+    "outcome",
+    "changed_items",
+    "artifacts",
+    "recovery"
+  ],
+  "additionalProperties": false
+}

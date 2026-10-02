@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:plan:1.0",
+  "title": "plan",
+  "type": "object",
+  "properties": {
+    "plan_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+    },
+    "base_snapshot": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+    },
+    "authorization_scope_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effects": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "enum": [
+            "plan",
+            "estimate",
+            "trial_observed"
+          ]
+        },
+        "known_changes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "trial_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "known_changes",
+        "unknowns",
+        "constraints",
+        "trial_snapshot"
+      ],
+      "additionalProperties": false
+    },
+    "can_apply": {
+      "type": "boolean"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "plan_id",
+    "operation_id",
+    "target",
+    "base_snapshot",
+    "authorization_scope_id",
+    "effects",
+    "preview",
+    "can_apply",
+    "expires_at"
+  ],
+  "additionalProperties": false
+}

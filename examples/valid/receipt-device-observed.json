@@ -1,0 +1,80 @@
+{
+  "operation_id": "operation-01",
+  "target": {
+    "mode": "device",
+    "engine_id": "device-controller",
+    "instance_id": "device-01",
+    "object_id": "actuator-01",
+    "locator": "device://device-01/actuator-01"
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "physical"
+  ],
+  "snapshot_before": {
+    "id": "snapshot-01",
+    "source": "device",
+    "revision": "memory-01",
+    "observed_at": "2026-10-02T00:00:00Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "snapshot_after": {
+    "id": "snapshot-02",
+    "source": "device",
+    "revision": "memory-02",
+    "observed_at": "2026-10-02T00:00:01Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "outcome": {
+    "execution": "completed",
+    "change": "applied",
+    "persistence": "not_applicable",
+    "verification": {
+      "status": "passed",
+      "scope": "declared_operation_postconditions",
+      "snapshot_id": "snapshot-02",
+      "coverage": "complete",
+      "checks": [
+        {
+          "id": "check-object-readback",
+          "status": "passed",
+          "required": true,
+          "evidence_ref": "evidence://synthetic/readback-01"
+        }
+      ],
+      "not_checked": [
+        {
+          "id": "domain-suitability",
+          "required": false,
+          "reason": "Outside the declared operation scope."
+        }
+      ],
+      "evidence_refs": [
+        "evidence://synthetic/readback-01"
+      ]
+    }
+  },
+  "changed_items": [
+    {
+      "id": "object-02",
+      "change": "created",
+      "evidence_ref": "evidence://synthetic/readback-01"
+    }
+  ],
+  "artifacts": [],
+  "recovery": {
+    "action": "none",
+    "reason": "Declared in-memory operation verified; save was not requested.",
+    "supported": true
+  }
+}

@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:release-manifest:1.0",
+  "title": "release-manifest",
+  "type": "object",
+  "properties": {
+    "artifact_kind": {
+      "enum": [
+        "specification",
+        "cli_product"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "spec_version": {
+      "const": "0.1.0"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "experimental",
+        "verified",
+        "stable"
+      ]
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "source_dirty": {
+      "type": "boolean"
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "enum": [
+            "any",
+            "windows",
+            "linux",
+            "darwin"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "any",
+            "amd64",
+            "arm64"
+          ]
+        }
+      },
+      "required": [
+        "os",
+        "arch"
+      ],
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "role": {
+            "enum": [
+              "cli",
+              "adapter",
+              "plugin",
+              "skill",
+              "documentation",
+              "schema",
+              "example",
+              "validator",
+              "dependency_manifest"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "path",
+          "sha256",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version_range": {
+                "type": "string",
+                "minLength": 1
+              },
+              "validation": {
+                "enum": [
+                  "not_run",
+                  "verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "identity",
+              "version_range",
+              "validation",
+              "evidence_refs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "plugin": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version_range": {
+                "type": "string",
+                "minLength": 1
+              },
+              "validation": {
+                "enum": [
+                  "not_run",
+                  "verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "identity",
+              "version_range",
+              "validation",
+              "evidence_refs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "protocol": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version_range": {
+                "type": "string",
+                "minLength": 1
+              },
+              "validation": {
+                "enum": [
+                  "not_run",
+                  "verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "identity",
+              "version_range",
+              "validation",
+              "evidence_refs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "skill": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "identity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version_range": {
+                "type": "string",
+                "minLength": 1
+              },
+              "validation": {
+                "enum": [
+                  "not_run",
+                  "verified"
+                ]
+              },
+              "evidence_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "identity",
+              "version_range",
+              "validation",
+              "evidence_refs"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "application",
+        "plugin",
+        "protocol",
+        "skill"
+      ],
+      "additionalProperties": false
+    },
+    "external_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "artifact_kind",
+    "name",
+    "version",
+    "spec_version",
+    "status",
+    "source_commit",
+    "source_dirty",
+    "target",
+    "components",
+    "compatibility",
+    "external_requirements",
+    "limitations"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,73 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "request_id": "request-unknown-01",
+  "phase": "apply",
+  "data": {
+    "receipt": {
+      "operation_id": "operation-03",
+      "target": {
+        "mode": "session",
+        "engine_id": "editor-engine",
+        "instance_id": "instance-01",
+        "object_id": "document-01",
+        "locator": "session://instance-01/document-01"
+      },
+      "authorization_scope_id": "scope-isolated-01",
+      "effects": [
+        "change"
+      ],
+      "snapshot_before": {
+        "id": "snapshot-01",
+        "source": "live",
+        "revision": "memory-01",
+        "observed_at": "2026-10-02T00:00:00Z",
+        "dependencies": [
+          {
+            "identity": "template-01",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "snapshot_after": null,
+      "outcome": {
+        "execution": "unknown",
+        "change": "unknown",
+        "persistence": "unknown",
+        "verification": {
+          "status": "incomplete",
+          "scope": "declared_operation_postconditions",
+          "snapshot_id": null,
+          "coverage": "none",
+          "checks": [],
+          "not_checked": [
+            {
+              "id": "readback",
+              "required": true,
+              "reason": "No reply or fresh observation is available."
+            }
+          ],
+          "evidence_refs": []
+        }
+      },
+      "changed_items": [],
+      "artifacts": [],
+      "recovery": {
+        "action": "inspect",
+        "reason": "Query and reconcile before any new write.",
+        "supported": true
+      }
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  },
+  "error": {
+    "code": "E_OUTCOME_UNKNOWN",
+    "message": "The native reply was lost after submission.",
+    "retryable": false,
+    "details": {
+      "next_action": "operation status"
+    }
+  }
+}

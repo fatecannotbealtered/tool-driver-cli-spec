@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:reference:1.0",
+  "title": "reference",
+  "type": "object",
+  "properties": {
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "spec_version": {
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effects": {
+            "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "session",
+                "file",
+                "device"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "request_schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result_schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maturity": {
+            "enum": [
+              "draft",
+              "experimental",
+              "verified",
+              "stable"
+            ]
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/environment"
+            },
+            "minItems": 1
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "recovery": {
+            "type": "object",
+            "properties": {
+              "atomicity": {
+                "enum": [
+                  "none",
+                  "per_item",
+                  "whole",
+                  "unknown"
+                ]
+              },
+              "undo": {
+                "type": "boolean"
+              },
+              "idempotent": {
+                "type": "boolean"
+              },
+              "cancel": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "atomicity",
+              "undo",
+              "idempotent",
+              "cancel"
+            ],
+            "additionalProperties": false
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "extensions": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "command",
+          "effects",
+          "modes",
+          "request_schema",
+          "result_schema",
+          "maturity",
+          "environments",
+          "limits",
+          "recovery",
+          "evidence_refs"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "tool",
+    "tool_version",
+    "spec_version",
+    "schema_version",
+    "capabilities"
+  ],
+  "additionalProperties": false
+}

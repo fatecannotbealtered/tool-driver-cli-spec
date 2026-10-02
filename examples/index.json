@@ -1,0 +1,161 @@
+{
+  "spec_version": "0.1.0",
+  "examples": [
+    {
+      "path": "examples/valid/plan-estimate.json",
+      "schema": "plan.schema.json",
+      "valid": true,
+      "purpose": "plan-estimate"
+    },
+    {
+      "path": "examples/valid/receipt-applied-unsaved.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "receipt-applied-unsaved"
+    },
+    {
+      "path": "examples/valid/response-applied-unsaved.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-applied-unsaved"
+    },
+    {
+      "path": "examples/valid/response-partial.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-partial"
+    },
+    {
+      "path": "examples/valid/response-unknown.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-unknown"
+    },
+    {
+      "path": "examples/valid/reference-experimental.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "reference-experimental"
+    },
+    {
+      "path": "examples/valid/release-manifest-draft.json",
+      "schema": "release-manifest.schema.json",
+      "valid": true,
+      "purpose": "release-manifest-draft"
+    },
+    {
+      "path": "examples/valid/evidence-development.json",
+      "schema": "evidence.schema.json",
+      "valid": true,
+      "purpose": "evidence-development"
+    },
+    {
+      "path": "examples/valid/receipt-file-saved.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "receipt-file-saved"
+    },
+    {
+      "path": "examples/valid/receipt-device-observed.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "receipt-device-observed"
+    },
+    {
+      "path": "examples/valid/response-noop-no-required-checks.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-noop-no-required-checks"
+    },
+    {
+      "path": "examples/valid/response-check-found-violations.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-check-found-violations"
+    },
+    {
+      "path": "examples/invalid/partial-as-success.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Partial final writes cannot report success."
+    },
+    {
+      "path": "examples/invalid/unknown-retry.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Unknown changes cannot be blindly retried."
+    },
+    {
+      "path": "examples/invalid/not-started-but-applied.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A not-started operation cannot claim applied change."
+    },
+    {
+      "path": "examples/invalid/passed-with-failed-check.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A failed check cannot aggregate to passed."
+    },
+    {
+      "path": "examples/invalid/passed-without-target-snapshot.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Passed readback must match a real observed snapshot."
+    },
+    {
+      "path": "examples/invalid/trial-without-observation.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "An observed trial needs its own trial snapshot."
+    },
+    {
+      "path": "examples/invalid/unsafe-component-path.json",
+      "schema": "release-manifest.schema.json",
+      "valid": false,
+      "purpose": "Component paths must stay inside the package."
+    },
+    {
+      "path": "examples/invalid/release-evidence-without-package.json",
+      "schema": "evidence.schema.json",
+      "valid": false,
+      "purpose": "Release evidence binds the actual package."
+    },
+    {
+      "path": "examples/invalid/verified-without-evidence.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Verified capabilities cannot omit evidence."
+    },
+    {
+      "path": "examples/invalid/unsupported-schema-version.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Consumers must reject an unknown major version."
+    },
+    {
+      "path": "examples/invalid/nested-trial-without-observation.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Nested plans follow the same semantic rules."
+    },
+    {
+      "path": "examples/invalid/not-applicable-required-failure.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Not applicable cannot bypass required checks."
+    },
+    {
+      "path": "examples/invalid/successful-apply-without-receipt.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Final successful application returns its receipt."
+    },
+    {
+      "path": "examples/invalid/release-evidence-without-environment.json",
+      "schema": "evidence.schema.json",
+      "valid": false,
+      "purpose": "Release evidence cannot omit component identities."
+    }
+  ]
+}

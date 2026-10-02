@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:evidence:1.0",
+  "title": "evidence",
+  "type": "object",
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_version": {
+      "const": "0.1.0"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "evidence_context": {
+      "enum": [
+        "development",
+        "release"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "contract",
+        "simulated_adapter",
+        "real_application",
+        "artifact_consumer",
+        "manual_review"
+      ]
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "source_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "package_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "enum": [
+                  "cli",
+                  "adapter",
+                  "plugin",
+                  "application",
+                  "device",
+                  "validator",
+                  "runtime"
+                ]
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "build_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "identity_status": {
+                "enum": [
+                  "observed",
+                  "unavailable",
+                  "not_applicable"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "name",
+              "role",
+              "version",
+              "build_id",
+              "identity_status"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "identity_status": {
+                      "enum": [
+                        "observed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "identity_status"
+                  ]
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "build_id": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "identity_status": {
+                      "enum": [
+                        "unavailable",
+                        "not_applicable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "identity_status"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "reason"
+                  ],
+                  "properties": {
+                    "version": {
+                      "type": "null"
+                    },
+                    "build_id": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "minItems": 1
+        },
+        "extensions": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "platform",
+        "arch",
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "input_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "snapshot_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "incomplete",
+              "not_applicable"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "evidence_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "extensions": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "required"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "passed",
+                    "failed"
+                  ]
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "evidence_ref"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "not_applicable"
+                  ]
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        ]
+      },
+      "minItems": 1
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "evidence_id",
+    "spec_version",
+    "schema_version",
+    "evidence_context",
+    "kind",
+    "source_commit",
+    "source_fingerprint_sha256",
+    "package_sha256",
+    "recorded_at",
+    "environment",
+    "input_fingerprint_sha256",
+    "target",
+    "snapshot_id",
+    "capabilities",
+    "checks",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "evidence_context": {
+            "enum": [
+              "release"
+            ]
+          }
+        },
+        "required": [
+          "evidence_context"
+        ]
+      },
+      "then": {
+        "properties": {
+          "package_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  ]
+}
