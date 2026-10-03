@@ -23,7 +23,7 @@ class FileConsumerProbeTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.browser = self.root / "chrome.exe"
         self.browser.write_bytes(b"simulated-executable-never-launched")
         self.output = self.root / "new-output"
@@ -149,19 +149,31 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertEqual(evidence["extensions"]["browser_identity"]["after"]["version"], "154.0.8037.93")
 
     def test_executable_hash_change_is_not_hidden_by_matching_version(self):
+        self.assert_executable_hash_change_detected(self.browser)
+
+    def test_executable_hash_change_is_injected_for_a_normalized_browser_alias(self):
+        (self.root / "lexical-parent").mkdir()
+        alias = self.root / "lexical-parent" / ".." / "chrome.exe"
+        self.assertNotEqual(alias, self.browser)
+        self.assertEqual(alias.resolve(), self.browser.resolve())
+        self.assert_executable_hash_change_detected(alias)
+
+    def assert_executable_hash_change_detected(self, browser):
         original = probe.digest
         browser_reads = 0
+        normalized_browser = browser.resolve()
 
         def changed_digest(path):
             nonlocal browser_reads
-            if Path(path) == self.browser:
+            if Path(path).resolve() == normalized_browser:
                 browser_reads += 1
                 return ("a" if browser_reads == 1 else "b") * 64
             return original(path)
 
         with patch.object(probe, "digest", side_effect=changed_digest), patch.object(
                 probe, "read_browser", side_effect=simulated_readback):
-            result = self.run_simulated()
+            result = probe.run_probe(browser, self.output, consumer_kind="simulated_adapter")
+        self.assertGreaterEqual(browser_reads, 2, "Both browser identity observations must receive the injected hashes.")
         self.assertFalse(result["ok"])
         self.assertEqual(result["data"]["receipt"]["outcome"]["verification"]["status"], "incomplete")
         identity = result["data"]["evidence"]["extensions"]["browser_identity"]
