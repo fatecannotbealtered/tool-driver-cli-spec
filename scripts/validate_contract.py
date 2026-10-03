@@ -12,7 +12,7 @@ from pathlib import Path
 from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
-from check_spec import semantic_errors, validators
+from check_spec import ROOT, load, semantic_errors, validators
 from contract_io import InputError, parse_json, read_regular_file
 
 
@@ -40,6 +40,8 @@ def validate_value(kind: str, value) -> list[str]:
         raise InputError("unknown schema; use a schema basename from the specification")
     if name == "common.schema.json":
         raise InputError("common contains shared definitions; select an instance contract")
+    if load(ROOT / "schemas" / name).get("x-development-only"):
+        raise InputError("development declarations are checked by their development tool, not as a public instance contract")
     errors = [f"constraint {error.validator} failed at depth {len(error.absolute_path)}" for error in checked[name].iter_errors(value)]
     if not errors:
         errors.extend(semantic_errors(name.removesuffix(".schema.json"), value))

@@ -25,7 +25,7 @@ def git_bytes(*args: str) -> bytes:
 
 def committed_inputs(source_commit: str) -> dict[str, bytes]:
     required = {"README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt"}
-    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}, "tests": {".py", ".json", ".svg"}}
+    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}, "tests": {".py", ".json", ".svg"}, "packages": {".py", ".json", ".md"}, "starter": {".py", ".json", ".md", ".tmpl"}, "development": {".json", ".md"}}
     inputs = {}
     for record in git_bytes("ls-tree", "-r", "-z", "--full-tree", source_commit).split(b"\0"):
         if not record:
@@ -63,7 +63,7 @@ def build(output: Path) -> dict:
     status = inputs["STATUS"].decode("utf-8").strip()
     components = []
     for relative, payload in sorted(inputs.items()):
-        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith("examples/") else "validator" if relative.startswith(("scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
+        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith(("examples/", "starter/")) else "runtime" if relative.startswith("packages/") else "validator" if relative.startswith(("scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
         components.append({"name": relative, "version": version, "path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "role": role})
     manifest = {
         "artifact_kind": "specification", "name": "tool-driver-cli-spec", "version": version,

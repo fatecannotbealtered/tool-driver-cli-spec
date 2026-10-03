@@ -25,6 +25,10 @@ jobs:
         run: python scripts/check_spec.py
       - name: Exercise command and delivery boundaries
         run: python -m unittest discover -s tests -v
+      - name: Generate and check product declarations
+        run: |
+          python scripts/generate_product.py --registry examples/development/product-registry.json --output dist/generated-product
+          python scripts/generate_product.py --registry examples/development/product-registry.json --output dist/generated-product --check
       - name: Build specification bundle
         run: python scripts/build_spec_bundle.py
       - name: Verify specification bundle

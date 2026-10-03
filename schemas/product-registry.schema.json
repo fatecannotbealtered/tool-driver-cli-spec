@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:development:product-registry:1.0",
+  "title": "Product registry for development generation",
+  "description": "Development support contract; this is not a public core instance contract or proof of native behavior.",
+  "x-development-only": true,
+  "type": "object",
+  "properties": {
+    "registry_version": {
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "product_version": {
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+    },
+    "entrypoint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1
+      }
+    },
+    "error_codes": {
+      "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/error_codes"
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "required": [
+    "registry_version",
+    "name",
+    "product_version",
+    "entrypoint",
+    "description",
+    "schemas",
+    "error_codes",
+    "commands"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "pointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[^~]|~[01])*)*$"
+    },
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "enum": [
+            "option",
+            "positional",
+            "json"
+          ]
+        },
+        "binding": {
+          "$ref": "#/$defs/pointer"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "encoding": {
+          "enum": [
+            "scalar",
+            "repeat",
+            "json",
+            "file_json",
+            "stdin_json"
+          ]
+        },
+        "input_pointer": {
+          "$ref": "#/$defs/pointer"
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "aliases": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "deprecated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "location",
+        "binding",
+        "required",
+        "description",
+        "encoding",
+        "input_pointer"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "location": {
+                "const": "positional"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "position"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "position"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "location": {
+                "const": "option"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "aliases"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/id"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*(?: [A-Za-z0-9][A-Za-z0-9_-]*)*$"
+        },
+        "description": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/description"
+        },
+        "phases": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/phases"
+        },
+        "effects": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/effects"
+        },
+        "modes": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/modes"
+        },
+        "maturity": {
+          "enum": [
+            "draft",
+            "experimental",
+            "verified",
+            "stable"
+          ],
+          "default": "draft"
+        },
+        "environments": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/environments"
+        },
+        "limits": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/limits"
+        },
+        "recovery": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/recovery"
+        },
+        "request_schema": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/request_schema"
+        },
+        "result_schema": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/result_schema"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/parameter"
+          }
+        },
+        "examples": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/examples"
+        },
+        "error_codes": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/error_codes"
+        },
+        "evidence_refs": {
+          "$ref": "urn:tool-driver-cli-spec:reference:1.0#/properties/capabilities/items/properties/evidence_refs"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "description",
+        "phases",
+        "effects",
+        "modes",
+        "environments",
+        "limits",
+        "recovery",
+        "request_schema",
+        "result_schema",
+        "parameters",
+        "examples",
+        "error_codes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

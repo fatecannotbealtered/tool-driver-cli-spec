@@ -1,0 +1,20 @@
+{
+  "spec_version": "1.0.0",
+  "schema_version": "1.0",
+  "release_tag": "v1.0.0",
+  "source_commit": "caeb82869c2812e7027a14289cddd31f9fdffeb7",
+  "package_sha256": "a1ba9c22a7266982a4d32903fbcdd3f804b0508b4e820faea47be63a5f1f7c43",
+  "public_schemas": {
+    "schemas/adoption-lock.schema.json": "1f97f812e25a486fcb77337214ec188e40546dedfa9a6fea484519f1d1644a36",
+    "schemas/common.schema.json": "aed4e4bd4127740322e5377f4a0d9ff574b834049fedcae03a6b05e23ee11cab",
+    "schemas/evidence.schema.json": "b27766ad825bd14898ad4eb6a84027e69f5f7d26872d1ccbd3b43cfd99956933",
+    "schemas/operation-status.schema.json": "4153c75ece34a153273aeb130ca4656810809b504bba6ebc311fcf03fc67e5f2",
+    "schemas/plan.schema.json": "9d4a1b0d8377b3362855a25e34bc3afa6c2afa1de0a6f0628b4b30416c7f2c37",
+    "schemas/query-page.schema.json": "22ea700f8f1f8c740e8a1acd8ba49917608c61427e14298e70de7ead29cd3b2c",
+    "schemas/receipt.schema.json": "e4934ace501a798005e531d755ec94987559a6d09fbc24e6ffca0bee1289761e",
+    "schemas/reference.schema.json": "052a3d1f3208104f7b8c36fb51f06c561e74c3e861b6460db845883b45137a43",
+    "schemas/release-manifest.schema.json": "a8443f389ee073ff3a39bf97cec0a406913da0845a633f5d1e54c0a37a3c54e2",
+    "schemas/response.schema.json": "a5f0b3df6938b9b6f686e34b4974faa2c64d3d6d9e0f809ad802db4cb4731dda",
+    "schemas/workflow.schema.json": "8a87448cbe835bb06a38b0f81ab70ceaa09e5fec2cff6691abce55874710eb07"
+  }
+}

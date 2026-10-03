@@ -7,6 +7,7 @@ establish that any receipt or evidence was produced by a real tool.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import sys
 from collections import Counter
@@ -370,6 +371,22 @@ def document_errors() -> list[str]:
     return errors
 
 
+def published_baseline_errors() -> list[str]:
+    """Development helpers can evolve without rewriting the released core contract."""
+    path = ROOT / "development/published-baseline.json"
+    if not path.exists():
+        return []
+    baseline = load(path)
+    errors = []
+    if (ROOT / "VERSION").read_text(encoding="utf-8").strip() != baseline["spec_version"]:
+        errors.append("development support must retain the selected specification version")
+    for relative, expected in baseline["public_schemas"].items():
+        target = ROOT / relative
+        if not target.is_file() or hashlib.sha256(target.read_bytes().replace(b"\r\n", b"\n")).hexdigest() != expected:
+            errors.append(f"published public contract changed: {relative}")
+    return errors
+
+
 def main() -> int:
     failures = []
     try:
@@ -396,6 +413,7 @@ def main() -> int:
         if actual != seen:
             failures.append("example index must enumerate every positive and negative fixture")
         failures.extend(document_errors())
+        failures.extend(published_baseline_errors())
     except (ValueError, OSError, KeyError, TypeError) as exc:
         failures.append(str(exc))
     print(json.dumps({"ok": not failures, "scope": "specification_structure_and_static_examples", "errors": failures}, ensure_ascii=False))

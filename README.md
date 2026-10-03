@@ -23,6 +23,7 @@
 | [验证](docs/VERIFICATION-SPEC.md) | 契约、真实操作、独立检查、产物和证据范围 |
 | [交付](docs/DELIVERY-SPEC.md) | GitHub Release、SkillHub、组件配套、安装与升级 |
 | [实施与迁移](docs/ADOPTION-GUIDE.md) | 固定公共契约、建立操作闭环、校验符合性及编写最小 Skill |
+| [工具工程](docs/DEVELOPMENT-GUIDE.md) | 注册表生成、公共 SDK、能力按需发现和工程种子 |
 | [机器结构](schemas/) | 响应、能力、计划、回执、证据和发布清单的 JSON Schema |
 | [示例索引](examples/index.json) | 应通过及应拒绝的结构与语义样例 |
 
