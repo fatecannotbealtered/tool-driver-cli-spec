@@ -33,6 +33,15 @@
         },
         "plan": {
           "$ref": "urn:tool-driver-cli-spec:plan:1.0"
+        },
+        "operation_status": {
+          "$ref": "urn:tool-driver-cli-spec:operation-status:1.0"
+        },
+        "workflow": {
+          "$ref": "urn:tool-driver-cli-spec:workflow:1.0"
+        },
+        "query_page": {
+          "$ref": "urn:tool-driver-cli-spec:query-page:1.0"
         }
       },
       "additionalProperties": true
@@ -133,8 +142,45 @@
       "then": {
         "properties": {
           "data": {
+            "anyOf": [
+              {
+                "required": [
+                  "receipt"
+                ]
+              },
+              {
+                "required": [
+                  "workflow"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "phase": {
+            "enum": [
+              "submit",
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "ok",
+          "phase"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
             "required": [
-              "receipt"
+              "operation_status"
             ]
           }
         }

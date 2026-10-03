@@ -1,6 +1,6 @@
 {
   "evidence_id": "evidence-contract-01",
-  "spec_version": "0.1.0",
+  "spec_version": "1.0.0",
   "schema_version": "1.0",
   "evidence_context": "release",
   "kind": "contract",

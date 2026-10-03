@@ -24,8 +24,8 @@ def git_bytes(*args: str) -> bytes:
 
 
 def committed_inputs(source_commit: str) -> dict[str, bytes]:
-    required = {"README.md", "AGENTS.md", "VERSION", "CHANGELOG.md", "requirements-dev.txt"}
-    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}}
+    required = {"README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt"}
+    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}, "tests": {".py", ".json", ".svg"}}
     inputs = {}
     for record in git_bytes("ls-tree", "-r", "-z", "--full-tree", source_commit).split(b"\0"):
         if not record:
@@ -60,17 +60,18 @@ def build(output: Path) -> dict:
     source_commit = git("rev-parse", "HEAD")
     inputs = committed_inputs(source_commit)
     version = inputs["VERSION"].decode("utf-8").strip()
+    status = inputs["STATUS"].decode("utf-8").strip()
     components = []
     for relative, payload in sorted(inputs.items()):
-        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith("examples/") else "validator" if relative.startswith("scripts/") else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
+        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith("examples/") else "validator" if relative.startswith(("scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
         components.append({"name": relative, "version": version, "path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "role": role})
     manifest = {
         "artifact_kind": "specification", "name": "tool-driver-cli-spec", "version": version,
-        "spec_version": version, "status": "draft", "source_commit": source_commit, "source_dirty": False,
+        "spec_version": version, "status": status, "source_commit": source_commit, "source_dirty": False,
         "target": {"os": "any", "arch": "any"}, "components": components,
         "compatibility": {"application": [], "plugin": [], "protocol": [{"identity": "tool-driver-cli-schema", "version_range": "1.0", "validation": "verified", "evidence_refs": ["scripts/check_spec.py"]}], "skill": []},
         "external_requirements": ["Python 3.11+ and requirements-dev.txt are needed only to run local specification checks."],
-        "limitations": ["Draft specification bundle; static example validation is not real application or device verification.", "No GitHub Release or SkillHub upload is performed by this builder."],
+        "limitations": ["A stable specification does not certify a particular application or device product.", "No GitHub Release or SkillHub upload is performed by this builder."],
     }
     validators()["release-manifest.schema.json"].validate(manifest)
     errors = semantic_errors("release-manifest", manifest)

@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.1.0",
+  "spec_version": "1.0.0",
   "examples": [
     {
       "path": "examples/valid/plan-estimate.json",
@@ -216,6 +216,294 @@
       "schema": "reference.schema.json",
       "valid": true,
       "purpose": "JSON Pointer bindings preserve percent, slash, tilde and Unicode property names."
+    },
+    {
+      "path": "examples/valid/adoption-lock.json",
+      "schema": "adoption-lock.schema.json",
+      "valid": true,
+      "purpose": "adoption-lock"
+    },
+    {
+      "path": "examples/valid/query-empty-complete.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "query-empty-complete"
+    },
+    {
+      "path": "examples/valid/query-snapshot-page.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "query-snapshot-page"
+    },
+    {
+      "path": "examples/valid/query-truncated-no-continuation.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "query-truncated-no-continuation"
+    },
+    {
+      "path": "examples/valid/query-unread-scope.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "query-unread-scope"
+    },
+    {
+      "path": "examples/valid/query-weak-no-snapshot.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "query-weak-no-snapshot"
+    },
+    {
+      "path": "examples/valid/status-blocked-running.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-blocked-running"
+    },
+    {
+      "path": "examples/valid/status-cancel-requested.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-cancel-requested"
+    },
+    {
+      "path": "examples/valid/status-cancelled-partial.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-cancelled-partial"
+    },
+    {
+      "path": "examples/valid/status-completed.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-completed"
+    },
+    {
+      "path": "examples/valid/status-expired-unknown.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-expired-unknown"
+    },
+    {
+      "path": "examples/valid/status-running.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "status-running"
+    },
+    {
+      "path": "examples/valid/workflow-dependent-partial.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "workflow-dependent-partial"
+    },
+    {
+      "path": "examples/valid/workflow-independent-partial.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "workflow-independent-partial"
+    },
+    {
+      "path": "examples/valid/workflow-read-plan-completed.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "workflow-read-plan-completed"
+    },
+    {
+      "path": "examples/invalid/query-count-mismatch.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-count-mismatch"
+    },
+    {
+      "path": "examples/invalid/query-more-without-cursor.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-more-without-cursor"
+    },
+    {
+      "path": "examples/invalid/query-null-snapshot-without-reason.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-null-snapshot-without-reason"
+    },
+    {
+      "path": "examples/invalid/query-over-effective-limit.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-over-effective-limit"
+    },
+    {
+      "path": "examples/invalid/query-snapshot-mode-without-snapshot.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-snapshot-mode-without-snapshot"
+    },
+    {
+      "path": "examples/invalid/query-truncated-without-reason.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-truncated-without-reason"
+    },
+    {
+      "path": "examples/invalid/query-unread-as-complete.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "query-unread-as-complete"
+    },
+    {
+      "path": "examples/invalid/status-cancelled-without-stop.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-cancelled-without-stop"
+    },
+    {
+      "path": "examples/invalid/status-command-is-string.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-command-is-string"
+    },
+    {
+      "path": "examples/invalid/status-completed-with-running-receipt.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-completed-with-running-receipt"
+    },
+    {
+      "path": "examples/invalid/status-expired-as-completed.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-expired-as-completed"
+    },
+    {
+      "path": "examples/invalid/status-lookup-is-write.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-lookup-is-write"
+    },
+    {
+      "path": "examples/invalid/status-missing-identifiers.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-missing-identifiers"
+    },
+    {
+      "path": "examples/invalid/status-receipt-id-mismatch.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "status-receipt-id-mismatch"
+    },
+    {
+      "path": "examples/invalid/workflow-completed-without-result.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-completed-without-result"
+    },
+    {
+      "path": "examples/invalid/workflow-cycle.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-cycle"
+    },
+    {
+      "path": "examples/invalid/workflow-duplicate-step-id.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-duplicate-step-id"
+    },
+    {
+      "path": "examples/invalid/workflow-missing-dependency.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-missing-dependency"
+    },
+    {
+      "path": "examples/invalid/workflow-ran-after-failure.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-ran-after-failure"
+    },
+    {
+      "path": "examples/invalid/workflow-receipt-id-mismatch.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-receipt-id-mismatch"
+    },
+    {
+      "path": "examples/invalid/workflow-skipped-without-reason.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-skipped-without-reason"
+    },
+    {
+      "path": "examples/invalid/workflow-summary-mismatch.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-summary-mismatch"
+    },
+    {
+      "path": "examples/invalid/workflow-modification-hidden-as-verify.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-modification-hidden-as-verify"
+    },
+    {
+      "path": "examples/invalid/workflow-modification-hidden-as-observe.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-modification-hidden-as-observe"
+    },
+    {
+      "path": "examples/invalid/workflow-modification-hidden-as-apply.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "workflow-modification-hidden-as-apply"
+    },
+    {
+      "path": "examples/invalid/receipt-applied-without-authorization.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "receipt-applied-without-authorization"
+    },
+    {
+      "path": "examples/valid/response-unknown-authorization-disclosed.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "response-unknown-authorization-disclosed"
+    },
+    {
+      "path": "examples/invalid/reference-redefined-public-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "reference-redefined-public-schema"
+    },
+    {
+      "path": "examples/valid/reference-semver-build.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "reference-semver-build"
+    },
+    {
+      "path": "examples/valid/reference-semver-prerelease.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "reference-semver-prerelease"
+    },
+    {
+      "path": "examples/invalid/reference-semver-leading-zero.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "reference-semver-leading-zero"
+    },
+    {
+      "path": "examples/invalid/reference-semver-empty-label.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "reference-semver-empty-label"
+    },
+    {
+      "path": "examples/invalid/reference-semver-numeric-prerelease-zero.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "reference-semver-numeric-prerelease-zero"
     }
   ]
 }

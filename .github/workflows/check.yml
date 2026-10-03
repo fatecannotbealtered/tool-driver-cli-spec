@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -19,5 +23,12 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Validate specification and examples
         run: python scripts/check_spec.py
+      - name: Exercise command and delivery boundaries
+        run: python -m unittest discover -s tests -v
       - name: Build specification bundle
         run: python scripts/build_spec_bundle.py
+      - name: Verify specification bundle
+        shell: bash
+        run: |
+          spec_version=$(cat VERSION)
+          python scripts/verify_spec_bundle.py --bundle "dist/tool-driver-cli-spec-${spec_version}.zip" --checksum "dist/tool-driver-cli-spec-${spec_version}.sha256"

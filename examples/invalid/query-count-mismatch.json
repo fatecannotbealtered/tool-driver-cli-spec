@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "spec_version": "1.0.0",
+  "scope": {
+    "targets": [
+      {
+        "mode": "session",
+        "engine_id": "editor-engine",
+        "instance_id": "instance-01",
+        "object_id": "document-01",
+        "locator": "session://instance-01/document-01"
+      }
+    ],
+    "description": "All direct objects in document-01, excluding heavy geometry.",
+    "selector": {
+      "parent_id": "document-01"
+    }
+  },
+  "snapshot": {
+    "id": "snapshot-02",
+    "source": "live",
+    "revision": "memory-02",
+    "observed_at": "2026-10-02T00:00:01Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "snapshot_unavailable_reason": null,
+  "consistency": {
+    "mode": "snapshot",
+    "drift_policy": "reject",
+    "limitations": []
+  },
+  "sort": [
+    {
+      "field": "id",
+      "direction": "asc"
+    }
+  ],
+  "count": 3,
+  "items": [
+    {
+      "id": "object-01",
+      "name": "First object"
+    },
+    {
+      "id": "object-02",
+      "name": "Second object"
+    }
+  ],
+  "has_more": true,
+  "truncated": false,
+  "next_cursor": "cursor-bound-to-snapshot-02-page-2",
+  "limits": {
+    "requested": 2,
+    "effective": 2,
+    "truncation_reason": null
+  },
+  "unread_scopes": []
+}

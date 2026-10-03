@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0",
+  "spec_version": "1.0.0",
+  "operation_id": "operation-01",
+  "request_id": "request-submit-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "editor-engine",
+    "instance_id": "instance-01",
+    "object_id": "document-01",
+    "locator": "session://instance-01/document-01"
+  },
+  "status": "cancelled",
+  "stage": "stopped",
+  "observed_at": "2026-10-03T00:00:10Z",
+  "started_at": "2026-10-03T00:00:00Z",
+  "wait_timeout_ms": 10000,
+  "execution_deadline": null,
+  "record": {
+    "availability": "available",
+    "retain_until": "2026-10-10T00:00:00Z",
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": false,
+    "limitations": [
+      "Synthetic example; no application was run.",
+      "No native execution deadline is provided.",
+      "Application restart can make the native task outcome unknown."
+    ]
+  },
+  "commands": {
+    "lookup": {
+      "argv": [
+        "operation",
+        "status",
+        "--id",
+        "operation-01"
+      ],
+      "read_only": true
+    },
+    "result": {
+      "argv": [
+        "operation",
+        "result",
+        "--id",
+        "operation-01"
+      ],
+      "read_only": true
+    },
+    "cancel": {
+      "argv": [
+        "operation",
+        "cancel",
+        "--id",
+        "operation-01"
+      ],
+      "read_only": false
+    }
+  },
+  "blocked": null,
+  "stop_observed": true,
+  "stop_evidence_ref": "evidence://synthetic/native-stop-01",
+  "receipt": {
+    "operation_id": "operation-01",
+    "target": {
+      "mode": "session",
+      "engine_id": "editor-engine",
+      "instance_id": "instance-01",
+      "object_id": "document-01",
+      "locator": "session://instance-01/document-01"
+    },
+    "authorization_scope_id": "scope-isolated-01",
+    "effects": [
+      "change"
+    ],
+    "snapshot_before": {
+      "id": "snapshot-01",
+      "source": "live",
+      "revision": "memory-01",
+      "observed_at": "2026-10-02T00:00:00Z",
+      "dependencies": [
+        {
+          "identity": "template-01",
+          "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "snapshot_after": {
+      "id": "snapshot-02",
+      "source": "live",
+      "revision": "memory-02",
+      "observed_at": "2026-10-02T00:00:01Z",
+      "dependencies": [
+        {
+          "identity": "template-01",
+          "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "outcome": {
+      "execution": "interrupted",
+      "change": "partial",
+      "persistence": "unsaved",
+      "verification": {
+        "status": "incomplete",
+        "scope": "declared_operation_postconditions",
+        "snapshot_id": "snapshot-02",
+        "coverage": "partial",
+        "checks": [],
+        "not_checked": [
+          {
+            "id": "remaining-step",
+            "required": true,
+            "reason": "Skipped after observed cancellation."
+          }
+        ],
+        "evidence_refs": []
+      }
+    },
+    "changed_items": [
+      {
+        "id": "object-02",
+        "change": "created",
+        "evidence_ref": "evidence://synthetic/readback-01"
+      }
+    ],
+    "artifacts": [],
+    "recovery": {
+      "action": "inspect",
+      "reason": "Execution stopped after partial application; no rollback is claimed.",
+      "supported": true
+    }
+  }
+}

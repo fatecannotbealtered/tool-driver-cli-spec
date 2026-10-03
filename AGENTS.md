@@ -1,6 +1,6 @@
 # 仓库协作入口
 
-本仓库维护一份独立的应用与设备 CLI 操作规范，当前版本与状态分别以 `VERSION` 和 README 为准。
+本仓库维护一份独立的应用与设备 CLI 操作规范，当前版本与状态分别以 `VERSION` 和 `STATUS` 为准。
 
 ## 开始修改前
 
@@ -24,6 +24,7 @@
 
 ```powershell
 python scripts/check_spec.py
+python -m unittest discover -s tests -v
 python scripts/build_spec_bundle.py
 ```
 

@@ -15,11 +15,17 @@
       "minLength": 1
     },
     "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
     },
     "spec_version": {
-      "const": "0.1.0"
+      "allOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+        },
+        {
+          "pattern": "^1\\."
+        }
+      ]
     },
     "status": {
       "enum": [
@@ -71,8 +77,7 @@
             "minLength": 1
           },
           "version": {
-            "type": "string",
-            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+            "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
           },
           "path": {
             "type": "string",

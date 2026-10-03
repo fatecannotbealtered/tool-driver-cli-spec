@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tool-driver-cli-spec:operation-status:1.0",
+  "title": "operation-status",
+  "description": "可选操作状态 profile。状态与回执分开；取消受理、原生停止、目标恢复分别取证。",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "spec_version": {
+      "allOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+        },
+        {
+          "pattern": "^1\\."
+        }
+      ]
+    },
+    "operation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "target": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "cancel_requested",
+        "completed",
+        "failed",
+        "cancelled",
+        "unknown"
+      ]
+    },
+    "stage": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "wait_timeout_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "调用方等待上限，null 表示未设置；到期不等于停止原生执行。"
+    },
+    "execution_deadline": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "声明的原生执行期限；null 表示未设置或未提供该能力，具体限制记入 record.limitations。"
+    },
+    "record": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "enum": [
+            "available",
+            "expired",
+            "unavailable"
+          ]
+        },
+        "retain_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "survives_cli_exit": {
+          "type": "boolean"
+        },
+        "survives_reconnect": {
+          "type": "boolean"
+        },
+        "survives_instance_restart": {
+          "type": "boolean"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "availability",
+        "retain_until",
+        "survives_cli_exit",
+        "survives_reconnect",
+        "survives_instance_restart",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "object",
+      "properties": {
+        "lookup": {
+          "$ref": "#/$defs/readCommand"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/readCommand"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cancel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/controlCommand"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "lookup",
+        "result",
+        "cancel"
+      ],
+      "additionalProperties": false
+    },
+    "blocked": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required_action": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resume": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/controlCommand"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "reason",
+            "required_action",
+            "resume"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stop_observed": {
+      "type": "boolean"
+    },
+    "stop_evidence_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "receipt": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "spec_version",
+    "operation_id",
+    "request_id",
+    "target",
+    "status",
+    "stage",
+    "observed_at",
+    "started_at",
+    "wait_timeout_ms",
+    "execution_deadline",
+    "record",
+    "commands",
+    "blocked",
+    "stop_observed",
+    "stop_evidence_ref",
+    "receipt"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "readCommand": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
+        },
+        "read_only": {
+          "const": true
+        }
+      },
+      "required": [
+        "argv",
+        "read_only"
+      ],
+      "additionalProperties": false
+    },
+    "controlCommand": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
+        },
+        "read_only": {
+          "const": false
+        }
+      },
+      "required": [
+        "argv",
+        "read_only"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "operation_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "stop_observed": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_evidence_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stop_observed": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_evidence_ref": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "cancelled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_observed": {
+            "const": true
+          },
+          "blocked": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "completed",
+              "failed"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocked": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "availability": {
+                "enum": [
+                  "expired",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "unknown"
+          },
+          "receipt": {
+            "type": "null"
+          },
+          "record": {
+            "properties": {
+              "limitations": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "cancel_requested",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+          },
+          "record": {
+            "properties": {
+              "availability": {
+                "const": "available"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "retain_until": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "record": {
+            "properties": {
+              "limitations": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

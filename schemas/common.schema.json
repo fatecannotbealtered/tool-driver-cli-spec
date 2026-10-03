@@ -405,225 +405,7 @@
           ]
         },
         "verification": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "enum": [
-                "not_run",
-                "passed",
-                "failed",
-                "incomplete",
-                "not_applicable"
-              ]
-            },
-            "scope": {
-              "type": "string",
-              "minLength": 1
-            },
-            "snapshot_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "coverage": {
-              "enum": [
-                "none",
-                "partial",
-                "complete"
-              ]
-            },
-            "checks": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "status": {
-                    "enum": [
-                      "not_run",
-                      "passed",
-                      "failed",
-                      "incomplete",
-                      "not_applicable"
-                    ]
-                  },
-                  "required": {
-                    "type": "boolean"
-                  },
-                  "evidence_ref": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "extensions": {
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "id",
-                  "status",
-                  "required"
-                ],
-                "additionalProperties": false,
-                "allOf": [
-                  {
-                    "if": {
-                      "properties": {
-                        "status": {
-                          "enum": [
-                            "passed",
-                            "failed"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "status"
-                      ]
-                    },
-                    "then": {
-                      "required": [
-                        "evidence_ref"
-                      ]
-                    }
-                  },
-                  {
-                    "if": {
-                      "properties": {
-                        "status": {
-                          "enum": [
-                            "not_applicable"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "status"
-                      ]
-                    },
-                    "then": {
-                      "required": [
-                        "reason"
-                      ]
-                    }
-                  }
-                ]
-              }
-            },
-            "not_checked": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "required": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "id",
-                  "required",
-                  "reason"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "evidence_refs": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
-            "extensions": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "status",
-            "scope",
-            "snapshot_id",
-            "coverage",
-            "checks",
-            "not_checked",
-            "evidence_refs"
-          ],
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "enum": [
-                      "passed"
-                    ]
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "snapshot_id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "coverage": {
-                    "enum": [
-                      "complete"
-                    ]
-                  },
-                  "checks": {
-                    "minItems": 1
-                  },
-                  "evidence_refs": {
-                    "minItems": 1
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "enum": [
-                      "not_applicable"
-                    ]
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "required": [
-                  "reason"
-                ]
-              }
-            }
-          ]
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/verification"
         }
       },
       "required": [
@@ -639,7 +421,7 @@
       "properties": {
         "code": {
           "type": "string",
-          "pattern": "^E_[A-Z_]+$"
+          "pattern": "^E_[A-Z0-9_]+$"
         },
         "message": {
           "type": "string",
@@ -708,6 +490,10 @@
         "limitations"
       ],
       "additionalProperties": false
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
     }
   }
 }

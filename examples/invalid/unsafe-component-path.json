@@ -2,7 +2,7 @@
   "artifact_kind": "cli_product",
   "name": "demo-driver",
   "version": "1.2.0",
-  "spec_version": "0.1.0",
+  "spec_version": "1.0.0",
   "status": "draft",
   "source_commit": "0000000000000000000000000000000000000000",
   "source_dirty": false,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urljoin
 
@@ -16,6 +17,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
 from referencing import Registry, Resource
 from referencing.exceptions import Unresolvable
+from contract_io import InputError, canonical_relative_path, path_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,16 +68,28 @@ def reference_errors(value: dict) -> list[str]:
     if len(codes) != len(set(codes)):
         errors.append("error codes must have unique exit mappings")
     schemas = value["schemas"]
+    public_schemas = {schema["$id"]: schema for schema in (load(path) for path in (ROOT / "schemas").glob("*.schema.json"))}
     registry = Registry()
+    resource_ids = set()
     for identifier, schema in schemas.items():
         try:
             if schema.get("$id") != identifier or schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
-                errors.append(f"schema directory identity or dialect mismatch: {identifier}")
+                errors.append("schema directory identity or dialect mismatch")
+                continue
+            if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", identifier) or "#" in identifier:
+                errors.append("schema IDs must be absolute resource identities without fragments")
                 continue
             Draft202012Validator.check_schema(schema)
+            for _, base, node in schema_nodes(schema, identifier):
+                if isinstance(node, dict) and "$id" in node:
+                    if base in resource_ids:
+                        errors.append("schema resource identities must be unique")
+                    resource_ids.add(base)
+                    if base in public_schemas and node != public_schemas[base]:
+                        errors.append(f"public schema identity cannot be redefined: {base}")
             registry = registry.with_resource(identifier, Resource.from_contents(schema))
         except (ValueError, SchemaError) as exc:
-            errors.append(f"invalid discovered schema {identifier}: {exc}")
+            errors.append("invalid discovered JSON Schema definition")
     if errors:
         return errors
     registry = registry.crawl()
@@ -88,7 +102,7 @@ def reference_errors(value: dict) -> list[str]:
                     try:
                         registry.resolver(base).lookup(node[key])
                     except Unresolvable:
-                        errors.append(f"schema reference must resolve offline: {node[key]}")
+                        errors.append("schema reference must resolve offline")
     if errors:
         return errors
     for capability in value["capabilities"]:
@@ -134,6 +148,10 @@ def semantic_errors(kind: str, value: dict) -> list[str]:
         outcome = value["outcome"]
         verification = outcome["verification"]
         before, after = value["snapshot_before"], value["snapshot_after"]
+        if outcome["change"] in {"applied", "partial", "rolled_back"} and value["authorization_scope_id"] is None:
+            errors.append("known modifications must retain their applicable authorization reference")
+        if outcome["change"] == "unknown" and value["authorization_scope_id"] is None and not value.get("authorization_unavailable_reason"):
+            errors.append("unknown authorization must be disclosed without inventing a scope")
         if outcome["execution"] == "not_started" and outcome["change"] != "not_applied":
             errors.append("not_started cannot claim an applied or unknown change")
         if verification["status"] == "passed":
@@ -176,6 +194,14 @@ def semantic_errors(kind: str, value: dict) -> list[str]:
                         errors.append("successful no-op cannot omit required verification")
             if outcome["change"] == "unknown" and value.get("error", {}).get("retryable"):
                 errors.append("unknown outcomes cannot advertise blind retry")
+        for profile in ["operation_status", "workflow", "query_page"]:
+            nested = value.get("data", {}).get(profile)
+            if nested is not None:
+                errors.extend(semantic_errors(profile.replace("_", "-"), nested))
+        workflow = value.get("data", {}).get("workflow")
+        if workflow and value["ok"] and value["phase"] in {"apply", "result"}:
+            if any(step["status"] != "completed" for step in workflow["steps"]):
+                errors.append("a final successful workflow must complete every requested step")
     elif kind == "plan":
         preview = value["preview"]
         trial = preview["trial_snapshot"]
@@ -186,6 +212,98 @@ def semantic_errors(kind: str, value: dict) -> list[str]:
                 errors.append("a real physical effect cannot be an isolated observed trial")
     elif kind == "reference":
         errors.extend(reference_errors(value))
+    elif kind == "operation-status":
+        receipt = value["receipt"]
+        if receipt:
+            errors.extend(semantic_errors("receipt", receipt))
+            if receipt["operation_id"] != value["operation_id"]:
+                errors.append("status and receipt operation identities must agree")
+            identity_keys = ["mode", "engine_id", "instance_id", "object_id", "locator"]
+            if value["target"] is None or any(value["target"][key] != receipt["target"][key] for key in identity_keys):
+                errors.append("status and receipt must describe the same target")
+            execution = receipt["outcome"]["execution"]
+            if value["status"] == "completed" and execution != "completed":
+                errors.append("completed status cannot contain unfinished receipt execution")
+            if value["status"] == "cancelled" and execution not in {"not_started", "interrupted"}:
+                errors.append("cancelled status needs a stopped or never-started execution")
+            if value["status"] == "queued" and execution != "not_started":
+                errors.append("queued status cannot describe an already-started operation")
+        if value["stop_observed"] and value["status"] in {"queued", "running", "cancel_requested"}:
+            errors.append("an active task cannot claim an observed stop")
+    elif kind == "workflow":
+        steps = value["steps"]
+        ids = [step["id"] for step in steps]
+        if len(ids) != len(set(ids)):
+            errors.append("workflow step identities must be unique")
+        by_id = {step["id"]: step for step in steps}
+        for step in steps:
+            if any(dependency not in by_id for dependency in step["depends_on"]):
+                errors.append("workflow dependencies must identify existing steps")
+            receipt = step["receipt"]
+            modifying = any(effect in step["effects"] for effect in ["change", "persist", "deliver", "configure", "physical"])
+            executing = step["phase"] not in {"plan", "submit", "status"}
+            if receipt:
+                errors.extend(semantic_errors("receipt", receipt))
+                if receipt["operation_id"] != step["operation_id"]:
+                    errors.append("step and receipt operation identities must agree")
+                if not set(receipt["effects"]).issubset(set(step["effects"])):
+                    errors.append("step effects cannot hide effects reported by its receipt")
+                if step["status"] == "completed" and modifying and executing:
+                    outcome = receipt["outcome"]
+                    if outcome["execution"] != "completed" or outcome["change"] in {"partial", "unknown", "rolled_back"}:
+                        errors.append("a completed write step needs a completed successful application")
+                    if outcome["change"] == "applied" and outcome["verification"]["status"] != "passed":
+                        errors.append("a completed write step needs scoped readback verification")
+            if step["status"] == "completed" and modifying and executing:
+                if not receipt:
+                    errors.append("completed modifying steps cannot substitute output refs for a receipt")
+            if step["status"] in {"running", "completed", "failed", "cancelled"}:
+                for dependency in step["depends_on"]:
+                    parent = by_id.get(dependency)
+                    if parent is None:
+                        continue
+                    if parent["status"] != "completed":
+                        errors.append("a dependent step cannot run before its prerequisite completes")
+                    if parent["receipt"]:
+                        verification = parent["receipt"]["outcome"]["verification"]
+                        if any(check["required"] and check["status"] != "passed" for check in verification["checks"]) or any(check["required"] for check in verification["not_checked"]):
+                            errors.append("dependent steps cannot bypass required prerequisite checks")
+        incoming = {identifier: sum(dependency in by_id for dependency in step["depends_on"]) for identifier, step in by_id.items()}
+        downstream = {identifier: [] for identifier in by_id}
+        for identifier, step in by_id.items():
+            for dependency in step["depends_on"]:
+                if dependency in by_id:
+                    downstream[dependency].append(identifier)
+        ready = [identifier for identifier, count in incoming.items() if count == 0]
+        visited = 0
+        while ready:
+            identifier = ready.pop()
+            visited += 1
+            for child in downstream[identifier]:
+                incoming[child] -= 1
+                if incoming[child] == 0:
+                    ready.append(child)
+        if visited != len(by_id):
+            errors.append("workflow dependencies must be acyclic")
+        counts = Counter(step["status"] for step in steps)
+        if value["summary"]["total"] != len(steps) or any(value["summary"][status] != counts[status] for status in value["summary"] if status != "total"):
+            errors.append("workflow summary must exactly count the step results")
+    elif kind == "query-page":
+        if value["count"] != len(value["items"]):
+            errors.append("query count must equal the returned item count")
+        if value["limits"]["effective"] is not None and value["count"] > value["limits"]["effective"]:
+            errors.append("query items cannot exceed the effective output limit")
+    elif kind == "adoption-lock":
+        paths = []
+        for item in value["files"]:
+            try:
+                canonical_relative_path(item["path"])
+                canonical_relative_path(item["source_path"])
+            except InputError:
+                errors.append("adoption paths must stay within their declared relative roots")
+            paths.append(path_identity(item["path"]))
+        if len(paths) != len(set(paths)):
+            errors.append("adoption paths must be unique on case-insensitive filesystems")
     elif kind == "release-manifest":
         paths = []
         for component in value["components"]:
@@ -195,7 +313,11 @@ def semantic_errors(kind: str, value: dict) -> list[str]:
                 errors.append("component paths must be canonical relative package paths")
             if path == "manifest.json":
                 errors.append("manifest cannot contain its own checksum")
-            paths.append(path.casefold())
+            try:
+                canonical_relative_path(path)
+            except InputError:
+                errors.append("component paths must be safe on the declared target platforms")
+            paths.append(path_identity(path))
         if len(paths) != len(set(paths)):
             errors.append("component paths must be unique on case-insensitive targets too")
         if value["source_dirty"]:
@@ -218,6 +340,9 @@ def document_errors() -> list[str]:
         "DELIVERY-SPEC.md": "DEL", "VERIFICATION-SPEC.md": "VER",
     }
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    status = (ROOT / "STATUS").read_text(encoding="utf-8").strip()
+    if status not in {"draft", "experimental", "stable"}:
+        errors.append("STATUS must declare a supported publication maturity")
     for path in [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md"))]:
         text = path.read_text(encoding="utf-8")
         for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
@@ -229,6 +354,8 @@ def document_errors() -> list[str]:
         if path.name in expected:
             if version not in text:
                 errors.append(f"{path.name}: missing current spec version")
+            if f"状态：`{status}`" not in text:
+                errors.append(f"{path.name}: maturity differs from STATUS")
             found = re.findall(r"^### ([A-Z]{3}-\d{3})\b", text, re.M)
             if not found:
                 errors.append(f"{path.name}: no addressable clauses")

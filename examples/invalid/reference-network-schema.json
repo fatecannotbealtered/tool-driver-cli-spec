@@ -1,7 +1,7 @@
 {
   "tool": "demo-driver",
   "tool_version": "1.2.0",
-  "spec_version": "0.1.0",
+  "spec_version": "1.0.0",
   "schema_version": "1.0",
   "capabilities": [
     {
@@ -112,6 +112,9 @@
         "E_VALIDATION",
         "E_CONFLICT",
         "E_OUTCOME_UNKNOWN"
+      ],
+      "profiles": [
+        "core"
       ]
     }
   ],
@@ -204,6 +207,15 @@
             },
             "plan": {
               "$ref": "urn:tool-driver-cli-spec:plan:1.0"
+            },
+            "operation_status": {
+              "$ref": "urn:tool-driver-cli-spec:operation-status:1.0"
+            },
+            "workflow": {
+              "$ref": "urn:tool-driver-cli-spec:workflow:1.0"
+            },
+            "query_page": {
+              "$ref": "urn:tool-driver-cli-spec:query-page:1.0"
             }
           },
           "additionalProperties": true
@@ -304,8 +316,45 @@
           "then": {
             "properties": {
               "data": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "receipt"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "workflow"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ok": {
+                "const": true
+              },
+              "phase": {
+                "enum": [
+                  "submit",
+                  "status"
+                ]
+              }
+            },
+            "required": [
+              "ok",
+              "phase"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
                 "required": [
-                  "receipt"
+                  "operation_status"
                 ]
               }
             }
@@ -720,225 +769,7 @@
               ]
             },
             "verification": {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "enum": [
-                    "not_run",
-                    "passed",
-                    "failed",
-                    "incomplete",
-                    "not_applicable"
-                  ]
-                },
-                "scope": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "snapshot_id": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "coverage": {
-                  "enum": [
-                    "none",
-                    "partial",
-                    "complete"
-                  ]
-                },
-                "checks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "status": {
-                        "enum": [
-                          "not_run",
-                          "passed",
-                          "failed",
-                          "incomplete",
-                          "not_applicable"
-                        ]
-                      },
-                      "required": {
-                        "type": "boolean"
-                      },
-                      "evidence_ref": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "reason": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "extensions": {
-                        "type": "object"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "status",
-                      "required"
-                    ],
-                    "additionalProperties": false,
-                    "allOf": [
-                      {
-                        "if": {
-                          "properties": {
-                            "status": {
-                              "enum": [
-                                "passed",
-                                "failed"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "status"
-                          ]
-                        },
-                        "then": {
-                          "required": [
-                            "evidence_ref"
-                          ]
-                        }
-                      },
-                      {
-                        "if": {
-                          "properties": {
-                            "status": {
-                              "enum": [
-                                "not_applicable"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "status"
-                          ]
-                        },
-                        "then": {
-                          "required": [
-                            "reason"
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                },
-                "not_checked": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "required": {
-                        "type": "boolean"
-                      },
-                      "reason": {
-                        "type": "string",
-                        "minLength": 1
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "required",
-                      "reason"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "evidence_refs": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "reason": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "extensions": {
-                  "type": "object"
-                }
-              },
-              "required": [
-                "status",
-                "scope",
-                "snapshot_id",
-                "coverage",
-                "checks",
-                "not_checked",
-                "evidence_refs"
-              ],
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "status": {
-                        "enum": [
-                          "passed"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "status"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "snapshot_id": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "coverage": {
-                        "enum": [
-                          "complete"
-                        ]
-                      },
-                      "checks": {
-                        "minItems": 1
-                      },
-                      "evidence_refs": {
-                        "minItems": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "status": {
-                        "enum": [
-                          "not_applicable"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "status"
-                    ]
-                  },
-                  "then": {
-                    "required": [
-                      "reason"
-                    ]
-                  }
-                }
-              ]
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/verification"
             }
           },
           "required": [
@@ -954,7 +785,7 @@
           "properties": {
             "code": {
               "type": "string",
-              "pattern": "^E_[A-Z_]+$"
+              "pattern": "^E_[A-Z0-9_]+$"
             },
             "message": {
               "type": "string",
@@ -1023,6 +854,10 @@
             "limitations"
           ],
           "additionalProperties": false
+        },
+        "semver": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
         }
       }
     },
@@ -1279,6 +1114,10 @@
         },
         "extensions": {
           "type": "object"
+        },
+        "authorization_unavailable_reason": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
@@ -1294,6 +1133,1226 @@
         "recovery"
       ],
       "additionalProperties": false
+    },
+    "urn:tool-driver-cli-spec:operation-status:1.0": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:tool-driver-cli-spec:operation-status:1.0",
+      "title": "operation-status",
+      "description": "可选操作状态 profile。状态与回执分开；取消受理、原生停止、目标恢复分别取证。",
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "spec_version": {
+          "allOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+            },
+            {
+              "pattern": "^1\\."
+            }
+          ]
+        },
+        "operation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancel_requested",
+            "completed",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "wait_timeout_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "调用方等待上限，null 表示未设置；到期不等于停止原生执行。"
+        },
+        "execution_deadline": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "声明的原生执行期限；null 表示未设置或未提供该能力，具体限制记入 record.limitations。"
+        },
+        "record": {
+          "type": "object",
+          "properties": {
+            "availability": {
+              "enum": [
+                "available",
+                "expired",
+                "unavailable"
+              ]
+            },
+            "retain_until": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "survives_cli_exit": {
+              "type": "boolean"
+            },
+            "survives_reconnect": {
+              "type": "boolean"
+            },
+            "survives_instance_restart": {
+              "type": "boolean"
+            },
+            "limitations": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "availability",
+            "retain_until",
+            "survives_cli_exit",
+            "survives_reconnect",
+            "survives_instance_restart",
+            "limitations"
+          ],
+          "additionalProperties": false
+        },
+        "commands": {
+          "type": "object",
+          "properties": {
+            "lookup": {
+              "$ref": "#/$defs/readCommand"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/readCommand"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cancel": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/controlCommand"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "lookup",
+            "result",
+            "cancel"
+          ],
+          "additionalProperties": false
+        },
+        "blocked": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required_action": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "resume": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/controlCommand"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "reason",
+                "required_action",
+                "resume"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stop_observed": {
+          "type": "boolean"
+        },
+        "stop_evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "receipt": {
+          "anyOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extensions": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "spec_version",
+        "operation_id",
+        "request_id",
+        "target",
+        "status",
+        "stage",
+        "observed_at",
+        "started_at",
+        "wait_timeout_ms",
+        "execution_deadline",
+        "record",
+        "commands",
+        "blocked",
+        "stop_observed",
+        "stop_evidence_ref",
+        "receipt"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "readCommand": {
+          "type": "object",
+          "properties": {
+            "argv": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
+            },
+            "read_only": {
+              "const": true
+            }
+          },
+          "required": [
+            "argv",
+            "read_only"
+          ],
+          "additionalProperties": false
+        },
+        "controlCommand": {
+          "type": "object",
+          "properties": {
+            "argv": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
+            },
+            "read_only": {
+              "const": false
+            }
+          },
+          "required": [
+            "argv",
+            "read_only"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "operation_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "stop_observed": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stop_evidence_ref": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "stop_observed": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stop_evidence_ref": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stop_observed": {
+                "const": true
+              },
+              "blocked": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "failed"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blocked": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "record": {
+                "properties": {
+                  "availability": {
+                    "enum": [
+                      "expired",
+                      "unavailable"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "unknown"
+              },
+              "receipt": {
+                "type": "null"
+              },
+              "record": {
+                "properties": {
+                  "limitations": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "cancel_requested",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target": {
+                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+              },
+              "record": {
+                "properties": {
+                  "availability": {
+                    "const": "available"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "record": {
+                "properties": {
+                  "retain_until": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "record": {
+                "properties": {
+                  "limitations": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "urn:tool-driver-cli-spec:workflow:1.0": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:tool-driver-cli-spec:workflow:1.0",
+      "title": "workflow",
+      "description": "可选组合结果 profile。只描述步骤关系与实际结果，不定义执行脚本、原子事务或自动重放。",
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "spec_version": {
+          "allOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+            },
+            {
+              "pattern": "^1\\."
+            }
+          ]
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "enum": [
+            "independent_batch",
+            "dependent_workflow"
+          ]
+        },
+        "failure_policy": {
+          "enum": [
+            "stop",
+            "continue_independent"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "depends_on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "operation_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "not_started",
+                  "running",
+                  "completed",
+                  "failed",
+                  "skipped",
+                  "cancelled",
+                  "unknown"
+                ]
+              },
+              "receipt": {
+                "anyOf": [
+                  {
+                    "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "output_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "skip_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/error"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checkpoint_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1
+              },
+              "extensions": {
+                "type": "object"
+              },
+              "phase": {
+                "enum": [
+                  "observe",
+                  "plan",
+                  "apply",
+                  "submit",
+                  "status",
+                  "result",
+                  "verify"
+                ]
+              },
+              "effects": {
+                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
+              }
+            },
+            "required": [
+              "id",
+              "depends_on",
+              "operation_id",
+              "status",
+              "receipt",
+              "output_refs",
+              "skip_reason",
+              "error",
+              "phase",
+              "effects"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "skipped"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "skip_reason": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "not_started",
+                        "running",
+                        "completed",
+                        "failed",
+                        "cancelled",
+                        "unknown"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "skip_reason": {
+                      "type": "null"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "completed"
+                    }
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "receipt": {
+                          "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "output_refs": {
+                          "minItems": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "receipt": {
+                      "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "operation_id": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    }
+                  }
+                },
+                "then": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "error": {
+                          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/error"
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "receipt": {
+                          "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_started": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "running": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cancelled": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "total",
+            "not_started",
+            "running",
+            "completed",
+            "failed",
+            "skipped",
+            "cancelled",
+            "unknown"
+          ],
+          "additionalProperties": false
+        },
+        "extensions": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "spec_version",
+        "operation_id",
+        "observed_at",
+        "kind",
+        "failure_policy",
+        "steps",
+        "summary"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "independent_batch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "steps": {
+                "items": {
+                  "properties": {
+                    "depends_on": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "urn:tool-driver-cli-spec:query-page:1.0": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:tool-driver-cli-spec:query-page:1.0",
+      "title": "query-page",
+      "description": "可选集合读取 profile。正常分页与无法完整读取分开；弱一致性不能冒充固定快照。",
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "spec_version": {
+          "allOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+            },
+            {
+              "pattern": "^1\\."
+            }
+          ]
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+              }
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "targets",
+            "description",
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "snapshot": {
+          "anyOf": [
+            {
+              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot_unavailable_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "consistency": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "snapshot",
+                "live",
+                "best_effort"
+              ]
+            },
+            "drift_policy": {
+              "enum": [
+                "reject",
+                "report"
+              ]
+            },
+            "limitations": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "mode",
+            "drift_policy",
+            "limitations"
+          ],
+          "additionalProperties": false
+        },
+        "sort": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "minLength": 1
+              },
+              "direction": {
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              }
+            },
+            "required": [
+              "field",
+              "direction"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "具体条目字段由该能力的 result_schema 约束；本 profile 不伪造统一领域对象。"
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "requested": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "effective": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "truncation_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            }
+          },
+          "required": [
+            "requested",
+            "effective",
+            "truncation_reason"
+          ],
+          "additionalProperties": false
+        },
+        "unread_scopes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "scope",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "extensions": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "spec_version",
+        "scope",
+        "snapshot",
+        "snapshot_unavailable_reason",
+        "consistency",
+        "sort",
+        "count",
+        "items",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "limits",
+        "unread_scopes"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "snapshot": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "snapshot_unavailable_reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "consistency": {
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "live",
+                      "best_effort"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "snapshot_unavailable_reason": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "consistency": {
+                "properties": {
+                  "mode": {
+                    "const": "snapshot"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "snapshot": {
+                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+              },
+              "consistency": {
+                "properties": {
+                  "drift_policy": {
+                    "const": "reject"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "consistency": {
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "live",
+                      "best_effort"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "consistency": {
+                "properties": {
+                  "limitations": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "has_more": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "next_cursor": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "has_more": {
+                "const": true
+              },
+              "truncated": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "next_cursor": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "truncated": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "limits": {
+                "properties": {
+                  "truncation_reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "limits": {
+                "properties": {
+                  "truncation_reason": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "unread_scopes": {
+                "minItems": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "truncated": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

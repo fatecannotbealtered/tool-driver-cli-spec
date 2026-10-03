@@ -1,0 +1,19 @@
+{
+  "spec_version": "1.0.0",
+  "schema_version": "1.0",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "package_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "files": [
+    {
+      "path": ".agent/schemas/response.schema.json",
+      "source_path": "schemas/response.schema.json",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "extensions": {
+    "synthetic": true,
+    "limitations": [
+      "Protocol shape example only; the hashes and commit do not identify an actual package or installed Schema copy."
+    ]
+  }
+}

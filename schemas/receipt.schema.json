@@ -142,6 +142,10 @@
     },
     "extensions": {
       "type": "object"
+    },
+    "authorization_unavailable_reason": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [

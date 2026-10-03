@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "spec_version": "1.0.0",
+  "scope": {
+    "targets": [
+      {
+        "mode": "session",
+        "engine_id": "editor-engine",
+        "instance_id": "instance-01",
+        "object_id": "document-01",
+        "locator": "session://instance-01/document-01"
+      }
+    ],
+    "description": "All direct objects in document-01, excluding heavy geometry.",
+    "selector": {
+      "parent_id": "document-01"
+    }
+  },
+  "snapshot": null,
+  "snapshot_unavailable_reason": "The device protocol cannot provide a coherent collection snapshot.",
+  "consistency": {
+    "mode": "best_effort",
+    "drift_policy": "report",
+    "limitations": [
+      "Items may reflect different observation times."
+    ]
+  },
+  "sort": [
+    {
+      "field": "id",
+      "direction": "asc"
+    }
+  ],
+  "count": 2,
+  "items": [
+    {
+      "id": "object-01",
+      "name": "First object"
+    },
+    {
+      "id": "object-02",
+      "name": "Second object"
+    }
+  ],
+  "has_more": false,
+  "truncated": false,
+  "next_cursor": null,
+  "limits": {
+    "requested": 2,
+    "effective": 2,
+    "truncation_reason": null
+  },
+  "unread_scopes": []
+}

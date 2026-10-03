@@ -9,7 +9,14 @@
       "minLength": 1
     },
     "spec_version": {
-      "const": "0.1.0"
+      "allOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+        },
+        {
+          "pattern": "^1\\."
+        }
+      ]
     },
     "schema_version": {
       "const": "1.0"
