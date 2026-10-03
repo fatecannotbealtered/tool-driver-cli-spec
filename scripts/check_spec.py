@@ -10,9 +10,12 @@ import json
 import re
 import sys
 from pathlib import Path, PurePosixPath
+from urllib.parse import quote, urljoin
 
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import SchemaError
 from referencing import Registry, Resource
+from referencing.exceptions import Unresolvable
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,6 +34,98 @@ def validators():
         name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
         for name, schema in schemas.items()
     }
+
+
+def schema_nodes(schema, base: str, pointer: str = ""):
+    """Visit real subschemas, excluding schema containers and annotation data."""
+    if isinstance(schema, bool):
+        yield pointer, base, schema
+        return
+    if not isinstance(schema, dict):
+        return
+    base = urljoin(base, schema.get("$id", base))
+    yield pointer, base, schema
+    for key in ["$defs", "definitions", "properties", "patternProperties", "dependentSchemas"]:
+        for name, child in schema.get(key, {}).items():
+            escaped = name.replace("~", "~0").replace("/", "~1")
+            yield from schema_nodes(child, base, f"{pointer}/{key}/{escaped}")
+    for key in ["items", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "contains", "propertyNames", "if", "then", "else", "not", "contentSchema"]:
+        if key in schema:
+            yield from schema_nodes(schema[key], base, f"{pointer}/{key}")
+    for key in ["allOf", "anyOf", "oneOf", "prefixItems"]:
+        for index, child in enumerate(schema.get(key, [])):
+            yield from schema_nodes(child, base, f"{pointer}/{key}/{index}")
+
+
+def reference_errors(value: dict) -> list[str]:
+    errors = []
+    identifiers = [c["id"] for c in value["capabilities"]]
+    if len(identifiers) != len(set(identifiers)):
+        errors.append("capability IDs must be unique")
+    codes = [entry["code"] for entry in value["error_codes"]]
+    if len(codes) != len(set(codes)):
+        errors.append("error codes must have unique exit mappings")
+    schemas = value["schemas"]
+    registry = Registry()
+    for identifier, schema in schemas.items():
+        try:
+            if schema.get("$id") != identifier or schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+                errors.append(f"schema directory identity or dialect mismatch: {identifier}")
+                continue
+            Draft202012Validator.check_schema(schema)
+            registry = registry.with_resource(identifier, Resource.from_contents(schema))
+        except (ValueError, SchemaError) as exc:
+            errors.append(f"invalid discovered schema {identifier}: {exc}")
+    if errors:
+        return errors
+    registry = registry.crawl()
+    for identifier, schema in schemas.items():
+        for _, base, node in schema_nodes(schema, identifier):
+            if not isinstance(node, dict):
+                continue
+            for key in ["$ref", "$dynamicRef"]:
+                if key in node:
+                    try:
+                        registry.resolver(base).lookup(node[key])
+                    except Unresolvable:
+                        errors.append(f"schema reference must resolve offline: {node[key]}")
+    if errors:
+        return errors
+    for capability in value["capabilities"]:
+        if capability["maturity"] in {"verified", "stable"} and not capability["evidence_refs"]:
+            errors.append("verified capabilities need scoped evidence")
+        if any(code not in codes for code in capability["error_codes"]):
+            errors.append("capability errors must have declared exit mappings")
+        if any(capability[key] not in schemas for key in ["request_schema", "result_schema"]):
+            errors.append("request and result schemas must be in the offline directory")
+            continue
+        request_id = capability["request_schema"]
+        schema_pointers = {pointer for pointer, _, _ in schema_nodes(schemas[request_id], request_id)}
+        names = [(p["location"], p["name"]) for p in capability["parameters"]]
+        if len(names) != len(set(names)):
+            errors.append("parameter names must be unique within each location")
+        for parameter in capability["parameters"]:
+            if parameter["binding"] not in schema_pointers:
+                errors.append("parameter bindings must identify subschemas, not containers or data")
+                continue
+            try:
+                binding = registry.resolver(request_id).lookup("#" + quote(parameter["binding"], safe="/~")).contents
+                if not isinstance(binding, (dict, bool)):
+                    errors.append("parameter bindings must identify schema definitions")
+                else:
+                    Draft202012Validator.check_schema(binding)
+            except (Unresolvable, SchemaError):
+                errors.append("parameter binding must resolve into the request schema")
+        request_validator = Draft202012Validator(schemas[request_id], registry=registry, format_checker=FormatChecker())
+        command = capability["command"].split()
+        for example in capability["examples"]:
+            if example["argv"][:len(command)] != command:
+                errors.append("example argv must start with the command path, without an executable")
+            if example["phase"] not in capability["phases"]:
+                errors.append("example phase must be supported by its capability")
+            if list(request_validator.iter_errors(example["request"])):
+                errors.append("example request must satisfy the declared input schema")
+    return errors
 
 
 def semantic_errors(kind: str, value: dict) -> list[str]:
@@ -90,12 +185,7 @@ def semantic_errors(kind: str, value: dict) -> list[str]:
             if "physical" in value["effects"]:
                 errors.append("a real physical effect cannot be an isolated observed trial")
     elif kind == "reference":
-        identifiers = [c["id"] for c in value["capabilities"]]
-        if len(identifiers) != len(set(identifiers)):
-            errors.append("capability IDs must be unique")
-        for capability in value["capabilities"]:
-            if capability["maturity"] in {"verified", "stable"} and not capability["evidence_refs"]:
-                errors.append("verified capabilities need scoped evidence")
+        errors.extend(reference_errors(value))
     elif kind == "release-manifest":
         paths = []
         for component in value["components"]:

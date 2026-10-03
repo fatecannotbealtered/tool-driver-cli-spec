@@ -156,6 +156,66 @@
       "schema": "evidence.schema.json",
       "valid": false,
       "purpose": "Release evidence cannot omit component identities."
+    },
+    {
+      "path": "examples/invalid/reference-unresolved-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Request schemas must resolve from the offline directory."
+    },
+    {
+      "path": "examples/invalid/reference-unresolved-error.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Capabilities must refer to declared exit mappings."
+    },
+    {
+      "path": "examples/invalid/reference-empty-examples.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Each capability requires an invocation example."
+    },
+    {
+      "path": "examples/invalid/reference-unresolved-parameter.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Parameter bindings must resolve into their request schema."
+    },
+    {
+      "path": "examples/invalid/reference-invalid-example-input.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Invocation inputs must satisfy the declared request schema."
+    },
+    {
+      "path": "examples/invalid/reference-network-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Schema resolution must not silently retrieve network resources."
+    },
+    {
+      "path": "examples/invalid/reference-duplicate-error.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A stable error code has one unambiguous exit mapping."
+    },
+    {
+      "path": "examples/invalid/reference-parameter-container.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A schema container is not a parameter schema."
+    },
+    {
+      "path": "examples/invalid/reference-parameter-default-data.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Default instance data cannot masquerade as a parameter schema."
+    },
+    {
+      "path": "examples/valid/reference-escaped-parameter-names.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "JSON Pointer bindings preserve percent, slash, tilde and Unicode property names."
     }
   ]
 }
