@@ -11,6 +11,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from jsonschema.exceptions import ValidationError
 
 from check_spec import ROOT, main as check_main, semantic_errors, validators
 
@@ -63,7 +64,7 @@ def build(output: Path) -> dict:
     status = inputs["STATUS"].decode("utf-8").strip()
     components = []
     for relative, payload in sorted(inputs.items()):
-        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith(("examples/", "starter/")) else "runtime" if relative.startswith("packages/") else "validator" if relative.startswith(("scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
+        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith(("examples/", "starter/")) else "validator" if relative.startswith(("packages/", "scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
         components.append({"name": relative, "version": version, "path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "role": role})
     manifest = {
         "artifact_kind": "specification", "name": "tool-driver-cli-spec", "version": version,
@@ -117,7 +118,7 @@ def main() -> int:
     try:
         print(json.dumps(build(args.output.resolve()), ensure_ascii=False))
         return 0
-    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+    except (OSError, ValueError, ValidationError, subprocess.CalledProcessError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         return 1
 
