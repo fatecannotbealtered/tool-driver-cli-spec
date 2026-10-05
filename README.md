@@ -2,7 +2,7 @@
 
 ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文件和设备时，状态说得清、授权管得住、失败能收敛。
 
-规范版本：`1.0.0`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本规范供驱动 CLI 的实现者、适配器作者和验收人员使用。读者应了解命令行、JSON，以及所驱动工具的基本操作。
 
@@ -56,7 +56,7 @@ python examples/engineering/svg_title_driver.py reference --index
 python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-acceptance-new
 ```
 
-工作版本保持 1.0.0；机器结构独立为 2.0。已有 Release 1.0.0 的结构为 1.0，内容不同，采用方必须同时固定结构、来源与哈希。正式发布时使用新的版本和标签，不替换旧资产。
+版本 1.0.1 使用驱动结构 2.0，与已有 Release 1.0.0 的结构 1.0 不兼容；迁移见[实施与迁移指南](docs/ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)。采用方必须同时固定规范版本、结构、来源与哈希。发布使用新标签 `v1.0.1`，旧标签和资产保持原样。
 
 ## 实施顺序
 

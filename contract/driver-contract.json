@@ -2,7 +2,7 @@
   "$comment": "Machine-readable driver layer of tool-driver-cli-spec. A driver CLI first satisfies the pinned ai-native-cli-spec contract exactly (base/ai-native-cli-spec/contract.json): envelope keys, core error codes with their exit codes and retryable flags, self-description keys, pagination, batch and _untrusted. This file only adds what driving applications, application files and devices needs; it never redefines a base key, code or command. Prose: docs/LAYERING.md and docs/CORE-SPEC.md.",
   "contract": "tool-driver-cli-spec",
   "contract_version": "2.0",
-  "spec_version": "1.0.0",
+  "spec_version": "1.0.1",
   "schema_version": "2.0",
   "base": {
     "spec": "ai-native-cli-spec",

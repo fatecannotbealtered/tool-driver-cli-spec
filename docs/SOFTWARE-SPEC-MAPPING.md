@@ -1,6 +1,6 @@
 # 与软件 spec 的逐项对照
 
-规范工作版本：`1.0.0`；驱动结构：`2.0`。本次对照 ai-native-cli-spec 远端 main 与本地一致的提交 `d6733433e2a9b93a4e6fb169c6927f6604ec89c7`（`v1.6.3`），不以 README 里的旧示例 pin `v1.5.0` 为当前契约。`base/base-lock.json` 固定的也是这个提交，基线副本不修改。
+规范版本：`1.0.1`；驱动结构：`2.0`。本次对照 ai-native-cli-spec 远端 main 与本地一致的提交 `d6733433e2a9b93a4e6fb169c6927f6604ec89c7`（`v1.6.3`），不以 README 里的旧示例 pin `v1.5.0` 为当前契约。`base/base-lock.json` 固定的也是这个提交，基线副本不修改。
 
 ## 对照与落实
 
@@ -12,8 +12,8 @@
 | [CLI §13](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/.agent/CLI-SPEC_zh.md#L519)、[REPO §6](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/REPO-SPEC_zh.md#L193)：所有公开行为的 FCC，成功/失败/参数/输出/退出码，stable 对应本次候选真实 smoke | VER-001/022/025；种子实际子进程调用与运行时命令集守卫，默认 `unpublishable/fcc missing`。规范的 `check_graduation.py` 留存静态、回归、真实消费及源文件哈希；候选 ZIP 已在隔离 checkout 消费 | 已有机制与真实运行。命令集守卫只证明叶子被调用，不能单独证明所有参数与失败行为覆盖；具体产品仍须逐行为证据 |
 | [SKILL §1/6](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/.agent/SKILL-SPEC_zh.md#L13)：使用者通过 Skill 意图配方与实时 reference 使用工具 | README、种子 Skill 和 `reference --index/--command` 分工；修正种子 Skill 残留的未验证 npx 安装配方，与 Release + SkillHub 约束一致 | 入口已对齐；原生包安装与 SkillHub 路径仍由各产品实测，模板不宣称已有发布 |
 | [SKILL §9](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/.agent/SKILL-SPEC_zh.md#L184)：先跑无 Skill 代表任务、至少三场景、多模型、A/B 实例迭代与实际导航 | SKL-010、VER-026 已要求实测；此次补 `agent-eval` Schema、离线 `check_agent_eval.py`、种子 CI 的记录门禁。绑定源文件、Skill、场景、模型版本、实际 argv/退出码/stdout/stderr、轨迹和结果证据；发布声明要求多模型全场景及无 Skill 基线；fixture 不能满足门禁 | 记录/门禁机制已补。真实 Agent、多模型、A/B 导航观察尚未执行；CLI 回归和模拟记录不能替代 |
-| [SEC §5](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/.agent/SEC-SPEC_zh.md#L89)：每个分发生态在合并和发布路径审计；校验材料由标签工作流 keyless 签名 | 查 Requires-Dist 后补齐 Python <3.13 的 typing-extensions pin，与原五项一起固定；`check_graduation --audit` 使用现有 pip-audit、禁用 pip 解析/安装/修复，保留 JSON。两条工作流均启用；Release 工作流补 Sigstore bundle 签名与精确 workflow/tag 身份校验，审计失败不能签名或发布 | 原五项在线审计通过；完整六项在最终验收重跑。工作流签名尚未运行；CLI 自更新的进程内签名验证属于产品要求，规范哈希验证器不冒充它 |
-| [REPO §4/5c](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/REPO-SPEC_zh.md#L79)、[version-files.js](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/scripts/version-files.js#L142)：版本单源、CHANGELOG、不可变源码和生成物同步 | 规范 VERSION、契约、文档和正反例互相核对；种子新增 `sync_version.py` 从 registry 同步 pyproject/Skill/min_version，`check_project.py` 拒绝这三处及生成 reference 的版本漂移；候选标 dirty，正式 Release manifest 拒绝 dirty | 补上产品版本守卫与写入器；正式冻结、签名和发布仍未执行，已有 Release 1.0.0 不替换 |
+| [SEC §5](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/.agent/SEC-SPEC_zh.md#L89)：每个分发生态在合并和发布路径审计；校验材料由标签工作流 keyless 签名 | 查 Requires-Dist 后补齐 Python <3.13 的 typing-extensions pin，与原五项一起固定；`check_graduation --audit` 使用现有 pip-audit、禁用 pip 解析/安装/修复，保留 JSON。两条工作流均启用；Release 工作流补 Sigstore bundle 签名与精确 workflow/tag 身份校验，审计失败不能签名或发布 | 完整六项在对应提交的验收中重跑，实际审计与签名结果以本版本工作流、签名包和 Release 资产为准；CLI 自更新的进程内签名验证属于产品要求，规范哈希验证器不冒充它 |
+| [REPO §4/5c](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/REPO-SPEC_zh.md#L79)、[version-files.js](https://github.com/fatecannotbealtered/ai-native-cli-spec/blob/d6733433e2a9b93a4e6fb169c6927f6604ec89c7/template/common/scripts/version-files.js#L142)：版本单源、CHANGELOG、不可变源码和生成物同步 | 规范 VERSION、契约、文档和正反例互相核对；种子新增 `sync_version.py` 从 registry 同步 pyproject/Skill/min_version，`check_project.py` 拒绝这三处及生成 reference 的版本漂移；候选标 dirty，正式 Release manifest 拒绝 dirty | 产品版本守卫与写入器已实现；规范 1.0.1 通过独立标签的发布工作流构建、验收和签名，实际完成情况按该版本发布材料取证，已有 Release 1.0.0 保持原样 |
 
 ## 有意调整与按条件适用
 
@@ -22,7 +22,7 @@
 - LAY-008 按既定交付选择 GitHub Release + SkillHub，替代 npm 壳；当前分发没有 npm 生态，不添加无关的 npm audit。采用其他语言、运行时或分发组件的产品仍审计其全部适用生态。
 - common + 语言叠加思路保留，但目前只提供 Python 参考 SDK，不把多语言实现列为规范毕业门槛。Python 版本与平台范围如实声明，不复制软件模板的所有构建矩阵。
 - 本仓库 AGENTS 明确规范正文用中文；不机械复制全部双语、徽章和开源社区模板。具体 CLI 产品的 LICENSE/CONTRIBUTING/SECURITY/第三方 NOTICE/兼容矩阵仍按基线 REPO-SPEC 适用性补齐；种子当前只保证直接运行的开发起点，不声称公开产品仓库准备完成。
-- 当前工作版本按用户要求保留 1.0.0，机器结构独立标识 2.0；正式发布不同内容需要新标签/版本与显式结构迁移，不修改原 Release。
+- 本次按用户选定的规范版本 1.0.1 发布，机器结构独立标识 2.0，与旧规范 1.0.0 的结构 1.0 不兼容；使用新标签 `v1.0.1` 并按实施指南迁移，原 Release 保持原样。实际签名、发布和资产身份以对应版本的工作流与发布材料为准。
 
 ## 真实缺口与取证边界
 

@@ -1,6 +1,6 @@
 # 应用与设备操作规范
 
-规范版本：`1.0.0`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文供 CLI 实现者、适配器作者和验收人员使用，假设读者了解命令行、JSON 和所驱动工具的基本操作。
 机器接口遵循[核心协议](CORE-SPEC.md)和基线 CLI-SPEC，验证证据遵循[验证规范](VERIFICATION-SPEC.md)。

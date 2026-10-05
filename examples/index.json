@@ -1,5 +1,5 @@
 {
-  "spec_version": "1.0.0",
+  "spec_version": "1.0.1",
   "examples": [
     {
       "path": "examples/valid/plan-estimate.json",

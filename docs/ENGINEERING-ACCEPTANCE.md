@@ -1,6 +1,6 @@
 # 能力验收与规范毕业
 
-规范版本：`1.0.0`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.1`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 目标是让 Agent 在授权范围内完成可独立核实的真实任务。命令数量、JSON 返回成功和静态合同通过，都不能代替实际结果。这里把仓库已有 VER-024、DEL-025 的规范准入整理成可执行入口，再按 file/session/device 与实际能力给出任务选择建议；工程、内容处理、服务和设备均按同一公共机制取证。
 
@@ -21,12 +21,12 @@ python scripts/check_graduation.py --audit --browser "C:/Program Files/Google/Ch
 冻结到获授权的干净提交后，用既有构建器生成规范 ZIP；取得独立预期校验值，再执行：
 
 ```powershell
-python scripts/check_graduation.py --audit --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-package-acceptance-new --bundle dist/tool-driver-cli-spec-1.0.0.zip --expected-sha256 <trusted-sha256>
+python scripts/check_graduation.py --audit --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-package-acceptance-new --bundle dist/tool-driver-cli-spec-1.0.1.zip --expected-sha256 <trusted-sha256>
 ```
 
 该入口拒绝覆盖证据目录，重新校验和解包 ZIP，在包目录运行静态检查、全套测试和真实浏览器消费，而非只检查开发目录。`release_ready` 还要求包字节与干净源码逐项一致、提交相同、STATUS 为 stable；它表示本地发布材料具备条件，不证明发布者身份、GitHub 实际资产或 SkillHub 安装。
 
-本次保持规范工作版本 1.0.0。已有 Release 1.0.0 的驱动结构是 1.0，本地扩展结构为 2.0；调用方必须同时固定结构标识、来源和文件哈希，不能只看版本号。已有标签和资产不得替换；正式发布本次不同内容时采用新标签和版本，例如 1.0.1，并明确迁移结构及来源。结构版本独立于规范工作版本，绝不能把两套不同字节当成同一个发布包。
+本次规范版本为 1.0.1，驱动结构为 2.0，与已有 Release 1.0.0 的结构 1.0 不兼容；调用方必须同时固定规范版本、结构标识、来源和文件哈希，按[实施与迁移指南](ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)升级。已有标签和资产保持原样，本次发布使用新标签 `v1.0.1`。结构版本独立于规范版本，两套不同字节分别绑定各自的发布包。
 
 ## 按模式选择最小真实任务
 

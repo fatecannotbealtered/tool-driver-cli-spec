@@ -1,6 +1,6 @@
 # 实施与迁移指南
 
-规范版本：`1.0.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.1`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文供驱动 CLI 的实现者和适配器作者采用本规范，假设读者了解 JSON、命令行测试和目标工具的基本操作。分三种起点：新建工具、已有的基线驱动 CLI、按 1.0 实现的工具。
 
@@ -12,7 +12,7 @@
 
 ## 当前实施路线
 
-1. 采用固定的软件 CLI 基线加驱动扩展，工作版本保持 1.0.0、驱动结构为 2.0。既有发布包不替换；正式发布不同内容时使用新版本和标签，并记录结构迁移。
+1. 采用固定的软件 CLI 基线加驱动扩展，规范版本为 1.0.1、驱动结构为 2.0。本次使用新标签 `v1.0.1`；已有 1.0.0 发布包保持原样，采用方按下述结构迁移说明升级。
 2. 规范按 VER-024、DEL-025 验收，提供种子、SDK、已实现文件适配器和可执行毕业入口；不把三个工具全部迁移设为规范毕业门槛。
 3. 每个工具按 [工程任务验收](ENGINEERING-ACCEPTANCE.md) 选定首批闭环；未实测的环境和命令不提升成熟度。产品交付保持 GitHub Release 打包、SkillHub 分发。
 
@@ -58,7 +58,7 @@ creo-cli、xpedition-cli、kicad-cli、auto-cad-cli 这类工具已经符合基�
 
 ## 从已发布的驱动结构 1.0 迁移
 
-本地驱动结构 2.0 与已发布结构 1.0 不兼容；规范工作版本仍为 1.0.0。必须按结构、来源和副本哈希识别，逐项迁移：
+规范 1.0.1 的驱动结构 2.0 与已发布规范 1.0.0 的结构 1.0 不兼容。必须按规范版本、结构、来源和副本哈希识别，逐项迁移：
 
 | 1.0 | 2.0 |
 |---|---|
@@ -112,7 +112,7 @@ python scripts/validate_contract.py --schema reference --input examples/valid/re
 python scripts/check_spec.py
 python -m unittest discover -s tests -v
 python scripts/build_spec_bundle.py
-python scripts/verify_spec_bundle.py --bundle dist/tool-driver-cli-spec-1.0.0.zip --checksum dist/tool-driver-cli-spec-1.0.0.sha256
+python scripts/verify_spec_bundle.py --bundle dist/tool-driver-cli-spec-1.0.1.zip --checksum dist/tool-driver-cli-spec-1.0.1.sha256
 ```
 
 构建只在工作树干净时进行；ZIP 校验不解压到磁盘，默认解压上限 32 MiB，拒绝加密、分卷、ZIP64 和链接条目。哈希不符为 `E_INTEGRITY`（退出码 1），结构错误为 `E_VALIDATION`（2）。没有独立的期望值时，只能报告包内部一致，不能认证来源。

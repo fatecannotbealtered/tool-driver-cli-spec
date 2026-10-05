@@ -1,6 +1,6 @@
 {
   "evidence_id": "evidence-development-01",
-  "spec_version": "1.0.0",
+  "spec_version": "1.0.1",
   "schema_version": "2.0",
   "evidence_context": "development",
   "kind": "simulated_adapter",

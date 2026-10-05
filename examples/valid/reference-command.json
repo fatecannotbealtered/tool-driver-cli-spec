@@ -4,7 +4,7 @@
   "version": "0.4.0",
   "driver_profile": {
     "spec": "tool-driver-cli-spec",
-    "spec_version": "1.0.0",
+    "spec_version": "1.0.1",
     "schema_version": "2.0",
     "base": {
       "spec": "ai-native-cli-spec",

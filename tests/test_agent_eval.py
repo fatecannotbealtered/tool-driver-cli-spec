@@ -25,7 +25,8 @@ class AgentEvalRecordTests(unittest.TestCase):
             {'id':item,'requirements':[name]} for item,name in
             (('read','fresh-agent-read'),('scope','missing-scope'),('lost-reply','lost-reply'))])
         evidence = self.write('evidence/outcome.json', {'fixture':True})
-        self.report = {'spec_version':'1.0.0','schema_version':'2.0','tool':'eval-fixture','product_version':'0.1.0',
+        self.report = {'spec_version':(ROOT / 'VERSION').read_text(encoding='utf-8').strip(),
+                       'schema_version':'2.0','tool':'eval-fixture','product_version':'0.1.0',
                        'record_kind':'fixture','source_files':[self.registry], 'skill':skill,'suite':suite,'runs':[],
                        'evaluation_scope':{'claim':'capability_subset','capabilities':['target inspect','target apply'],
                            'requirements':[{'id':name,'disposition':'supported' if name in {'fresh-agent-read','missing-scope','lost-reply'} else 'unsupported',

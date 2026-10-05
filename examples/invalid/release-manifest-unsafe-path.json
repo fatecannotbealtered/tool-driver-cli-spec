@@ -2,7 +2,7 @@
   "artifact_kind": "cli_product",
   "name": "demo-cad-cli",
   "version": "0.4.0",
-  "spec_version": "1.0.0",
+  "spec_version": "1.0.1",
   "base": {
     "spec": "ai-native-cli-spec",
     "version": "v1.6.3"
