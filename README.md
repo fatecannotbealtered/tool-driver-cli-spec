@@ -2,7 +2,7 @@
 
 ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文件和设备时，状态说得清、授权管得住、失败能收敛。
 
-规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.2`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本规范供驱动 CLI 的实现者、适配器作者和验收人员使用。读者应了解命令行、JSON，以及所驱动工具的基本操作。
 
@@ -36,6 +36,7 @@ ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文
 | [驱动 Skill 增补](docs/SKILL-ADDENDUM.md) | 驱动 Skill 在基线 SKILL-SPEC 之上必须写的内容 |
 | [实施与迁移](docs/ADOPTION-GUIDE.md) | 新建工具、从基线驱动 CLI 和 1.0 迁移、试点 |
 | [工具工程](docs/DEVELOPMENT-GUIDE.md) | 产品注册表、生成器、Python SDK 与种子工程 |
+| [命令树设计](docs/COMMAND-DESIGN.md) | 应用能力调查、任务映射、范围分母与可执行开发设计契约 |
 | [能力验收与规范毕业](docs/ENGINEERING-ACCEPTANCE.md) | 按模式和能力选择任务，区分规范准入与具体工具验收 |
 | [驱动契约](contract/driver-contract.json) | 扩展错误码、回执推导规则、错误详情、效果与范围的机器形式 |
 | [机器结构](schemas/) | 计划、回执、操作状态、工作流、批量、列表、reference、context、doctor、scope 等 Schema |
@@ -56,11 +57,11 @@ python examples/engineering/svg_title_driver.py reference --index
 python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-acceptance-new
 ```
 
-版本 1.0.1 使用驱动结构 2.0，与已有 Release 1.0.0 的结构 1.0 不兼容；迁移见[实施与迁移指南](docs/ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)。采用方必须同时固定规范版本、结构、来源与哈希。发布使用新标签 `v1.0.1`，旧标签和资产保持原样。
+版本 1.0.2 沿用 1.0.1 的驱动结构 2.0 和运行时信封，无需再次迁移公共协议，与已有 Release 1.0.0 的结构 1.0 不兼容；迁移见[实施与迁移指南](docs/ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)。采用方必须同时固定规范版本、结构、来源与哈希。发布使用新标签 `v1.0.2`，旧标签和资产保持原样。
 
 ## 实施顺序
 
-1. 选定驱动模式、目标身份和首批命令，固定基线标签与驱动规范版本。
+1. 调查实际应用的能力、接口、版本、许可和证据，从用户任务设计命令树、范围分母与读回判据，固定基线标签与驱动规范版本。
 2. 先满足基线：信封、错误码、自描述命令、`--dry-run`/`--confirm`、`_untrusted`。
 3. 加上驱动层：reference 的 driver 块、范围文件、操作记录、回执与读回。
 4. 按命令补齐命令级测试、真实读回和产物验收，记录失败路径与未覆盖项。

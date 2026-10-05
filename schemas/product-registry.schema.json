@@ -110,6 +110,10 @@
           }
         ]
       }
+    },
+    "design": {
+      "description": "Optional development design record; new starter projects require it. Never copied into public reference or the runtime envelope.",
+      "$ref": "urn:tool-driver-cli-spec:product-design:2.0"
     }
   },
   "required": [

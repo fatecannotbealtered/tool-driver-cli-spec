@@ -1,6 +1,6 @@
 # 驱动 Skill 增补
 
-规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.2`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文面向给驱动 CLI 写 Skill 的作者。基线 [SKILL-SPEC](../base/ai-native-cli-spec/SKILL-SPEC_zh.md) 原样适用：frontmatter、第三人称的 description（写清做什么、何时用、哪些不归它管）、渐进式披露、作为 CLI 门面的必备段落、STOP CHECKPOINT、评测与多 Skill 家族。
 本文只列驱动 Skill 在此之上必须增加的内容。一个工具带多个 Skill 时，SKL-001 到 SKL-004 写在入口 Skill 里，领域 Skill 指向它。

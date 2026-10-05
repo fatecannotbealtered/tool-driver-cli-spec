@@ -1,5 +1,5 @@
 {
-  "spec_version": "1.0.1",
+  "spec_version": "1.0.2",
   "examples": [
     {
       "path": "examples/valid/plan-estimate.json",
@@ -1248,6 +1248,36 @@
       "schema": "receipt.schema.json",
       "valid": false,
       "purpose": "Forged generic passed cannot hide a result from an old target revision."
+    },
+    {
+      "path": "examples/valid/product-design-draft.json",
+      "schema": "product-registry.schema.json",
+      "valid": true
+    },
+    {
+      "path": "examples/invalid/design-dangling-reference.json",
+      "schema": "product-registry.schema.json",
+      "valid": false
+    },
+    {
+      "path": "examples/invalid/design-scope-omission.json",
+      "schema": "product-registry.schema.json",
+      "valid": false
+    },
+    {
+      "path": "examples/invalid/design-false-completion.json",
+      "schema": "product-registry.schema.json",
+      "valid": false
+    },
+    {
+      "path": "examples/invalid/design-missing-evidence.json",
+      "schema": "product-registry.schema.json",
+      "valid": false
+    },
+    {
+      "path": "examples/invalid/design-unknown-as-verified.json",
+      "schema": "product-registry.schema.json",
+      "valid": false
     }
   ]
 }

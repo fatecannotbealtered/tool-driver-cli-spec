@@ -20,3 +20,4 @@ This repository is **{{NAME}}**, a driver CLI: an AI-native CLI (ai-native-cli-s
 - Driver mode: `{{PROFILE}}`
 - Source: `{{PACKAGE}}/` (the adapter is `{{PACKAGE}}/adapter.py`); declarations: `registry.json`; tests: `tests/`; Skill: `skills/{{NAME}}/SKILL.md`
 - Local checks: `python check_project.py && python .agent/driver/scripts/generate_product.py --registry registry.json --output {{PACKAGE}}/generated --check && python -m unittest discover -s tests -v`
+- Before command design, survey the actual application and update `registry.json.design`; check it with `python .agent/driver/scripts/check_product_design.py --registry registry.json --require-design`. Placeholder commands and FCC do not prove application capability coverage.

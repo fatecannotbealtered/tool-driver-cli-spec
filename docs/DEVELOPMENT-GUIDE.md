@@ -1,6 +1,6 @@
 # 从注册表建立驱动工具
 
-规范版本：`1.0.1`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.2`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文供 CLI 和适配器作者使用，假设读者了解 Python、JSON 和目标应用的基本操作。开发支持包括产品注册表、生成器、Python SDK 和种子工程；它们是本规范的参考实现，不要求每个驱动 CLI 都用 Python。
 
@@ -17,6 +17,8 @@
 注册表和声明都是数据：生成和发现不执行示例，不根据注册表内容导入代码。适配器必须显式接入；SDK 不会把未知改写成未修改，也不替应用承诺保存、恢复、幂等或授权。
 
 ## 按能力接入
+
+先按 [命令设计指南](COMMAND-DESIGN.md)调查实际 Application 的能力、接口、版本与许可，再从用户任务设计命令树。注册表可携带开发用 `design`，新种子工程以该记录闭合清单、任务、命令、适配器与验证引用；旧注册表继续兼容。FCC 的声明命令覆盖不能替代应用能力覆盖。
 
 先选实际目标的 `file`、`session` 或 `device` 模式，再定义命令、效果、参数与产品 Schema，不从品牌示例复制支持声明。模式不决定行业；`device` 脚手架也没有物理动作实现。新增物理效果必须同时满足 COR-008、DRV-039 的 T2、危险标记与授权要求。
 
@@ -35,7 +37,7 @@ python scripts/generate_product.py --registry examples/development/product-regis
 ```
 
 第一条生成输出目录，第二条只核对；注册表变化后用 `--update` 更新。生成器只替换它的所有权清单登记过、且未被手改的文件，遇到其他同名内容会停止。
-输出包括 `product_contract.json`（SDK 加载）、`reference.json`（审阅与差异比较）、`contract-ext.json`（驱动与产品扩展码，基线 contract-ext 格式）和 `skill-capabilities.md`。生成器在写出之前用公共 Schema 和 `check_spec` 的规则检查 reference，错误会逐条列出。
+输出包括 `product_contract.json`（SDK 加载）、`reference.json`（审阅与差异比较）、`contract-ext.json`（驱动与产品扩展码，基线 contract-ext 格式）、`skill-capabilities.md` 和开发用 `development-design.json`。生成器在写出之前用公共 Schema 和 `check_spec` 的规则检查 reference，并校验设计与证据引用，错误会逐条列出。设计数据不进入 public reference 或运行时信封。
 
 ## 产品版本与 Agent eval
 

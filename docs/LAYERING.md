@@ -1,6 +1,6 @@
 # 基线与驱动层
 
-规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.2`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文面向驱动 CLI 的实现者和验收人员，说明本规范与 ai-native-cli-spec 的关系：哪些原样继承，哪些在驱动场景下收紧，哪些是本规范新增的。
 读者应已读过基线的 CLI-SPEC、SKILL-SPEC 和 SEC-SPEC，原文保存在 [base/ai-native-cli-spec/](../base/ai-native-cli-spec/CLI-SPEC_zh.md)。

@@ -305,5 +305,249 @@
         "evidence_refs": []
       }
     }
-  ]
+  ],
+  "design": {
+    "design_version": "2.0",
+    "application": {
+      "name": "SVG example target (not surveyed)",
+      "version": "unconfigured",
+      "license": "unknown; record actual version/license restrictions before automation",
+      "environment": {
+        "platform": "unconfigured",
+        "arch": "unconfigured",
+        "mode": "file"
+      },
+      "evidence_refs": []
+    },
+    "scope": {
+      "description": "Three draft SVG declarations plus an explicit unresearched area; not full SVG/application coverage.",
+      "inventory_ids": [
+        "drawing-inspect",
+        "drawing-set-title",
+        "drawing-export",
+        "unresearched-application-capabilities"
+      ],
+      "inventory_evidence_refs": [],
+      "excluded_scopes": [
+        "Other applications, versions, modes and tasks outside the chosen survey."
+      ],
+      "limitations": [
+        "No application survey or native adapter execution has been performed for this declaration."
+      ]
+    },
+    "coverage": {
+      "denominator_ids": [
+        "drawing-inspect",
+        "drawing-set-title",
+        "drawing-export",
+        "unresearched-application-capabilities"
+      ],
+      "fcc_scope": "declared_commands",
+      "rationale": "Command contract tests do not establish application capability coverage; unknown areas remain in this scoped denominator."
+    },
+    "capabilities": [
+      {
+        "id": "drawing-inspect",
+        "description": "Read the title, size and element count of an SVG drawing without changing it.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "drawing-set-title",
+        "description": "Set the title element of an SVG drawing and save the file in place.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "drawing-export",
+        "description": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "unresearched-application-capabilities",
+        "description": "Application capabilities beyond these starter/example declarations have not been surveyed.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unknown",
+        "cli_exposure": "not_exposed",
+        "testing": "unknown",
+        "disposition": "unknown",
+        "reason": "The listed command set is not an application-wide inventory. Expand this scope from actual application evidence.",
+        "evidence_refs": []
+      }
+    ],
+    "evidence": [],
+    "tasks": [
+      {
+        "id": "task-drawing-inspect",
+        "goal": "Read the title, size and element count of an SVG drawing without changing it.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-inspect"
+        ],
+        "command_paths": [
+          "drawing inspect"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing inspect",
+            "name": "file",
+            "reason": "the SVG file"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-inspect",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      },
+      {
+        "id": "task-drawing-set-title",
+        "goal": "Set the title element of an SVG drawing and save the file in place.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-set-title"
+        ],
+        "command_paths": [
+          "drawing set-title"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing set-title",
+            "name": "file",
+            "reason": "the SVG file inside an authorized root"
+          },
+          {
+            "command_path": "drawing set-title",
+            "name": "title",
+            "reason": "the new title text"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-set-title",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      },
+      {
+        "id": "task-drawing-export",
+        "goal": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-export"
+        ],
+        "command_paths": [
+          "drawing export"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing export",
+            "name": "file",
+            "reason": "Task input; validate against the real target."
+          },
+          {
+            "command_path": "drawing export",
+            "name": "output",
+            "reason": "a new PNG path under an output root"
+          },
+          {
+            "command_path": "drawing export",
+            "name": "dpi",
+            "reason": "Task input; validate against the real target."
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-export",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      }
+    ],
+    "commands": [
+      {
+        "path": "drawing inspect",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-inspect"
+        ],
+        "task_ids": [
+          "task-drawing-inspect"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      },
+      {
+        "path": "drawing set-title",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-set-title"
+        ],
+        "task_ids": [
+          "task-drawing-set-title"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      },
+      {
+        "path": "drawing export",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-export"
+        ],
+        "task_ids": [
+          "task-drawing-export"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      }
+    ],
+    "tests": [],
+    "tree_decisions": [
+      {
+        "decision": "Use temporary resource/action paths until the real task survey is available.",
+        "alternatives": [
+          "Organize by different domain resources or end-to-end tasks."
+        ],
+        "reason": "No fixed CRUD set, depth, root words, or API-to-command one-to-one requirement; these names are placeholders."
+      }
+    ]
+  }
 }

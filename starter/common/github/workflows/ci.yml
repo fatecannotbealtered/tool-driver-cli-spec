@@ -25,6 +25,8 @@ jobs:
         run: python check_project.py
       - name: Generated declarations match registry.json
         run: python .agent/driver/scripts/generate_product.py --registry registry.json --output {{PACKAGE}}/generated --check
+      - name: Scoped application design and evidence mappings
+        run: python .agent/driver/scripts/check_product_design.py --registry registry.json --require-design
       - name: Command-level contract tests
         run: python -m unittest discover -s tests -v
       - name: Recorded Agent evaluation gate for publishable products

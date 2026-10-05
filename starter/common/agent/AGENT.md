@@ -15,6 +15,12 @@ Read only the parts the task needs. The driver layer never relaxes the base; `LA
 - `.agent/driver/` and `.agent/vendor/sdk/` are pinned copies. Never edit them; replace them by instantiating a newer starter or re-copying from a newer specification package, and record the change in CHANGELOG.
 - `{{PACKAGE}}/adapter.py` is the native side: targets, snapshots, plans, receipts and read-back. The SDK owns flags, tokens, scope checks, the operation store and envelopes.
 
+## Before designing commands
+
+Read `.agent/driver/docs/COMMAND-DESIGN.md` and COR-026. Survey the actual application's tasks, resources, interfaces, version and license; preserve sources. Update `registry.json.design` with separate application support, automation reachability, adapter implementation, CLI exposure and actual testing states. Explain the scoped inventory/denominator, deferred/excluded/unknown areas and tree decisions. The `target inspect/apply` paths are placeholders, not a prescribed CRUD tree or proof of application coverage.
+
+Keep capability/task/command/readback/test references closed. A supported task needs critical parameters, hashed implementation entrypoints and actual command/readback evidence bound to the run, source, application version and environment. Unknown, blocked, not_run and contract fixtures cannot count as completed tasks. The checker establishes consistency, not survey exhaustiveness or tree quality.
+
 ## Workflow A — add a command
 
 1. Declare it in `registry.json`: path, type, params (with `unit` for quantities), output schema, examples (`--dry-run` / `--confirm` pair for writes, `--dangerous` for dangerous ones) and the `driver` block (effects, phases, modes, maturity, environments, limits, recovery, profiles, error codes).
@@ -31,6 +37,7 @@ Read the clause the behaviour belongs to first. Changing a parameter, default, u
 ## Self-check before you finish
 
 - [ ] `check_project.py`, the generator `--check` and the tests pass
+- [ ] `python .agent/driver/scripts/check_product_design.py --registry registry.json --require-design` passes; application coverage is reported separately from declared-command FCC
 - [ ] every new or changed command has command-level tests, including failure paths
 - [ ] no command claims `verified` or `stable` without evidence
 - [ ] receipts report what was observed; nothing is assumed saved, delivered or verified

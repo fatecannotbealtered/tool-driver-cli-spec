@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "scripts" / "validate_contract.py"
 HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 sys.path.insert(0, str(ROOT / "scripts"))
-from validate_contract import instance_schemas, validate_value  # noqa: E402
+from validate_contract import UsageError, instance_schemas, validate_value  # noqa: E402
+from check_spec import instance_errors  # noqa: E402
 
 
 def load_json(path: Path):
@@ -67,7 +68,13 @@ class ConformanceCliTests(unittest.TestCase):
         self.assertGreaterEqual(len(examples), 150)
         for item in examples:
             with self.subTest(path=item["path"]):
-                errors = validate_value(item["schema"], load_json(ROOT / item["path"]))
+                value = load_json(ROOT / item["path"])
+                if load_json(ROOT / "schemas" / item["schema"]).get("x-development-only"):
+                    with self.assertRaises(UsageError):
+                        validate_value(item["schema"], value)
+                    errors = instance_errors(item["schema"].removesuffix(".schema.json"), value)
+                else:
+                    errors = validate_value(item["schema"], value)
                 self.assertEqual(not errors, item["valid"], errors)
 
     def test_a_sample_of_fixtures_via_subprocess(self):
@@ -96,12 +103,14 @@ class ConformanceCliTests(unittest.TestCase):
                 self.assert_response(self.invoke("--schema", "receipt", "--input", "-", payload=payload), 2)
 
     def test_unknown_common_and_development_schemas_are_usage_errors(self):
-        for schema in ["missing", "common", "product-registry"]:
+        for schema in ["missing", "common", "product-registry", "product-design"]:
             with self.subTest(schema=schema):
                 response = self.assert_response(self.invoke("--schema", schema, "--input", "-", payload=b"{}"), 2)
                 self.assertEqual(response["error"]["code"], "E_USAGE")
         self.assertIn("reference", instance_schemas())
         self.assertNotIn("common", instance_schemas())
+        self.assertNotIn("product-design", instance_schemas())
+        self.assertNotIn("product-registry", instance_schemas())
 
     def test_missing_file_is_io_failure(self):
         response = self.assert_response(self.invoke("--schema", "receipt", "--input", str(self.cwd / "missing.json")), 1)

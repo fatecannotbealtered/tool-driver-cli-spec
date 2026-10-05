@@ -1,6 +1,6 @@
 # 核心机器协议
 
-规范版本：`1.0.1`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
+规范版本：`1.0.2`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
 本文面向驱动 CLI、适配器和消费方的实现者，假设读者已读过基线 [CLI-SPEC](../base/ai-native-cli-spec/CLI-SPEC_zh.md)。
 本文只写驱动层在基线之上增加或收紧的要求；基线已规定的内容不重复，除非驱动场景需要额外约束。与基线的关系见[基线与驱动层](LAYERING.md)。
@@ -308,6 +308,16 @@ POSIX 上目录为 0700、文件为 0600；Windows 上依靠用户目录的默�
 | COR-020 | [列表](../examples/valid/query-snapshot-page.json)、[无法续取](../examples/valid/query-truncated-no-continuation.json) |
 | COR-024 | [需要人处理](../examples/valid/response-human-required.json)、[长任务被模态框阻塞](../examples/valid/status-blocked.json) |
 | COR-025 | [记录中的计划](../examples/valid/status-planned.json)、[未登记的操作阻止写入](../examples/valid/response-unresolved-operation.json)、[登记未知结果](../examples/valid/status-resolved.json) |
+
+### COR-026：从应用能力设计命令树
+
+开发新命令或调整命令树时，必须先调查目标 Application 的真实能力、接口、版本、许可和证据，分别记录应用支持、自动化可达性、适配器实现、CLI 暴露及实测状态；缺少 API 不得直接推断应用不支持。必须从用户任务确定资源/动作与命令粒度，说明能力 → 任务 → 命令 → 验证的映射、取舍、调查范围和未覆盖部分。
+
+命名与粒度继承基线 §12，重子资源与范围查询继承 §8.2/8.3，注册与效果遵循 COR-007/008，生命周期与工作流遵循既有条款；不规定 CRUD 集合、树深度、固定根词或 API 一比一映射。种子 `target inspect/apply` 仅为占位。
+
+采用开发设计记录时，每条领域命令必须追溯到能力与任务，工具管理命令另作说明；清单内每项能力必须有暴露、延后、排除或未知的处置及原因。已支持任务必须含关键参数、真实适配器入口、读回判据与实际通过的测试，已验证记录绑定运行、源码、应用版本与环境。声明命令的 FCC=100% 不得冒充应用能力覆盖；blocked、unknown、not_run 不得算作完成。
+
+验收：按[命令设计指南](COMMAND-DESIGN.md)核对调查材料与任务取舍；开发检查拒绝悬空引用、缺少实际证据、范围遗漏和虚假完成。检查器只证明记录一致性，不证明应用调查穷尽或命令树质量。开发记录兼容旧注册表，不改变公共驱动结构或运行时信封。
 
 ## 开放问题
 

@@ -46,7 +46,7 @@ class GenerationTests(unittest.TestCase):
         result = generate_registry(self.registry(), self.output)
         self.assertTrue(result["changed"])
         self.assertEqual(sorted(path.name for path in self.output.iterdir()),
-                         ["contract-ext.json", "product-generation.manifest.json", "product_contract.json", "reference.json", "skill-capabilities.md"])
+                         ["contract-ext.json", "development-design.json", "product-generation.manifest.json", "product_contract.json", "reference.json", "skill-capabilities.md"])
         extension = json.loads((self.output / "contract-ext.json").read_text(encoding="utf-8"))
         self.assertIn("E_DRAWING_LOCKED", extension["error_codes"])
         self.assertNotIn("E_CONFLICT", extension["error_codes"], "core codes stay in the base contract")

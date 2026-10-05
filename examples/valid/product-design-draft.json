@@ -1,0 +1,553 @@
+{
+  "registry_version": "2.0",
+  "name": "sample-driver",
+  "product_version": "0.1.0",
+  "description": "A development registry for a file-mode driver that edits SVG drawings; the adapter is not implemented.",
+  "risk_tier": "T1",
+  "record": {
+    "store": "SQLite file in the tool state directory",
+    "retain_days": 30,
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": true,
+    "limitations": [
+      "A synchronous apply whose CLI process ends reports unknown once its lease expires."
+    ]
+  },
+  "builtins": {
+    "maturity": "experimental",
+    "evidence_refs": []
+  },
+  "error_codes": {
+    "E_DRAWING_LOCKED": {
+      "exit": 6,
+      "retryable": false,
+      "description": "Another program holds the drawing file open for writing; re-read state after it closes."
+    }
+  },
+  "schemas": {
+    "inspection": {
+      "shape": "object",
+      "fields": [
+        "file",
+        "title",
+        "width_mm",
+        "height_mm",
+        "element_count",
+        "snapshot"
+      ],
+      "untrusted_fields": [
+        "title"
+      ]
+    },
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    }
+  },
+  "commands": [
+    {
+      "path": "drawing inspect",
+      "type": "read",
+      "description": "Read the title, size and element count of an SVG drawing without changing it.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file"
+        }
+      ],
+      "output_schema": "inspection",
+      "examples": [
+        "sample-driver drawing inspect --file D:/work/copy/part-01.svg --compact"
+      ],
+      "driver": {
+        "capability_id": "drawing-inspect",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Reads one file at a time; external references are not followed."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_UNSUPPORTED"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing set-title",
+      "type": "write",
+      "description": "Set the title element of an SVG drawing and save the file in place.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file inside an authorized root"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "multiple": false,
+          "description": "the new title text"
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --dry-run",
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-set-title",
+        "effects": [
+          "change",
+          "persist"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Rewrites the whole file; comments outside the title element are kept byte for byte."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_DRAWING_LOCKED",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": [],
+        "stages": [
+          {
+            "stage": "plan",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "apply",
+            "effects": [
+              "change",
+              "persist"
+            ]
+          },
+          {
+            "stage": "verify",
+            "effects": [
+              "change"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "drawing export",
+      "type": "write",
+      "description": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "output",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "a new PNG path under an output root"
+        },
+        {
+          "name": "dpi",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 96
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "sample-driver drawing export --file D:/work/copy/part-01.svg --output D:/work/out/part-01.png --dry-run",
+        "sample-driver drawing export --file D:/work/copy/part-01.svg --output D:/work/out/part-01.png --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-export",
+        "effects": [
+          "artifact"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Refuses to overwrite an existing file."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_NATIVE_FAILURE",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": []
+      }
+    }
+  ],
+  "design": {
+    "design_version": "2.0",
+    "application": {
+      "name": "SVG example target (not surveyed)",
+      "version": "unconfigured",
+      "license": "unknown; record actual version/license restrictions before automation",
+      "environment": {
+        "platform": "unconfigured",
+        "arch": "unconfigured",
+        "mode": "file"
+      },
+      "evidence_refs": []
+    },
+    "scope": {
+      "description": "Three draft SVG declarations plus an explicit unresearched area; not full SVG/application coverage.",
+      "inventory_ids": [
+        "drawing-inspect",
+        "drawing-set-title",
+        "drawing-export",
+        "unresearched-application-capabilities"
+      ],
+      "inventory_evidence_refs": [],
+      "excluded_scopes": [
+        "Other applications, versions, modes and tasks outside the chosen survey."
+      ],
+      "limitations": [
+        "No application survey or native adapter execution has been performed for this declaration."
+      ]
+    },
+    "coverage": {
+      "denominator_ids": [
+        "drawing-inspect",
+        "drawing-set-title",
+        "drawing-export",
+        "unresearched-application-capabilities"
+      ],
+      "fcc_scope": "declared_commands",
+      "rationale": "Command contract tests do not establish application capability coverage; unknown areas remain in this scoped denominator."
+    },
+    "capabilities": [
+      {
+        "id": "drawing-inspect",
+        "description": "Read the title, size and element count of an SVG drawing without changing it.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "drawing-set-title",
+        "description": "Set the title element of an SVG drawing and save the file in place.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "drawing-export",
+        "description": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "unresearched-application-capabilities",
+        "description": "Application capabilities beyond these starter/example declarations have not been surveyed.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unknown",
+        "cli_exposure": "not_exposed",
+        "testing": "unknown",
+        "disposition": "unknown",
+        "reason": "The listed command set is not an application-wide inventory. Expand this scope from actual application evidence.",
+        "evidence_refs": []
+      }
+    ],
+    "evidence": [],
+    "tasks": [
+      {
+        "id": "task-drawing-inspect",
+        "goal": "Read the title, size and element count of an SVG drawing without changing it.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-inspect"
+        ],
+        "command_paths": [
+          "drawing inspect"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing inspect",
+            "name": "file",
+            "reason": "the SVG file"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-inspect",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      },
+      {
+        "id": "task-drawing-set-title",
+        "goal": "Set the title element of an SVG drawing and save the file in place.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-set-title"
+        ],
+        "command_paths": [
+          "drawing set-title"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing set-title",
+            "name": "file",
+            "reason": "the SVG file inside an authorized root"
+          },
+          {
+            "command_path": "drawing set-title",
+            "name": "title",
+            "reason": "the new title text"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-set-title",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      },
+      {
+        "id": "task-drawing-export",
+        "goal": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "drawing-export"
+        ],
+        "command_paths": [
+          "drawing export"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "drawing export",
+            "name": "file",
+            "reason": "Task input; validate against the real target."
+          },
+          {
+            "command_path": "drawing export",
+            "name": "output",
+            "reason": "a new PNG path under an output root"
+          },
+          {
+            "command_path": "drawing export",
+            "name": "dpi",
+            "reason": "Task input; validate against the real target."
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-drawing-export",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      }
+    ],
+    "commands": [
+      {
+        "path": "drawing inspect",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-inspect"
+        ],
+        "task_ids": [
+          "task-drawing-inspect"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      },
+      {
+        "path": "drawing set-title",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-set-title"
+        ],
+        "task_ids": [
+          "task-drawing-set-title"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      },
+      {
+        "path": "drawing export",
+        "role": "domain",
+        "capability_ids": [
+          "drawing-export"
+        ],
+        "task_ids": [
+          "task-drawing-export"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      }
+    ],
+    "tests": [],
+    "tree_decisions": [
+      {
+        "decision": "Use temporary resource/action paths until the real task survey is available.",
+        "alternatives": [
+          "Organize by different domain resources or end-to-end tasks."
+        ],
+        "reason": "No fixed CRUD set, depth, root words, or API-to-command one-to-one requirement; these names are placeholders."
+      }
+    ]
+  }
+}

@@ -28,7 +28,8 @@ VERSION = "0.1.0"
 HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 TEXT_SUFFIXES = {".md", ".json", ".py", ".toml", ".yml", ".txt", ""}
-VENDORED_SCRIPTS = ("check_spec.py", "contract_io.py", "validate_contract.py", "generate_product.py", "check_agent_eval.py")
+VENDORED_SCRIPTS = ("check_spec.py", "contract_io.py", "validate_contract.py", "generate_product.py", "check_agent_eval.py",
+                    "check_product_design.py")
 
 
 class StarterError(ValueError):

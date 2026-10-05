@@ -18,3 +18,5 @@ python scripts/instantiate_starter.py --name sample-native-cli --profile file --
 模板中的占位符包括 `{{NAME}}`（产品名）、`{{PACKAGE}}`（Python 包名）、`{{VERSION}}`、`{{PROFILE}}`、`{{DATE}}`、`{{ENV_PREFIX}}`（环境变量前缀），以及按 HTML、JSON/TOML 上下文转义的描述、作者与仓库槽位。实例化时替换一次，不把元数据重新解释为模板。
 
 初始化成功、协议测试通过和真实原生能力的验证分别验收；未实现的适配器只返回 `E_UNSUPPORTED`，不生成假的工程、设备测量或保存回执。使用方法见[工具工程指南](../docs/DEVELOPMENT-GUIDE.md)。
+
+新工程携带开发用 `registry.json.design`，初始能力与应用调查明确为未知/未实现。先按[命令设计指南](../docs/COMMAND-DESIGN.md)调查应用、版本、许可与接口，再替换 `target inspect/apply` 占位，闭合任务、参数、入口、读回、测试及覆盖分母；CI 使用 `check_product_design.py --require-design`。设计记录通过、声明命令 FCC 与真实应用能力完成分别取证。

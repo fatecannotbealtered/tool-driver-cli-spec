@@ -86,7 +86,7 @@ def main(argv=None):
         checks.append(bundle_check)
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8')
     commands = [('static', ['scripts/check_spec.py'], 60),
-                ('regression', ['-m', 'unittest', 'discover', '-s', 'tests', '-v'], 300),
+                ('regression', ['-m', 'unittest', 'discover', '-s', 'tests', '-v'], 600),
                 ('independent-consumption', ['scripts/run_file_consumer_probe.py', '--browser', str(args.browser.resolve()),
                                              '--output', str(output / 'consumer')], 120)]
     if args.audit:

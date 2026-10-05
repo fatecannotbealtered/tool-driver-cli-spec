@@ -25,13 +25,15 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
 from check_spec import base_contract, driver_contract, reference_errors
+from check_product_design import check_design
 
 SPEC_ROOT = Path(__file__).resolve().parents[1]
 OWNER = "tool-driver-cli-spec.product-generation"
 MANIFEST = "product-generation.manifest.json"
 LOCK = ".product-generation.lock"
 MAX_INPUT_BYTES = 8 * 1024 * 1024
-ARTIFACT_NAMES = frozenset({"product_contract.json", "reference.json", "contract-ext.json", "skill-capabilities.md"})
+ARTIFACT_NAMES = frozenset({"product_contract.json", "reference.json", "contract-ext.json", "skill-capabilities.md",
+                            "development-design.json"})
 BUILTIN_HEADS = {"reference", "context", "doctor", "changelog", "operation"}
 BUILTIN_SCHEMAS = {
     "reference": {"shape": "object", "fields": ["tool", "version", "risk_tier", "release_readiness", "commands", "schemas",
@@ -219,6 +221,9 @@ def build_contract(registry: dict, *, registry_dir: Path | str | None = None, pu
                 for error in _validator("urn:tool-driver-cli-spec:product-registry:2.0", schemas).iter_errors(registry)]
     if problems:
         raise GenerationError("registry does not satisfy the product-registry schema", errors=problems[:20])
+    design = check_design(registry, registry_dir=Path(registry_dir) if registry_dir is not None else None)
+    if design["errors"]:
+        raise GenerationError("development design is inconsistent", errors=design["errors"][:20])
     for command in registry["commands"]:
         if command["path"].split()[0] in BUILTIN_HEADS:
             raise GenerationError(f"'{command['path']}' is a built-in command path; the generator provides it")
@@ -277,6 +282,9 @@ def build_contract(registry: dict, *, registry_dir: Path | str | None = None, pu
 def build_artifacts(registry: dict, *, registry_dir: Path | str | None = None, public_root: Path | str = SPEC_ROOT) -> dict[str, bytes]:
     contract = build_contract(registry, registry_dir=registry_dir, public_root=public_root)
     reference = contract["reference"]
+    design = check_design(registry, registry_dir=Path(registry_dir) if registry_dir is not None else None)
+    design["generated_tool_management_commands"] = [c["path"] for c in reference["commands"]
+                                                   if c["path"] not in {item["path"] for item in registry["commands"]}]
     driver_codes = driver_contract()["error_codes"]["extensions"]
     extension = {"error_codes": {code: {"exit": entry["exit"], "retryable": entry["retryable"]}
                                  for code, entry in reference["error_codes"].items()
@@ -296,6 +304,7 @@ def build_artifacts(registry: dict, *, registry_dir: Path | str | None = None, p
         "reference.json": json_bytes(reference),
         "contract-ext.json": json_bytes(extension),
         "skill-capabilities.md": ("\n".join(lines) + "\n").encode("utf-8"),
+        "development-design.json": json_bytes(design),
     }
 
 

@@ -985,6 +985,13 @@ SEMANTIC = {
 
 
 def semantic_errors(kind: str, value: dict) -> list[str]:
+    if kind == "product-registry":
+        from generate_product import GenerationError, build_contract
+        try:
+            build_contract(value)
+        except GenerationError as exc:
+            return exc.errors or [str(exc)]
+        return []
     checker = SEMANTIC.get(kind)
     return checker(value) if checker else []
 

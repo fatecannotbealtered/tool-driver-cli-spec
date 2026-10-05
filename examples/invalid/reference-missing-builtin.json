@@ -1108,7 +1108,7 @@
   },
   "driver_profile": {
     "spec": "tool-driver-cli-spec",
-    "spec_version": "1.0.1",
+    "spec_version": "1.0.2",
     "schema_version": "2.0",
     "base": {
       "spec": "ai-native-cli-spec",

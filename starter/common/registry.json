@@ -91,5 +91,184 @@
         "evidence_refs": []
       }
     }
-  ]
+  ],
+  "design": {
+    "design_version": "2.0",
+    "application": {
+      "name": "target backend (not configured)",
+      "version": "unconfigured",
+      "license": "unknown; record actual version/license restrictions before automation",
+      "environment": {
+        "platform": "unconfigured",
+        "arch": "unconfigured",
+        "mode": "{{PROFILE}}"
+      },
+      "evidence_refs": []
+    },
+    "scope": {
+      "description": "Starter placeholders and one explicit unresearched area; replace with a scoped application inventory.",
+      "inventory_ids": [
+        "target-inspect",
+        "target-apply",
+        "unresearched-application-capabilities"
+      ],
+      "inventory_evidence_refs": [],
+      "excluded_scopes": [
+        "Other applications, versions, modes and tasks outside the chosen survey."
+      ],
+      "limitations": [
+        "No application survey or native adapter execution has been performed for this declaration."
+      ]
+    },
+    "coverage": {
+      "denominator_ids": [
+        "target-inspect",
+        "target-apply",
+        "unresearched-application-capabilities"
+      ],
+      "fcc_scope": "declared_commands",
+      "rationale": "Command contract tests do not establish application capability coverage; unknown areas remain in this scoped denominator."
+    },
+    "capabilities": [
+      {
+        "id": "target-inspect",
+        "description": "Observe one explicitly named target and its revision without changing it.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "target-apply",
+        "description": "Apply one declared change to an explicitly named target, then read it back.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unimplemented",
+        "cli_exposure": "exposed",
+        "testing": "not_run",
+        "disposition": "exposed",
+        "reason": "Declaration only; survey the actual target, interfaces and license before implementing.",
+        "evidence_refs": []
+      },
+      {
+        "id": "unresearched-application-capabilities",
+        "description": "Application capabilities beyond these starter/example declarations have not been surveyed.",
+        "interfaces": [],
+        "application_support": "unknown",
+        "automation": "unknown",
+        "adapter": "unknown",
+        "cli_exposure": "not_exposed",
+        "testing": "unknown",
+        "disposition": "unknown",
+        "reason": "The listed command set is not an application-wide inventory. Expand this scope from actual application evidence.",
+        "evidence_refs": []
+      }
+    ],
+    "evidence": [],
+    "tasks": [
+      {
+        "id": "task-target-inspect",
+        "goal": "Observe one explicitly named target and its revision without changing it.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "target-inspect"
+        ],
+        "command_paths": [
+          "target inspect"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "target inspect",
+            "name": "target-id",
+            "reason": "the target to observe; never chosen by window focus"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-target-inspect",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      },
+      {
+        "id": "task-target-apply",
+        "goal": "Apply one declared change to an explicitly named target, then read it back.",
+        "status": "planned",
+        "reason": "Placeholder, not an implemented or verified task.",
+        "capability_ids": [
+          "target-apply"
+        ],
+        "command_paths": [
+          "target apply"
+        ],
+        "critical_parameters": [
+          {
+            "command_path": "target apply",
+            "name": "target-id",
+            "reason": "the target to change"
+          },
+          {
+            "command_path": "target apply",
+            "name": "change",
+            "reason": "the change, as JSON (inline, @file or - for stdin)"
+          }
+        ],
+        "adapter_entries": [],
+        "readback": [
+          {
+            "id": "result-target-apply",
+            "method": "Replace with actual independent application/file/device readback.",
+            "criterion": "Compare the requested result with actual state, including units and tolerances where applicable.",
+            "independence": "Identify reader, writer and expectation sources; declaration is not evidence."
+          }
+        ],
+        "test_ids": []
+      }
+    ],
+    "commands": [
+      {
+        "path": "target inspect",
+        "role": "domain",
+        "capability_ids": [
+          "target-inspect"
+        ],
+        "task_ids": [
+          "task-target-inspect"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      },
+      {
+        "path": "target apply",
+        "role": "domain",
+        "capability_ids": [
+          "target-apply"
+        ],
+        "task_ids": [
+          "task-target-apply"
+        ],
+        "rationale": "Provisional task mapping; choose resource/action names after the application survey."
+      }
+    ],
+    "tests": [],
+    "tree_decisions": [
+      {
+        "decision": "Use temporary resource/action paths until the real task survey is available.",
+        "alternatives": [
+          "Organize by different domain resources or end-to-end tasks."
+        ],
+        "reason": "No fixed CRUD set, depth, root words, or API-to-command one-to-one requirement; these names are placeholders."
+      }
+    ]
+  }
 }
