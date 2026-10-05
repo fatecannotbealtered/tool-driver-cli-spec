@@ -1,0 +1,1237 @@
+{
+  "tool": "demo-cad-cli",
+  "version": "0.4.0",
+  "risk_tier": "T1",
+  "release_readiness": {
+    "level": "beta",
+    "fcc_status": "verified",
+    "mock_upstream_status": "verified",
+    "live_smoke_status": "missing",
+    "reason": "Live smoke against a licensed application is not recorded yet."
+  },
+  "commands": [
+    {
+      "path": "changelog",
+      "type": "read",
+      "description": "Versions newer than --since, from the embedded CHANGELOG.",
+      "params": [
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "changelog",
+      "examples": [
+        "demo-cad-cli changelog --compact"
+      ],
+      "driver": {
+        "capability_id": "changelog",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "context",
+      "type": "read",
+      "description": "CLI, adapter, running service and application identity; the active task scope.",
+      "params": [],
+      "output_schema": "context",
+      "examples": [
+        "demo-cad-cli context --compact"
+      ],
+      "driver": {
+        "capability_id": "context",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "doctor",
+      "type": "read",
+      "description": "Readiness checks with a fix for each failure.",
+      "params": [],
+      "output_schema": "doctor",
+      "examples": [
+        "demo-cad-cli doctor --compact"
+      ],
+      "driver": {
+        "capability_id": "doctor",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing export",
+      "type": "write",
+      "description": "Export the drawing of a part to a new SVG file under an authorized output root.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "output",
+          "type": "path",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli drawing export --part part-01 --output D:/work/out/part-01.svg --dry-run",
+        "demo-cad-cli drawing export --part part-01 --output D:/work/out/part-01.svg --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-export",
+        "effects": [
+          "artifact"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing publish",
+      "type": "write",
+      "description": "Export the drawing of a part and send it to the release share; the share keeps what it receives.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "share",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli drawing publish --part part-01 --share release --dry-run --dangerous",
+        "demo-cad-cli drawing publish --part part-01 --share release --confirm <confirm_token> --dangerous"
+      ],
+      "driver": {
+        "capability_id": "drawing-publish",
+        "effects": [
+          "artifact",
+          "deliver"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": []
+      },
+      "dangerous": true
+    },
+    {
+      "path": "feature create",
+      "type": "write",
+      "description": "Create an extrusion feature on a sketch of a part open in the running application.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "sketch",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "depth",
+          "type": "number",
+          "required": true,
+          "multiple": false,
+          "unit": "mm",
+          "description": "Extrusion depth in millimetres"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --dry-run",
+        "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "feature-create",
+        "effects": [
+          "change"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": [],
+        "request_schema": "urn:demo-cad-cli:feature-create-request:1",
+        "result_schema": "urn:tool-driver-cli-spec:receipt:2.0",
+        "stages": [
+          {
+            "stage": "plan",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "apply",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "verify",
+            "effects": [
+              "change"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "feature list",
+      "type": "read",
+      "description": "List the features of a part with completeness information.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 50
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "feature_page",
+      "examples": [
+        "demo-cad-cli feature list --compact"
+      ],
+      "driver": {
+        "capability_id": "feature-list",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core",
+          "query_page"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_BACKEND_UNAVAILABLE"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation list",
+      "type": "read",
+      "description": "Recent operation records from the local store.",
+      "params": [
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "enum": [
+            "planned",
+            "pending",
+            "running",
+            "cancel_requested",
+            "succeeded",
+            "partial",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 20
+        }
+      ],
+      "output_schema": "operation_page",
+      "examples": [
+        "demo-cad-cli operation list --status unknown --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-list",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core",
+          "query_page"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation resolve",
+      "type": "read",
+      "description": "Record what an independent read-back showed about an unresolved operation; updates only the local record.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "required": true,
+          "multiple": false,
+          "enum": [
+            "applied",
+            "not_applied",
+            "partial"
+          ]
+        },
+        {
+          "name": "evidence",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "operation",
+      "examples": [
+        "demo-cad-cli operation resolve --id operation-01 --outcome applied --evidence 'feature list shows feature-07' --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-resolve",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_FORBIDDEN",
+          "E_CONFLICT"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation show",
+      "type": "read",
+      "description": "One operation record: plan, status, receipt and resolution.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "operation",
+      "examples": [
+        "demo-cad-cli operation show --id operation-01 --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-show",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "part save",
+      "type": "write",
+      "description": "Save a part to the file it was opened from.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli part save --part part-01 --dry-run",
+        "demo-cad-cli part save --part part-01 --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "part-save",
+        "effects": [
+          "persist"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "reference",
+      "type": "read",
+      "description": "This reference; --index for one line per command, --command for one command.",
+      "params": [
+        {
+          "name": "index",
+          "type": "boolean",
+          "required": false,
+          "multiple": false,
+          "default": false
+        },
+        {
+          "name": "command",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "reference",
+      "examples": [
+        "demo-cad-cli reference --compact"
+      ],
+      "driver": {
+        "capability_id": "reference",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "update",
+      "type": "write",
+      "description": "Base self-update: one call, no confirm token; verifies the release before replacing the binary.",
+      "params": [
+        {
+          "name": "check",
+          "type": "boolean",
+          "required": false,
+          "multiple": false,
+          "default": false
+        },
+        {
+          "name": "target-version",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "update_result",
+      "examples": [
+        "demo-cad-cli update --check --compact",
+        "demo-cad-cli update --compact"
+      ],
+      "driver": {
+        "capability_id": "update",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_NETWORK",
+          "E_INTEGRITY",
+          "E_IO",
+          "E_INTERRUPTED"
+        ],
+        "evidence_refs": []
+      }
+    }
+  ],
+  "schemas": {
+    "ack": {
+      "shape": "object",
+      "fields": [
+        "ok"
+      ],
+      "untrusted_fields": []
+    },
+    "changelog": {
+      "shape": "object",
+      "fields": [
+        "current_version",
+        "since",
+        "entries"
+      ],
+      "untrusted_fields": []
+    },
+    "context": {
+      "shape": "object",
+      "fields": [
+        "version",
+        "credentials",
+        "driver_profile",
+        "authorization",
+        "environment",
+        "state"
+      ],
+      "untrusted_fields": []
+    },
+    "doctor": {
+      "shape": "object",
+      "fields": [
+        "checks"
+      ],
+      "untrusted_fields": []
+    },
+    "update_result": {
+      "shape": "object",
+      "fields": [
+        "status",
+        "current_version",
+        "target_version",
+        "update_available",
+        "install_method",
+        "command",
+        "signature_status",
+        "skill_sync_status"
+      ],
+      "untrusted_fields": []
+    },
+    "feature_page": {
+      "shape": "object",
+      "fields": [
+        "items",
+        "count",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "scope",
+        "snapshot",
+        "sort"
+      ],
+      "untrusted_fields": [
+        "items"
+      ]
+    },
+    "operation": {
+      "shape": "object",
+      "fields": [
+        "operation_status"
+      ],
+      "untrusted_fields": []
+    },
+    "operation_page": {
+      "shape": "object",
+      "fields": [
+        "items",
+        "count",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "scope",
+        "snapshot",
+        "sort"
+      ],
+      "untrusted_fields": []
+    },
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    },
+    "reference": {
+      "shape": "object",
+      "fields": [
+        "tool",
+        "version",
+        "commands",
+        "schemas",
+        "driver_profile"
+      ],
+      "untrusted_fields": []
+    }
+  },
+  "exit_codes": {
+    "0": "success",
+    "1": "failure, not retryable; read the envelope",
+    "2": "usage or validation; fix the call",
+    "3": "not found",
+    "4": "permission, scope, configuration or backend unavailable",
+    "5": "confirmation required",
+    "6": "conflict or outcome unknown; re-read state first",
+    "7": "transient; retry with backoff",
+    "8": "timeout before dispatch",
+    "9": "a person must act first",
+    "130": "interrupted before anything was dispatched"
+  },
+  "error_codes": {
+    "E_USAGE": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_VALIDATION": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_NOT_FOUND": {
+      "exit": 3,
+      "retryable": false
+    },
+    "E_AUTH": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_FORBIDDEN": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_CONFIG": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_CONFIRMATION_REQUIRED": {
+      "exit": 5,
+      "retryable": false
+    },
+    "E_CONFLICT": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_NETWORK": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_RATE_LIMITED": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_SERVER": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_TIMEOUT": {
+      "exit": 8,
+      "retryable": true
+    },
+    "E_INTEGRITY": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_IO": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_INTERRUPTED": {
+      "exit": 130,
+      "retryable": true
+    },
+    "E_UNKNOWN": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_UNSUPPORTED": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_BACKEND_UNAVAILABLE": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_PROTOCOL": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_BUSY": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_NATIVE_FAILURE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_PARTIAL": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_OUTCOME_UNKNOWN": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_VERIFY_FAILED": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_VERIFY_INCOMPLETE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_HUMAN_REQUIRED": {
+      "exit": 9,
+      "retryable": false
+    }
+  },
+  "driver_profile": {
+    "spec": "tool-driver-cli-spec",
+    "spec_version": "1.0.0",
+    "schema_version": "2.0",
+    "base": {
+      "spec": "ai-native-cli-spec",
+      "version": "v1.6.3"
+    },
+    "record": {
+      "store": "local SQLite file in the tool state directory",
+      "retain_days": 30,
+      "survives_cli_exit": true,
+      "survives_reconnect": true,
+      "survives_instance_restart": true,
+      "limitations": [
+        "A running apply whose CLI process ends reports unknown once its lease expires."
+      ]
+    }
+  },
+  "json_schemas": {
+    "urn:demo-cad-cli:feature-create-request:1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:demo-cad-cli:feature-create-request:1",
+      "type": "object",
+      "properties": {
+        "part": {
+          "type": "string"
+        },
+        "sketch": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "sketch",
+        "depth"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

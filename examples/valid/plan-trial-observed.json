@@ -1,0 +1,64 @@
+{
+  "plan_id": "plan-01",
+  "operation_id": "operation-01",
+  "capability_id": "feature-create",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "base_snapshot": {
+    "id": "snapshot-01",
+    "source": "live",
+    "revision": "memory-01",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "change",
+    "artifact"
+  ],
+  "level": "trial_observed",
+  "changes": [
+    {
+      "action": "create",
+      "resource": "feature",
+      "summary": "Add a 10 mm extrusion on sketch-03 named Boss."
+    }
+  ],
+  "outputs": [
+    {
+      "path": "D:/work/copy/.trial/part-01.prt",
+      "effect": "artifact",
+      "exists": false
+    }
+  ],
+  "unknowns": [
+    "Regeneration of downstream features is computed only when the change is applied."
+  ],
+  "constraints": [
+    "The part must still be at revision memory-01 when the plan is confirmed."
+  ],
+  "trial_snapshot": {
+    "id": "snapshot-trial-01",
+    "source": "trial",
+    "revision": "copy-01",
+    "observed_at": "2026-10-04T00:00:03Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "can_apply": true,
+  "expires_at": "2026-10-04T00:10:00Z"
+}

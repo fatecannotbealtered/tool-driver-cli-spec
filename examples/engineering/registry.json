@@ -1,0 +1,228 @@
+{
+  "registry_version": "2.0",
+  "name": "sample-driver",
+  "product_version": "0.1.0",
+  "description": "Executable SVG title adapter for the driver SDK; no native CAD support.",
+  "risk_tier": "T1",
+  "record": {
+    "store": "SQLite file in the tool state directory",
+    "retain_days": 30,
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": true,
+    "limitations": [
+      "A synchronous apply whose CLI process ends reports unknown once its lease expires."
+    ]
+  },
+  "builtins": {
+    "maturity": "experimental",
+    "evidence_refs": []
+  },
+  "error_codes": {
+    "E_DRAWING_LOCKED": {
+      "exit": 6,
+      "retryable": false,
+      "description": "Another program holds the drawing file open for writing; re-read state after it closes."
+    }
+  },
+  "schemas": {
+    "inspection": {
+      "shape": "object",
+      "fields": [
+        "file",
+        "title",
+        "width",
+        "height",
+        "element_count",
+        "snapshot"
+      ],
+      "untrusted_fields": [
+        "title"
+      ]
+    },
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    }
+  },
+  "commands": [
+    {
+      "path": "drawing inspect",
+      "type": "read",
+      "description": "Read the title, size and element count of an SVG drawing without changing it.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file"
+        }
+      ],
+      "output_schema": "inspection",
+      "examples": [
+        "sample-driver drawing inspect --file D:/work/copy/part-01.svg --compact"
+      ],
+      "driver": {
+        "capability_id": "drawing-inspect",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Only one plain existing SVG title; no native CAD or DRC verification."
+            ]
+          }
+        ],
+        "limits": [
+          "Reads one file at a time; external references are not followed."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_UNSUPPORTED"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing set-title",
+      "type": "write",
+      "description": "Set the title element of an SVG drawing and save the file in place.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file inside an authorized root"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "multiple": false,
+          "description": "the new title text"
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --dry-run",
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-set-title",
+        "effects": [
+          "change",
+          "persist"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Only one plain existing SVG title; no native CAD or DRC verification."
+            ]
+          }
+        ],
+        "limits": [
+          "UTF-8 regular files up to 1 MiB; no DTD, entities or nested title markup.",
+          "All bytes outside the title text are preserved; atomic rename is a local filesystem property."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_DRAWING_LOCKED",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_BUSY"
+        ],
+        "evidence_refs": [],
+        "stages": [
+          {
+            "stage": "plan",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "apply",
+            "effects": [
+              "change",
+              "persist"
+            ]
+          },
+          {
+            "stage": "verify",
+            "effects": [
+              "change"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "changelog": "CHANGELOG.md"
+}

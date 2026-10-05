@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_VALIDATION",
+    "message": "Invalid input.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "problem": "invalid_value"
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

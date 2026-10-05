@@ -1,0 +1,73 @@
+{
+  "artifact_kind": "cli_product",
+  "name": "demo-cad-cli",
+  "version": "0.4.0",
+  "spec_version": "1.0.0",
+  "base": {
+    "spec": "ai-native-cli-spec",
+    "version": "v1.6.3"
+  },
+  "status": "draft",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_dirty": false,
+  "target": {
+    "os": "windows",
+    "arch": "amd64"
+  },
+  "components": [
+    {
+      "name": "demo-cad-cli",
+      "version": "0.4.0",
+      "path": "bin/demo-cad-cli.exe",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "role": "cli"
+    },
+    {
+      "name": "demo-cad-service",
+      "version": "0.4.0",
+      "path": "service/demo-cad-service.jar",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "role": "service"
+    },
+    {
+      "name": "demo-cad-cli skill",
+      "version": "0.4.0",
+      "path": "skills/demo-cad-cli/SKILL.md",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "role": "skill"
+    }
+  ],
+  "compatibility": {
+    "application": [
+      {
+        "identity": "Demo CAD",
+        "version_range": ">=12.0 <13",
+        "validation": "verified",
+        "evidence_refs": []
+      }
+    ],
+    "plugin": [],
+    "protocol": [
+      {
+        "identity": "demo-cad-service",
+        "version_range": "0.4",
+        "validation": "not_run",
+        "evidence_refs": []
+      }
+    ],
+    "skill": [
+      {
+        "identity": "demo-cad-cli",
+        "version_range": "0.4.0",
+        "validation": "not_run",
+        "evidence_refs": []
+      }
+    ]
+  },
+  "external_requirements": [
+    "A licensed Demo CAD 12 installation."
+  ],
+  "limitations": [
+    "Draft manifest for illustration; the components were not built."
+  ]
+}

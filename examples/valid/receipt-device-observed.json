@@ -1,0 +1,69 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "carriage-move",
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "device",
+    "engine_id": "demo-plotter",
+    "instance_id": "plotter-01",
+    "object_id": "pen-carriage",
+    "locator": "device://plotter-01/pen-carriage"
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "physical"
+  ],
+  "snapshot_before": {
+    "id": "snapshot-d1",
+    "source": "device",
+    "revision": "telemetry-41",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": []
+  },
+  "snapshot_after": {
+    "id": "snapshot-d2",
+    "source": "device",
+    "revision": "telemetry-42",
+    "observed_at": "2026-10-04T00:00:02Z",
+    "dependencies": []
+  },
+  "outcome": {
+    "execution": "completed",
+    "change": "applied",
+    "persistence": "not_applicable",
+    "delivery": "not_applicable",
+    "verification": {
+      "status": "passed",
+      "scope": "declared_operation_postconditions",
+      "snapshot_id": "snapshot-d2",
+      "coverage": "complete",
+      "checks": [
+        {
+          "id": "check-position",
+          "status": "passed",
+          "required": true,
+          "evidence_ref": "evidence://synthetic/telemetry-42"
+        }
+      ],
+      "not_checked": [],
+      "evidence_refs": [
+        "evidence://synthetic/telemetry-42"
+      ]
+    }
+  },
+  "failed_stage": null,
+  "changed_items": [
+    {
+      "id": "pen-carriage",
+      "change": "moved to x=120 mm",
+      "evidence_ref": "evidence://synthetic/telemetry-42"
+    }
+  ],
+  "artifacts": [],
+  "deliveries": [],
+  "recovery": {
+    "action": "none",
+    "reason": "Position read back from fresh telemetry.",
+    "supported": true
+  }
+}

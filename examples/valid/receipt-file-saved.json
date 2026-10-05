@@ -1,0 +1,73 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "part-save",
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "persist"
+  ],
+  "snapshot_before": {
+    "id": "snapshot-01",
+    "source": "live",
+    "revision": "memory-01",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "snapshot_after": {
+    "id": "snapshot-03",
+    "source": "disk",
+    "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "observed_at": "2026-10-04T00:00:02Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "outcome": {
+    "execution": "completed",
+    "change": "not_applied",
+    "persistence": "saved",
+    "delivery": "not_applicable",
+    "verification": {
+      "status": "passed",
+      "scope": "declared_operation_postconditions",
+      "snapshot_id": "snapshot-03",
+      "coverage": "complete",
+      "checks": [
+        {
+          "id": "check-reopen-from-disk",
+          "status": "passed",
+          "required": true,
+          "evidence_ref": "evidence://synthetic/reopen-01"
+        }
+      ],
+      "not_checked": [],
+      "evidence_refs": [
+        "evidence://synthetic/reopen-01"
+      ]
+    }
+  },
+  "failed_stage": null,
+  "changed_items": [],
+  "artifacts": [],
+  "deliveries": [],
+  "recovery": {
+    "action": "none",
+    "reason": "Saved and reopened from disk.",
+    "supported": true
+  }
+}

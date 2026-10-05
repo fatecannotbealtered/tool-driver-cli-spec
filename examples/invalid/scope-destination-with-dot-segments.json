@@ -1,0 +1,30 @@
+{
+  "scope_id": "scope-release-01",
+  "tool": "demo-cad-cli",
+  "granted_by": "project owner (chat instruction 2026-10-04)",
+  "granted_at": "2026-10-04T00:00:00Z",
+  "expires_at": "2026-10-05T00:00:00Z",
+  "effects": [
+    "observe",
+    "artifact",
+    "deliver"
+  ],
+  "dangerous": true,
+  "roots": [],
+  "outputs": [
+    "D:/work/out"
+  ],
+  "targets": [
+    {
+      "engine_id": "demo-cad",
+      "instance_id": "instance-01"
+    }
+  ],
+  "limits": {
+    "max_operations": 200
+  },
+  "notes": "Iterate on the copy; never touch D:/work/original.",
+  "destinations": [
+    "share://release/../finance/"
+  ]
+}

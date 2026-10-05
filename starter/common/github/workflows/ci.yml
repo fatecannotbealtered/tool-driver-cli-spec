@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Pinned specification and SDK copies are unchanged
+        run: python check_project.py
+      - name: Generated declarations match registry.json
+        run: python .agent/driver/scripts/generate_product.py --registry registry.json --output {{PACKAGE}}/generated --check
+      - name: Command-level contract tests
+        run: python -m unittest discover -s tests -v
+      - name: Recorded Agent evaluation gate for publishable products
+        run: python .agent/driver/scripts/check_agent_eval.py --root . --registry registry.json --report evidence/agent-eval.json
+      - name: Dependency audit
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install pip-audit
+          pip-audit -r requirements.txt

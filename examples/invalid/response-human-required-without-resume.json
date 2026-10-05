@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_HUMAN_REQUIRED",
+    "message": "A dialog is open.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "action": "dismiss_dialog",
+      "next_action": "wait"
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

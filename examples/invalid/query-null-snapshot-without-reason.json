@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "id": "feature-01",
+      "name": "Base",
+      "kind": "extrude"
+    },
+    {
+      "id": "feature-02",
+      "name": "Hole-1",
+      "kind": "hole"
+    }
+  ],
+  "count": 2,
+  "has_more": true,
+  "truncated": false,
+  "next_cursor": "cursor-02",
+  "scope": {
+    "description": "Features of part-01 in instance-01",
+    "targets": [
+      "session://instance-01/part-01"
+    ],
+    "selector": {
+      "kind": "any"
+    }
+  },
+  "snapshot": null,
+  "snapshot_unavailable_reason": null,
+  "sort": [
+    {
+      "field": "id",
+      "direction": "asc"
+    }
+  ],
+  "consistency": {
+    "mode": "live",
+    "drift_policy": "report",
+    "limitations": []
+  },
+  "limits": {
+    "requested": 2,
+    "effective": 2,
+    "truncation_reason": null
+  },
+  "unread_scopes": [],
+  "_untrusted": [
+    "items"
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "feature-create",
+  "request_id": null,
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "status": "cancelled",
+  "stage": null,
+  "observed_at": "2026-10-04T00:00:10Z",
+  "started_at": "2026-10-04T00:00:00Z",
+  "finished_at": "2026-10-04T00:00:12Z",
+  "wait_timeout_ms": 10000,
+  "execution_deadline": null,
+  "progress": null,
+  "record": {
+    "availability": "available",
+    "retain_until": "2026-10-11T00:00:00Z",
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": false,
+    "limitations": [
+      "Synthetic example; no application was run."
+    ]
+  },
+  "commands": {
+    "lookup": {
+      "argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-01"
+      ],
+      "read_only": true
+    },
+    "result": null,
+    "cancel": null
+  },
+  "blocked": null,
+  "resolution": null,
+  "stop_observed": true,
+  "stop_evidence_ref": "evidence://synthetic/stop-01",
+  "receipt": {
+    "operation_id": "operation-01",
+    "capability_id": "feature-create",
+    "plan_id": "plan-01",
+    "target": {
+      "mode": "session",
+      "engine_id": "demo-cad",
+      "instance_id": "instance-01",
+      "object_id": "part-01",
+      "locator": "session://instance-01/part-01"
+    },
+    "authorization_scope_id": "scope-isolated-01",
+    "effects": [
+      "change"
+    ],
+    "snapshot_before": {
+      "id": "snapshot-01",
+      "source": "live",
+      "revision": "memory-01",
+      "observed_at": "2026-10-04T00:00:00Z",
+      "dependencies": [
+        {
+          "identity": "template-01",
+          "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "snapshot_after": {
+      "id": "snapshot-01",
+      "source": "live",
+      "revision": "memory-01",
+      "observed_at": "2026-10-04T00:00:00Z",
+      "dependencies": [
+        {
+          "identity": "template-01",
+          "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "outcome": {
+      "execution": "interrupted",
+      "change": "not_applied",
+      "persistence": "unchanged",
+      "delivery": "not_applicable",
+      "verification": {
+        "status": "not_run",
+        "scope": "declared_operation_postconditions",
+        "snapshot_id": null,
+        "coverage": "none",
+        "checks": [],
+        "not_checked": [],
+        "evidence_refs": []
+      }
+    },
+    "failed_stage": "apply",
+    "changed_items": [],
+    "artifacts": [],
+    "deliveries": [],
+    "recovery": {
+      "action": "none",
+      "reason": "Stopped before the feature was created.",
+      "supported": true
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "operation_id": "workflow-01",
+  "observed_at": "2026-10-04T00:01:00Z",
+  "failure_policy": "stop",
+  "steps": [
+    {
+      "id": "open",
+      "depends_on": [
+        "save"
+      ],
+      "phase": "apply",
+      "effects": [
+        "session"
+      ],
+      "operation_id": "operation-c1",
+      "status": "not_started",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "id": "save",
+      "depends_on": [
+        "open"
+      ],
+      "phase": "apply",
+      "effects": [
+        "persist"
+      ],
+      "operation_id": "operation-c2",
+      "status": "not_started",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "not_started": 2,
+    "running": 0,
+    "completed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "unknown": 0
+  }
+}

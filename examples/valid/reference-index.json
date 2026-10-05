@@ -1,0 +1,158 @@
+{
+  "view": "index",
+  "tool": "demo-cad-cli",
+  "version": "0.4.0",
+  "risk_tier": "T1",
+  "driver_profile": {
+    "spec": "tool-driver-cli-spec",
+    "spec_version": "1.0.0",
+    "schema_version": "2.0",
+    "base": {
+      "spec": "ai-native-cli-spec",
+      "version": "v1.6.3"
+    },
+    "record": {
+      "store": "local SQLite file in the tool state directory",
+      "retain_days": 30,
+      "survives_cli_exit": true,
+      "survives_reconnect": true,
+      "survives_instance_restart": true,
+      "limitations": [
+        "A running apply whose CLI process ends reports unknown once its lease expires."
+      ]
+    }
+  },
+  "commands": [
+    {
+      "path": "changelog",
+      "type": "read",
+      "dangerous": false,
+      "description": "Versions newer than --since, from the embedded CHANGELOG.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "context",
+      "type": "read",
+      "dangerous": false,
+      "description": "CLI, adapter, running service and application identity; the active task scope.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "doctor",
+      "type": "read",
+      "dangerous": false,
+      "description": "Readiness checks with a fix for each failure.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "drawing export",
+      "type": "write",
+      "dangerous": false,
+      "description": "Export the drawing of a part to a new SVG file under an authorized output root.",
+      "effects": [
+        "artifact"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "drawing publish",
+      "type": "write",
+      "dangerous": true,
+      "description": "Export the drawing of a part and send it to the release share; the share keeps what it receives.",
+      "effects": [
+        "artifact",
+        "deliver"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "feature create",
+      "type": "write",
+      "dangerous": false,
+      "description": "Create an extrusion feature on a sketch of a part open in the running application.",
+      "effects": [
+        "change"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "feature list",
+      "type": "read",
+      "dangerous": false,
+      "description": "List the features of a part with completeness information.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "operation list",
+      "type": "read",
+      "dangerous": false,
+      "description": "Recent operation records from the local store.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "operation resolve",
+      "type": "read",
+      "dangerous": false,
+      "description": "Record what an independent read-back showed about an unresolved operation; updates only the local record.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "operation show",
+      "type": "read",
+      "dangerous": false,
+      "description": "One operation record: plan, status, receipt and resolution.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "part save",
+      "type": "write",
+      "dangerous": false,
+      "description": "Save a part to the file it was opened from.",
+      "effects": [
+        "persist"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "reference",
+      "type": "read",
+      "dangerous": false,
+      "description": "This reference; --index for one line per command, --command for one command.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    },
+    {
+      "path": "update",
+      "type": "write",
+      "dangerous": false,
+      "description": "Base self-update: one call, no confirm token; verifies the release before replacing the binary.",
+      "effects": [
+        "observe"
+      ],
+      "maturity": "experimental"
+    }
+  ]
+}

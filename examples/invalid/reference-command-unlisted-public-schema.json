@@ -1,0 +1,234 @@
+{
+  "view": "command",
+  "tool": "demo-cad-cli",
+  "version": "0.4.0",
+  "driver_profile": {
+    "spec": "tool-driver-cli-spec",
+    "spec_version": "1.0.0",
+    "schema_version": "2.0",
+    "base": {
+      "spec": "ai-native-cli-spec",
+      "version": "v1.6.3"
+    },
+    "record": {
+      "store": "local SQLite file in the tool state directory",
+      "retain_days": 30,
+      "survives_cli_exit": true,
+      "survives_reconnect": true,
+      "survives_instance_restart": true,
+      "limitations": [
+        "A running apply whose CLI process ends reports unknown once its lease expires."
+      ]
+    }
+  },
+  "command": {
+    "path": "feature create",
+    "type": "write",
+    "description": "Create an extrusion feature on a sketch of a part open in the running application.",
+    "params": [
+      {
+        "name": "part",
+        "type": "string",
+        "required": true,
+        "multiple": false
+      },
+      {
+        "name": "sketch",
+        "type": "string",
+        "required": true,
+        "multiple": false
+      },
+      {
+        "name": "depth",
+        "type": "number",
+        "required": true,
+        "multiple": false,
+        "unit": "mm",
+        "description": "Extrusion depth in millimetres"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "required": false,
+        "multiple": false
+      }
+    ],
+    "output_schema": "receipt",
+    "examples": [
+      "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --dry-run",
+      "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --confirm <confirm_token>"
+    ],
+    "driver": {
+      "capability_id": "feature-create",
+      "effects": [
+        "change"
+      ],
+      "phases": [
+        "plan",
+        "apply"
+      ],
+      "modes": [
+        "session"
+      ],
+      "maturity": "experimental",
+      "environments": [
+        {
+          "application": "Demo CAD",
+          "application_version": "12.0.1",
+          "platform": "windows",
+          "arch": "amd64",
+          "adapter_version": "0.4.0",
+          "mode": "session",
+          "limitations": [
+            "Synthetic declaration for examples."
+          ]
+        }
+      ],
+      "limits": [
+        "Synthetic declaration; no application was driven."
+      ],
+      "recovery": {
+        "atomicity": "whole",
+        "undo": false,
+        "idempotent": false,
+        "cancel": false
+      },
+      "profiles": [
+        "core"
+      ],
+      "error_codes": [
+        "E_USAGE",
+        "E_VALIDATION",
+        "E_FORBIDDEN",
+        "E_CONFIRMATION_REQUIRED",
+        "E_CONFLICT",
+        "E_BUSY",
+        "E_NATIVE_FAILURE",
+        "E_PARTIAL",
+        "E_OUTCOME_UNKNOWN",
+        "E_VERIFY_FAILED",
+        "E_VERIFY_INCOMPLETE",
+        "E_HUMAN_REQUIRED"
+      ],
+      "evidence_refs": [],
+      "request_schema": "urn:demo-cad-cli:feature-create-request:1",
+      "result_schema": "urn:tool-driver-cli-spec:receipt:2.0",
+      "stages": [
+        {
+          "stage": "plan",
+          "effects": [
+            "change"
+          ]
+        },
+        {
+          "stage": "apply",
+          "effects": [
+            "change"
+          ]
+        },
+        {
+          "stage": "verify",
+          "effects": [
+            "change"
+          ]
+        }
+      ]
+    }
+  },
+  "schemas": {
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    }
+  },
+  "error_codes": {
+    "E_USAGE": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_VALIDATION": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_FORBIDDEN": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_CONFIRMATION_REQUIRED": {
+      "exit": 5,
+      "retryable": false
+    },
+    "E_CONFLICT": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_BUSY": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_NATIVE_FAILURE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_PARTIAL": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_OUTCOME_UNKNOWN": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_VERIFY_FAILED": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_VERIFY_INCOMPLETE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_HUMAN_REQUIRED": {
+      "exit": 9,
+      "retryable": false
+    }
+  },
+  "json_schemas": {
+    "urn:demo-cad-cli:feature-create-request:1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:demo-cad-cli:feature-create-request:1",
+      "type": "object",
+      "properties": {
+        "part": {
+          "type": "string"
+        },
+        "sketch": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "sketch",
+        "depth"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "public_schemas": []
+}

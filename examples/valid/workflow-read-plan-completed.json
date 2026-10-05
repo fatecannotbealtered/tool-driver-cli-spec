@@ -1,0 +1,47 @@
+{
+  "operation_id": "workflow-01",
+  "observed_at": "2026-10-04T00:01:00Z",
+  "failure_policy": "stop",
+  "steps": [
+    {
+      "id": "observe",
+      "depends_on": [],
+      "phase": "observe",
+      "effects": [
+        "observe"
+      ],
+      "operation_id": null,
+      "status": "completed",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "id": "plan",
+      "depends_on": [
+        "observe"
+      ],
+      "phase": "plan",
+      "effects": [
+        "change"
+      ],
+      "operation_id": null,
+      "status": "completed",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "not_started": 0,
+    "running": 0,
+    "completed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "unknown": 0
+  }
+}

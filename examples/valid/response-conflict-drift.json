@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_CONFLICT",
+    "message": "The part changed after the plan was made.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "conflict": "state_drift",
+      "plan_id": "plan-01",
+      "expected": {
+        "revision": "memory-01"
+      },
+      "next_action": "Observe the part again and make a new --dry-run plan."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

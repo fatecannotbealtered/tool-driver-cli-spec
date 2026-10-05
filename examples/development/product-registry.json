@@ -1,0 +1,309 @@
+{
+  "registry_version": "2.0",
+  "name": "sample-driver",
+  "product_version": "0.1.0",
+  "description": "A development registry for a file-mode driver that edits SVG drawings; the adapter is not implemented.",
+  "risk_tier": "T1",
+  "record": {
+    "store": "SQLite file in the tool state directory",
+    "retain_days": 30,
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": true,
+    "limitations": [
+      "A synchronous apply whose CLI process ends reports unknown once its lease expires."
+    ]
+  },
+  "builtins": {
+    "maturity": "experimental",
+    "evidence_refs": []
+  },
+  "error_codes": {
+    "E_DRAWING_LOCKED": {
+      "exit": 6,
+      "retryable": false,
+      "description": "Another program holds the drawing file open for writing; re-read state after it closes."
+    }
+  },
+  "schemas": {
+    "inspection": {
+      "shape": "object",
+      "fields": [
+        "file",
+        "title",
+        "width_mm",
+        "height_mm",
+        "element_count",
+        "snapshot"
+      ],
+      "untrusted_fields": [
+        "title"
+      ]
+    },
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    }
+  },
+  "commands": [
+    {
+      "path": "drawing inspect",
+      "type": "read",
+      "description": "Read the title, size and element count of an SVG drawing without changing it.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file"
+        }
+      ],
+      "output_schema": "inspection",
+      "examples": [
+        "sample-driver drawing inspect --file D:/work/copy/part-01.svg --compact"
+      ],
+      "driver": {
+        "capability_id": "drawing-inspect",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Reads one file at a time; external references are not followed."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_UNSUPPORTED"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing set-title",
+      "type": "write",
+      "description": "Set the title element of an SVG drawing and save the file in place.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "the SVG file inside an authorized root"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "multiple": false,
+          "description": "the new title text"
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --dry-run",
+        "sample-driver drawing set-title --file D:/work/copy/part-01.svg --title \"Bracket\" --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-set-title",
+        "effects": [
+          "change",
+          "persist"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Rewrites the whole file; comments outside the title element are kept byte for byte."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_DRAWING_LOCKED",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": [],
+        "stages": [
+          {
+            "stage": "plan",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "apply",
+            "effects": [
+              "change",
+              "persist"
+            ]
+          },
+          {
+            "stage": "verify",
+            "effects": [
+              "change"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "drawing export",
+      "type": "write",
+      "description": "Export a PNG preview of an SVG drawing to a new file under an authorized output root.",
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "output",
+          "type": "path",
+          "required": true,
+          "multiple": false,
+          "description": "a new PNG path under an output root"
+        },
+        {
+          "name": "dpi",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 96
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "sample-driver drawing export --file D:/work/copy/part-01.svg --output D:/work/out/part-01.png --dry-run",
+        "sample-driver drawing export --file D:/work/copy/part-01.svg --output D:/work/out/part-01.png --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "drawing-export",
+        "effects": [
+          "artifact"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "file"
+        ],
+        "maturity": "draft",
+        "environments": [
+          {
+            "application": "SVG 1.1 files",
+            "application_version": "1.1",
+            "platform": "any",
+            "arch": "any",
+            "adapter_version": "0.1.0",
+            "mode": "file",
+            "limitations": [
+              "Adapter not implemented; declaration only."
+            ]
+          }
+        ],
+        "limits": [
+          "Refuses to overwrite an existing file."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_NATIVE_FAILURE",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": []
+      }
+    }
+  ]
+}

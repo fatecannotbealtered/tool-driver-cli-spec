@@ -1,0 +1,1217 @@
+{
+  "spec_version": "1.0.0",
+  "examples": [
+    {
+      "path": "examples/valid/plan-estimate.json",
+      "schema": "plan.schema.json",
+      "valid": true,
+      "purpose": "A dry-run plan: computed estimate, baseline binding, unknowns and the constraint that invalidates it."
+    },
+    {
+      "path": "examples/valid/plan-trial-observed.json",
+      "schema": "plan.schema.json",
+      "valid": true,
+      "purpose": "A plan whose preview was read back from an isolated trial copy."
+    },
+    {
+      "path": "examples/invalid/plan-trial-without-observation.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "trial_observed without an independent trial snapshot."
+    },
+    {
+      "path": "examples/invalid/plan-physical-trial.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "A physical effect cannot be previewed as an isolated observed trial."
+    },
+    {
+      "path": "examples/invalid/plan-cannot-apply-unexplained.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "can_apply false must say what blocks the plan."
+    },
+    {
+      "path": "examples/invalid/plan-output-undeclared-effect.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "Every planned output belongs to a declared effect."
+    },
+    {
+      "path": "examples/valid/plan-batch.json",
+      "schema": "plan.schema.json",
+      "valid": true,
+      "purpose": "A batch dry-run (base §15.2): every target once, each with the operation_id it will run under."
+    },
+    {
+      "path": "examples/invalid/plan-batch-total-mismatch.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "A batch plan counts exactly the targets it lists."
+    },
+    {
+      "path": "examples/invalid/plan-batch-shared-operation.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "Every batch item runs under its own operation_id."
+    },
+    {
+      "path": "examples/invalid/plan-batch-applicable-with-blocked-item.json",
+      "schema": "plan.schema.json",
+      "valid": false,
+      "purpose": "A batch that can be applied has no item that cannot."
+    },
+    {
+      "path": "examples/valid/receipt-applied-unsaved.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "In-memory change applied and read back; saving was not requested."
+    },
+    {
+      "path": "examples/valid/receipt-file-saved.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "Save only: the disk state changed and was read back by reopening."
+    },
+    {
+      "path": "examples/valid/receipt-delivered.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "An exported drawing delivered to an external share, confirmed by the recipient's listing."
+    },
+    {
+      "path": "examples/valid/receipt-device-observed.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "A physical move confirmed by telemetry observed after the move."
+    },
+    {
+      "path": "examples/invalid/receipt-not-started-but-applied.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Nothing started, yet the change claims to be applied."
+    },
+    {
+      "path": "examples/invalid/receipt-saved-without-persist-effect.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Saved state without the declared persist effect."
+    },
+    {
+      "path": "examples/invalid/receipt-delivery-disagrees.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "outcome.delivery says delivered while the destination rejected it."
+    },
+    {
+      "path": "examples/invalid/receipt-rejected-delivery-completed.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A rejected delivery cannot leave execution completed."
+    },
+    {
+      "path": "examples/invalid/receipt-failed-without-stage.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A failed operation must name the stage that failed."
+    },
+    {
+      "path": "examples/invalid/receipt-replayed-without-key.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A replayed receipt carries the idempotency key that matched."
+    },
+    {
+      "path": "examples/invalid/receipt-applied-without-authorization.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "A known modification keeps its authorization reference."
+    },
+    {
+      "path": "examples/invalid/receipt-rollback-without-readback.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "rolled_back needs a fresh read-back and evidence."
+    },
+    {
+      "path": "examples/invalid/receipt-passed-against-old-snapshot.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Passed verification must name the post-operation snapshot."
+    },
+    {
+      "path": "examples/invalid/receipt-passed-with-failed-check.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Passed verification cannot contain a failed required check."
+    },
+    {
+      "path": "examples/invalid/receipt-not-applicable-bypass.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "not_applicable cannot bypass an applicable required check."
+    },
+    {
+      "path": "examples/invalid/receipt-unknown-retry.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "An unknown outcome is reconciled, never blindly retried."
+    },
+    {
+      "path": "examples/valid/response-dry-run.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A --dry-run: the driver plan as data.preview with the base confirm_token."
+    },
+    {
+      "path": "examples/valid/response-applied-unsaved.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A confirmed apply: ok because execution completed, the change was applied and read back."
+    },
+    {
+      "path": "examples/valid/response-noop.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A no-op confirm: nothing needed to change and no required check applied."
+    },
+    {
+      "path": "examples/valid/response-replayed.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A repeated idempotency key returns the original receipt marked replayed."
+    },
+    {
+      "path": "examples/valid/response-check-found-violations.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A check command ran and found violations: ok stays true and the verdict is in data.verification."
+    },
+    {
+      "path": "examples/valid/response-batch-partial.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "An independent batch: base items[] and summary (attempted items, skipped counted apart), ok true, one receipt per item."
+    },
+    {
+      "path": "examples/valid/response-batch-dry-run.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A batch --dry-run: one plan and one confirm token for the whole resolved target set."
+    },
+    {
+      "path": "examples/valid/response-query-page.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A list command: base pagination plus scope, snapshot and sort."
+    },
+    {
+      "path": "examples/valid/response-workflow-completed.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A dependent workflow where every step completed."
+    },
+    {
+      "path": "examples/valid/response-partial.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "Applied in memory, failed while saving: E_PARTIAL with the receipt in error.details."
+    },
+    {
+      "path": "examples/valid/response-unknown.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A lost reply after dispatch: E_OUTCOME_UNKNOWN, never retryable, with the pre-known operation ID."
+    },
+    {
+      "path": "examples/valid/response-verify-failed.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "Applied, then a required read-back check failed."
+    },
+    {
+      "path": "examples/valid/response-delivery-rejected.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "Export then delivery: the artifact this call produced stays, the rejected delivery is not reported as delivered."
+    },
+    {
+      "path": "examples/valid/response-unresolved-operation.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A write on a target with an unresolved operation is refused before dispatch and names that operation."
+    },
+    {
+      "path": "examples/valid/response-lock-held.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A target held by an operation that is still running: wait, never resolve a live operation."
+    },
+    {
+      "path": "examples/valid/response-scope-denied.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A missing task scope: E_FORBIDDEN naming the missing effect and where a person grants it."
+    },
+    {
+      "path": "examples/valid/response-human-required.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A person must act first: base E_HUMAN_REQUIRED with action and resume."
+    },
+    {
+      "path": "examples/valid/response-usage-unknown-flag.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "An unknown flag names the flag, what is accepted and the next step."
+    },
+    {
+      "path": "examples/valid/response-confirmation-required.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A write called without --dry-run or --confirm."
+    },
+    {
+      "path": "examples/valid/response-conflict-drift.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "Drift between plan and confirm stops the write before dispatch."
+    },
+    {
+      "path": "examples/valid/response-workflow-partial.json",
+      "schema": "response.schema.json",
+      "valid": true,
+      "purpose": "A dependent workflow that stopped after a failed step."
+    },
+    {
+      "path": "examples/invalid/response-ok-with-error.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Base envelope: a success carries no error."
+    },
+    {
+      "path": "examples/invalid/response-error-with-data.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Base envelope: a failure carries no data; driver state goes in error.details."
+    },
+    {
+      "path": "examples/invalid/response-top-level-request-id.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "No key is added to the base envelope."
+    },
+    {
+      "path": "examples/invalid/response-meta-extra-key.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "No key is added to base meta."
+    },
+    {
+      "path": "examples/invalid/response-notices-as-strings.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Base notices are objects with type and severity."
+    },
+    {
+      "path": "examples/invalid/response-partial-as-success.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "A partial change can never be ok."
+    },
+    {
+      "path": "examples/invalid/response-applied-unverified-as-ok.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "An applied change needs its read-back to be ok."
+    },
+    {
+      "path": "examples/invalid/response-unknown-retryable.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "E_OUTCOME_UNKNOWN is never retryable."
+    },
+    {
+      "path": "examples/invalid/response-unknown-without-lookup.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "E_OUTCOME_UNKNOWN names how to look the operation up."
+    },
+    {
+      "path": "examples/invalid/response-wrong-code-for-receipt.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "A receipt with a lasting change and a failed stage requires E_PARTIAL."
+    },
+    {
+      "path": "examples/invalid/response-timeout-after-dispatch.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "After dispatch, an unobserved timeout is E_OUTCOME_UNKNOWN."
+    },
+    {
+      "path": "examples/invalid/response-scope-denied-without-scope.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "E_FORBIDDEN names the scope it checked and what is missing."
+    },
+    {
+      "path": "examples/invalid/response-human-required-without-resume.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "E_HUMAN_REQUIRED gives the resume command."
+    },
+    {
+      "path": "examples/invalid/response-usage-without-problem.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "A usage error names the problem."
+    },
+    {
+      "path": "examples/invalid/response-error-without-next-action.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Every driver error says what to do next."
+    },
+    {
+      "path": "examples/invalid/response-untrusted-names-missing-field.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "_untrusted lists fields the object actually contains."
+    },
+    {
+      "path": "examples/invalid/response-dry-run-expiry-mismatch.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "The confirm token and its plan expire together."
+    },
+    {
+      "path": "examples/invalid/response-dry-run-without-token.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "A preview always comes with its confirm token."
+    },
+    {
+      "path": "examples/invalid/response-batch-summary-mismatch.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "The batch summary counts its items exactly."
+    },
+    {
+      "path": "examples/invalid/response-nested-trial-without-observation.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Nested plans are checked like top-level plans."
+    },
+    {
+      "path": "examples/invalid/response-wrong-schema-version.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "The envelope keeps the base schema_version 1.0."
+    },
+    {
+      "path": "examples/invalid/response-workflow-success-incomplete.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "A workflow with a failed step is not ok."
+    },
+    {
+      "path": "examples/invalid/response-error-without-dispatch-state.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Every driver error says whether anything was dispatched."
+    },
+    {
+      "path": "examples/invalid/response-unresolved-without-active-operation.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "An unresolved-operation conflict names the blocking operation."
+    },
+    {
+      "path": "examples/invalid/response-notice-error-severity.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Base notices are info or warning only."
+    },
+    {
+      "path": "examples/invalid/response-local-time.json",
+      "schema": "response.schema.json",
+      "valid": false,
+      "purpose": "Timestamps are UTC with the Z suffix (base §8)."
+    },
+    {
+      "path": "examples/valid/status-running.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "A long operation still running, queried by its pre-known ID."
+    },
+    {
+      "path": "examples/valid/status-blocked.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "Blocked by a modal dialog: the person acts, the CLI never confirms it."
+    },
+    {
+      "path": "examples/valid/status-succeeded.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "A finished operation with its successful receipt (base §16.2 succeeded)."
+    },
+    {
+      "path": "examples/valid/status-pending.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "Accepted and waiting for the application; nothing has started."
+    },
+    {
+      "path": "examples/valid/status-planned.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "A dry-run plan recorded before any confirm; operation show returns the plan itself."
+    },
+    {
+      "path": "examples/invalid/status-plan-of-another-operation.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "The recorded plan belongs to the operation it is shown with."
+    },
+    {
+      "path": "examples/valid/status-cancel-requested.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "Cancellation accepted but no stop observed yet."
+    },
+    {
+      "path": "examples/valid/status-cancelled.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "Cancelled, with the stop observed and nothing left changed."
+    },
+    {
+      "path": "examples/valid/status-expired-unknown.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "An expired record is unknown, never 'not executed'."
+    },
+    {
+      "path": "examples/valid/status-resolved.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "An unknown outcome resolved by an independent read-back; no longer blocks writes."
+    },
+    {
+      "path": "examples/invalid/status-succeeded-with-running-receipt.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Succeeded status needs a successful final receipt."
+    },
+    {
+      "path": "examples/invalid/status-cancelled-without-stop.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Cancelled needs an observed stop."
+    },
+    {
+      "path": "examples/invalid/status-expired-as-succeeded.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "An expired record cannot claim a known outcome."
+    },
+    {
+      "path": "examples/invalid/status-lookup-not-builtin.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "The lookup command is the built-in operation show."
+    },
+    {
+      "path": "examples/invalid/status-planned-but-started.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "A planned operation has not started."
+    },
+    {
+      "path": "examples/invalid/status-resolved-succeeded.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Only unknown or partial operations are resolved after the fact."
+    },
+    {
+      "path": "examples/invalid/status-blocked-after-finish.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Only a pending or running operation can be blocked."
+    },
+    {
+      "path": "examples/valid/status-batch-partial.json",
+      "schema": "operation-status.schema.json",
+      "valid": true,
+      "purpose": "A batch record lists its items in plan order; each item is its own operation with its own receipt."
+    },
+    {
+      "path": "examples/invalid/status-batch-hides-failed-item.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "A finished batch reports the status its items add up to."
+    },
+    {
+      "path": "examples/invalid/status-batch-items-out-of-order.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "A batch record lists the items of its plan, in plan order."
+    },
+    {
+      "path": "examples/invalid/status-unknown-with-known-receipt.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Unknown status cannot hold a receipt with a known outcome."
+    },
+    {
+      "path": "examples/invalid/status-missing-identifiers.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Every record names its operation."
+    },
+    {
+      "path": "examples/invalid/status-command-is-string.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Structured commands are argv arrays, never shell strings."
+    },
+    {
+      "path": "examples/invalid/status-receipt-id-mismatch.json",
+      "schema": "operation-status.schema.json",
+      "valid": false,
+      "purpose": "Status and receipt name the same operation."
+    },
+    {
+      "path": "examples/valid/workflow-dependent-partial.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "A failed save stops the dependent export; the skip says why."
+    },
+    {
+      "path": "examples/valid/workflow-continue-independent.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "continue_independent lets a step with no failed prerequisite finish."
+    },
+    {
+      "path": "examples/valid/workflow-read-plan-completed.json",
+      "schema": "workflow.schema.json",
+      "valid": true,
+      "purpose": "Observation and planning steps finish without receipts."
+    },
+    {
+      "path": "examples/invalid/workflow-cycle.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "Dependencies are acyclic."
+    },
+    {
+      "path": "examples/invalid/workflow-duplicate-step-id.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "Step identities are unique."
+    },
+    {
+      "path": "examples/invalid/workflow-missing-dependency.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "Dependencies name existing steps."
+    },
+    {
+      "path": "examples/invalid/workflow-ran-after-failure.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "A dependent step cannot run after its prerequisite failed."
+    },
+    {
+      "path": "examples/invalid/workflow-modification-without-receipt.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "A completed modifying step keeps its receipt."
+    },
+    {
+      "path": "examples/invalid/workflow-summary-mismatch.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "The summary counts step results exactly."
+    },
+    {
+      "path": "examples/invalid/workflow-skipped-without-reason.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "A skipped step says why."
+    },
+    {
+      "path": "examples/invalid/workflow-receipt-id-mismatch.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "Step and receipt operation identities agree."
+    },
+    {
+      "path": "examples/invalid/workflow-modification-hidden-as-observe.json",
+      "schema": "workflow.schema.json",
+      "valid": false,
+      "purpose": "A step cannot hide the effects its receipt reports."
+    },
+    {
+      "path": "examples/valid/batch-partial.json",
+      "schema": "batch.schema.json",
+      "valid": true,
+      "purpose": "Base batch: items[] and summary with skipped items reported."
+    },
+    {
+      "path": "examples/invalid/batch-duplicate-target.json",
+      "schema": "batch.schema.json",
+      "valid": false,
+      "purpose": "Targets are deduplicated before execution."
+    },
+    {
+      "path": "examples/invalid/batch-item-ok-against-receipt.json",
+      "schema": "batch.schema.json",
+      "valid": false,
+      "purpose": "An item's ok follows its receipt."
+    },
+    {
+      "path": "examples/invalid/batch-skipped-not-counted.json",
+      "schema": "batch.schema.json",
+      "valid": false,
+      "purpose": "Skipped items are counted."
+    },
+    {
+      "path": "examples/invalid/batch-dispatched-without-operation.json",
+      "schema": "batch.schema.json",
+      "valid": false,
+      "purpose": "A dispatched item carries its receipt or operation_id."
+    },
+    {
+      "path": "examples/invalid/batch-total-counts-skipped.json",
+      "schema": "batch.schema.json",
+      "valid": false,
+      "purpose": "summary.total counts attempted items; skipped items are counted apart (base §15.5)."
+    },
+    {
+      "path": "examples/valid/query-snapshot-page.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "A snapshot-consistent page with a cursor."
+    },
+    {
+      "path": "examples/valid/query-empty-complete.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "An empty result that is complete."
+    },
+    {
+      "path": "examples/valid/query-truncated-no-continuation.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "Truncated with a reason and no continuation."
+    },
+    {
+      "path": "examples/valid/query-unread-scope.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "Complete except for a named scope that could not be read."
+    },
+    {
+      "path": "examples/valid/query-weak-no-snapshot.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "No snapshot is available; the page says so."
+    },
+    {
+      "path": "examples/valid/query-offset-page.json",
+      "schema": "query-page.schema.json",
+      "valid": true,
+      "purpose": "Base offset style: offset and next_offset."
+    },
+    {
+      "path": "examples/invalid/query-count-mismatch.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "count equals the returned items."
+    },
+    {
+      "path": "examples/invalid/query-more-without-continuation.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "has_more needs a continuation or a reason."
+    },
+    {
+      "path": "examples/invalid/query-null-snapshot-without-reason.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "A missing snapshot needs a reason."
+    },
+    {
+      "path": "examples/invalid/query-over-effective-limit.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "Items cannot exceed the effective limit."
+    },
+    {
+      "path": "examples/invalid/query-snapshot-mode-without-snapshot.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "Snapshot consistency needs a snapshot."
+    },
+    {
+      "path": "examples/invalid/query-truncated-without-reason.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "Truncation needs a reason or unread scopes."
+    },
+    {
+      "path": "examples/invalid/query-next-offset-without-more.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "next_offset appears only when has_more is true."
+    },
+    {
+      "path": "examples/invalid/query-unread-as-complete.json",
+      "schema": "query-page.schema.json",
+      "valid": false,
+      "purpose": "A page with unread scopes is not complete."
+    },
+    {
+      "path": "examples/valid/reference-beta.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "A driver reference: base keys, driver_profile and a driver block per command."
+    },
+    {
+      "path": "examples/valid/reference-stable.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "A stable reference: no draft commands and evidence for every verified one."
+    },
+    {
+      "path": "examples/valid/reference-semver-prerelease.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "A prerelease tool version."
+    },
+    {
+      "path": "examples/valid/reference-semver-build.json",
+      "schema": "reference.schema.json",
+      "valid": true,
+      "purpose": "Build metadata in the tool version."
+    },
+    {
+      "path": "examples/invalid/reference-write-type-mismatch.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "type is write exactly when an effect needs the confirm gate."
+    },
+    {
+      "path": "examples/invalid/reference-deliver-not-dangerous.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "deliver, configure and physical commands are dangerous."
+    },
+    {
+      "path": "examples/invalid/reference-risk-tier-too-low.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A write tool cannot claim T0."
+    },
+    {
+      "path": "examples/invalid/reference-write-without-dry-run-example.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A write command shows the --dry-run and --confirm pair."
+    },
+    {
+      "path": "examples/invalid/reference-example-wrong-prefix.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Examples start with the tool name and command path."
+    },
+    {
+      "path": "examples/invalid/reference-core-code-changed.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Core codes keep their base exit and retryable."
+    },
+    {
+      "path": "examples/invalid/reference-driver-code-changed.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Driver codes keep their fixed exit and retryable."
+    },
+    {
+      "path": "examples/invalid/reference-unknown-retryable.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "E_OUTCOME_UNKNOWN is never retryable."
+    },
+    {
+      "path": "examples/invalid/reference-exit-codes-incomplete.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "exit_codes explain every exit the error table uses."
+    },
+    {
+      "path": "examples/invalid/reference-output-schema-missing.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "output_schema names an entry in schemas."
+    },
+    {
+      "path": "examples/invalid/reference-inlined-public-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Public driver schemas are referenced by URN, never inlined."
+    },
+    {
+      "path": "examples/invalid/reference-reserved-param.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "--dry-run is a base global flag, not a command parameter."
+    },
+    {
+      "path": "examples/invalid/reference-param-default-required.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A required parameter has no default."
+    },
+    {
+      "path": "examples/invalid/reference-verified-without-evidence.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Verified commands need evidence."
+    },
+    {
+      "path": "examples/invalid/reference-stable-with-draft.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A stable release exposes no draft command."
+    },
+    {
+      "path": "examples/invalid/reference-unknown-command-error.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Command error codes are declared in error_codes."
+    },
+    {
+      "path": "examples/invalid/reference-read-with-apply-phase.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A read command cannot declare apply."
+    },
+    {
+      "path": "examples/invalid/reference-untrusted-not-in-fields.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "untrusted_fields are a subset of fields."
+    },
+    {
+      "path": "examples/invalid/reference-duplicate-capability.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Capability IDs are unique."
+    },
+    {
+      "path": "examples/invalid/reference-path-group-conflict.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A command path cannot also be a group."
+    },
+    {
+      "path": "examples/invalid/reference-semver-leading-zero.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "SemVer forbids leading zeros."
+    },
+    {
+      "path": "examples/invalid/reference-semver-empty-label.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "SemVer forbids empty prerelease labels."
+    },
+    {
+      "path": "examples/invalid/reference-command-without-example.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Every command has at least one runnable example."
+    },
+    {
+      "path": "examples/invalid/reference-network-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Product schemas resolve offline; no network references."
+    },
+    {
+      "path": "examples/invalid/reference-missing-driver-profile.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A driver reference declares driver_profile."
+    },
+    {
+      "path": "examples/invalid/reference-unknown-request-schema.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "request_schema names a product or public schema."
+    },
+    {
+      "path": "examples/invalid/reference-dangerous-without-flag-example.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A dangerous command's examples carry --dangerous."
+    },
+    {
+      "path": "examples/invalid/reference-artifact-as-read.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "Creating a file is a write: every effect other than observe goes through --dry-run and --confirm."
+    },
+    {
+      "path": "examples/invalid/reference-missing-builtin.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "A driver reference lists the built-in operation commands."
+    },
+    {
+      "path": "examples/invalid/reference-operation-list-old-states.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "operation list --status accepts exactly the operation states."
+    },
+    {
+      "path": "examples/invalid/reference-update-with-confirm.json",
+      "schema": "reference.schema.json",
+      "valid": false,
+      "purpose": "The base self-update is one call and never takes --confirm."
+    },
+    {
+      "path": "examples/valid/reference-index.json",
+      "schema": "reference-index.schema.json",
+      "valid": true,
+      "purpose": "reference --index: one line per command for choosing what to read in full."
+    },
+    {
+      "path": "examples/invalid/reference-index-deliver-not-dangerous.json",
+      "schema": "reference-index.schema.json",
+      "valid": false,
+      "purpose": "The index applies the same danger rule as the full reference."
+    },
+    {
+      "path": "examples/invalid/reference-index-missing-builtin.json",
+      "schema": "reference-index.schema.json",
+      "valid": false,
+      "purpose": "The index lists the built-in commands too."
+    },
+    {
+      "path": "examples/valid/reference-command.json",
+      "schema": "reference-command.schema.json",
+      "valid": true,
+      "purpose": "reference --command 'feature create': one command, its schema entry, its error codes, its product schema; public schemas by URN."
+    },
+    {
+      "path": "examples/invalid/reference-command-extra-error-code.json",
+      "schema": "reference-command.schema.json",
+      "valid": false,
+      "purpose": "--command returns exactly the error codes the command declares."
+    },
+    {
+      "path": "examples/invalid/reference-command-unlisted-public-schema.json",
+      "schema": "reference-command.schema.json",
+      "valid": false,
+      "purpose": "--command lists the public schemas the command names."
+    },
+    {
+      "path": "examples/valid/context-connected.json",
+      "schema": "context.schema.json",
+      "valid": true,
+      "purpose": "Context separates the service on disk (0.4.1) from the one still running (0.4.0)."
+    },
+    {
+      "path": "examples/valid/context-read-only.json",
+      "schema": "context.schema.json",
+      "valid": true,
+      "purpose": "No scope file: the CLI is read-only and says so."
+    },
+    {
+      "path": "examples/invalid/context-read-only-with-effects.json",
+      "schema": "context.schema.json",
+      "valid": false,
+      "purpose": "read_only allows observe and nothing else."
+    },
+    {
+      "path": "examples/invalid/context-granted-without-scope-id.json",
+      "schema": "context.schema.json",
+      "valid": false,
+      "purpose": "A granted scope names its ID."
+    },
+    {
+      "path": "examples/invalid/context-connected-without-instance.json",
+      "schema": "context.schema.json",
+      "valid": false,
+      "purpose": "A connected backend names its instance."
+    },
+    {
+      "path": "examples/invalid/context-without-cli-component.json",
+      "schema": "context.schema.json",
+      "valid": false,
+      "purpose": "Context identifies the running CLI."
+    },
+    {
+      "path": "examples/valid/doctor.json",
+      "schema": "doctor.schema.json",
+      "valid": true,
+      "purpose": "Doctor with the four required driver checks and a fix for each failure."
+    },
+    {
+      "path": "examples/invalid/doctor-missing-authorization.json",
+      "schema": "doctor.schema.json",
+      "valid": false,
+      "purpose": "Doctor checks the task scope."
+    },
+    {
+      "path": "examples/invalid/doctor-fail-without-fix.json",
+      "schema": "doctor.schema.json",
+      "valid": false,
+      "purpose": "A failing check gives a fix."
+    },
+    {
+      "path": "examples/invalid/doctor-pass-with-fix.json",
+      "schema": "doctor.schema.json",
+      "valid": false,
+      "purpose": "A passing check has fix null (base doctor contract)."
+    },
+    {
+      "path": "examples/valid/scope-write.json",
+      "schema": "scope.schema.json",
+      "valid": true,
+      "purpose": "A task scope a person wrote for iterating on a copy."
+    },
+    {
+      "path": "examples/valid/scope-deliver.json",
+      "schema": "scope.schema.json",
+      "valid": true,
+      "purpose": "Delivery is allowed only with dangerous set, and only to the listed destinations."
+    },
+    {
+      "path": "examples/invalid/scope-deliver-without-destinations.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "A deliver scope names the destinations it allows."
+    },
+    {
+      "path": "examples/invalid/scope-destination-with-dot-segments.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "Destination prefixes compare by whole path segments; a dot segment would escape the granted location."
+    },
+    {
+      "path": "examples/invalid/scope-relative-root.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "Roots and outputs are absolute; a relative root would depend on the working directory."
+    },
+    {
+      "path": "examples/invalid/scope-expires-before-granted-fraction.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "Times are compared as instants, not as strings."
+    },
+    {
+      "path": "examples/invalid/scope-deliver-without-dangerous.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "deliver, configure and physical need dangerous."
+    },
+    {
+      "path": "examples/invalid/scope-write-without-roots.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "A write scope names its roots or targets."
+    },
+    {
+      "path": "examples/invalid/scope-expires-before-granted.json",
+      "schema": "scope.schema.json",
+      "valid": false,
+      "purpose": "A scope expires after it was granted."
+    },
+    {
+      "path": "examples/valid/changelog.json",
+      "schema": "changelog.schema.json",
+      "valid": true,
+      "purpose": "Base changelog --since output."
+    },
+    {
+      "path": "examples/invalid/changelog-out-of-order.json",
+      "schema": "changelog.schema.json",
+      "valid": false,
+      "purpose": "Entries are newest first."
+    },
+    {
+      "path": "examples/invalid/changelog-since-includes-older.json",
+      "schema": "changelog.schema.json",
+      "valid": false,
+      "purpose": "--since returns only newer versions."
+    },
+    {
+      "path": "examples/valid/evidence-development.json",
+      "schema": "evidence.schema.json",
+      "valid": true,
+      "purpose": "Development evidence from a simulated adapter, with its limits."
+    },
+    {
+      "path": "examples/invalid/evidence-release-without-package.json",
+      "schema": "evidence.schema.json",
+      "valid": false,
+      "purpose": "Release evidence binds the downloaded package hash."
+    },
+    {
+      "path": "examples/invalid/evidence-real-without-target.json",
+      "schema": "evidence.schema.json",
+      "valid": false,
+      "purpose": "Real-application evidence names the target and checked snapshot."
+    },
+    {
+      "path": "examples/valid/release-manifest-draft.json",
+      "schema": "release-manifest.schema.json",
+      "valid": true,
+      "purpose": "A draft product manifest with its service component and base pin."
+    },
+    {
+      "path": "examples/invalid/release-manifest-unsafe-path.json",
+      "schema": "release-manifest.schema.json",
+      "valid": false,
+      "purpose": "Component paths stay inside the package."
+    },
+    {
+      "path": "examples/invalid/release-manifest-verified-without-evidence.json",
+      "schema": "release-manifest.schema.json",
+      "valid": false,
+      "purpose": "A verified compatibility entry names its evidence."
+    },
+    {
+      "path": "examples/valid/adoption-lock.json",
+      "schema": "adoption-lock.schema.json",
+      "valid": true,
+      "purpose": "A consumer's pin of the driver package, its base and the copied files."
+    },
+    {
+      "path": "examples/invalid/adoption-lock-colliding-paths.json",
+      "schema": "adoption-lock.schema.json",
+      "valid": false,
+      "purpose": "Managed paths are unique on case-insensitive file systems."
+    },
+    {
+      "path": "examples/valid/adoption-lock-git-checkout.json",
+      "schema": "adoption-lock.schema.json",
+      "valid": true,
+      "purpose": "A pin taken from a git checkout says whether the tree was dirty."
+    },
+    {
+      "path": "examples/invalid/adoption-lock-bundle-without-package.json",
+      "schema": "adoption-lock.schema.json",
+      "valid": false,
+      "purpose": "A pin taken from a bundle records the bundle hash."
+    }
+  ]
+}

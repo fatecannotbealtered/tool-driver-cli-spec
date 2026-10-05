@@ -1,0 +1,25 @@
+{
+  "spec_version": "1.0.0",
+  "schema_version": "2.0",
+  "source_kind": "bundle",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_dirty": false,
+  "package_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "base": {
+    "spec": "ai-native-cli-spec",
+    "tag": "v1.6.3",
+    "commit": "d6733433e2a9b93a4e6fb169c6927f6604ec89c7"
+  },
+  "files": [
+    {
+      "path": ".agent/driver/schemas/receipt.schema.json",
+      "source_path": "schemas/receipt.schema.json",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "path": ".agent/driver/contract/driver-contract.json",
+      "source_path": "contract/driver-contract.json",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "schema_version": "1.0",
+  "data": {
+    "verification": {
+      "status": "failed",
+      "scope": "declared_operation_postconditions",
+      "snapshot_id": "snapshot-01",
+      "coverage": "complete",
+      "checks": [
+        {
+          "id": "check-min-wall",
+          "status": "failed",
+          "required": true,
+          "evidence_ref": "evidence://synthetic/check-01"
+        }
+      ],
+      "not_checked": [],
+      "evidence_refs": [
+        "evidence://synthetic/check-01"
+      ]
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}
