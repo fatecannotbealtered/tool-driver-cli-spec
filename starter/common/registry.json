@@ -49,7 +49,7 @@
         "modes": ["{{PROFILE}}"],
         "maturity": "draft",
         "environments": [
-          {"application": "native application (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
+          {"application": "target backend (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
            "adapter_version": "{{VERSION}}", "mode": "{{PROFILE}}", "limitations": ["Declaration only; the adapter refuses every native call."]}
         ],
         "limits": ["The starter adapter refuses this command with E_UNSUPPORTED."],
@@ -79,7 +79,7 @@
         "modes": ["{{PROFILE}}"],
         "maturity": "draft",
         "environments": [
-          {"application": "native application (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
+          {"application": "target backend (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
            "adapter_version": "{{VERSION}}", "mode": "{{PROFILE}}", "limitations": ["Declaration only; the adapter refuses every native call."]}
         ],
         "limits": ["The starter adapter refuses this command with E_UNSUPPORTED."],

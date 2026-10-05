@@ -19,6 +19,7 @@ python -m pip install -e .
 ## What It Does
 
 After its native adapter is implemented and verified, {{NAME}} can observe and change a {{PROFILE}}-mode target on behalf of an agent and reports what actually happened: execution, change, persistence, delivery and verification separately. Risk tier: T1 (writes need a task scope granted by a person).
+The mode describes target state and lifecycle, not an industry or supported vendor. This template provides no physical device action; adding one requires T2, the physical effect, dangerous flags and authorization under DRV-039. Follow the pinned [capability acceptance guide](.agent/driver/docs/ENGINEERING-ACCEPTANCE.md) for dependencies, units, checker coverage and saving semantics that actually apply.
 
 ## Agent Workflow
 

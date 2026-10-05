@@ -9,6 +9,7 @@ python scripts/instantiate_starter.py --name sample-native-cli --profile file --
 ```
 
 `--profile` 可选 `file`、`session` 或 `device`。输出必须是新目录。实例化不创建远端仓库、不联网、不安装依赖、不启动原软件；它复制模板、规范与基线副本和 SDK，生成运行时契约，并在临时状态目录里自检 `reference`、`context`、`doctor`。
+模式只选择契约与目标生命周期，不选择行业、品牌或文件格式；三个模式的原生适配器都未实现。设备模板不提供物理动作，后续能力产生物理效果时必须声明 T2、`physical`、危险标记及相应授权。按[能力验收](../docs/ENGINEERING-ACCEPTANCE.md)接入适用的依赖、单位、检查器与保存语义。
 
 生成的工程包含 Agent 入口（`AGENTS.md`、`.agent/AGENT.md`）、固定的规范与基线副本（`.agent/driver/`）、SDK（`.agent/vendor/sdk/`）、副本锁定记录、注册表、CLI 入口与未实现的适配器、命令级测试与 FCC 守卫、CI、CHANGELOG、`pyproject.toml` 以及对齐 SKILL-SPEC 的 Skill 和评测场景。
 

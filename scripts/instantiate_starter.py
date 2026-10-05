@@ -101,7 +101,7 @@ def vendored() -> dict[str, tuple[str, bytes]]:
 def instantiate(name: str, output: Path, profile: str) -> dict:
     if len(name) > 64 or not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name):
         raise StarterError("--name must be a lowercase kebab-case product name of at most 64 characters.",
-                           next_action="Use a name such as demo-cad-cli.")
+                            next_action="Use a name such as sample-driver.")
     if profile not in {"file", "session", "device"}:
         raise StarterError("--profile must be file, session or device.")
     output = Path(os.path.abspath(output))

@@ -20,6 +20,9 @@ ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文
 
 和基线的逐项关系见[基线与驱动层](docs/LAYERING.md)。
 
+规范按 `file`、`session`、`device` 模式和命令声明的效果组织，不以行业、品牌或文件格式划定支持范围。公共要求是目标与依赖身份、授权、计划、执行、保存/交付、验证及恢复；内存状态、单位/坐标、呈现和物理效果等附加要求按实际能力适用。没有某种状态可以说明不适用；声明支持但尚未观测或验证的状态不能借此豁免。
+正文编号条款中的「必须」「不得」是规范性要求；标为参考实现、建议任务或案例附录的内容用于说明和取证，不新增特定产品的支持义务。领域规则在公共契约之外补充，并说明检查范围。
+
 ## 阅读入口
 
 | 文档 | 用途 |
@@ -32,6 +35,7 @@ ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文
 | [驱动 Skill 增补](docs/SKILL-ADDENDUM.md) | 驱动 Skill 在基线 SKILL-SPEC 之上必须写的内容 |
 | [实施与迁移](docs/ADOPTION-GUIDE.md) | 新建工具、从基线驱动 CLI 和 1.0 迁移、试点 |
 | [工具工程](docs/DEVELOPMENT-GUIDE.md) | 产品注册表、生成器、Python SDK 与种子工程 |
+| [能力验收与规范毕业](docs/ENGINEERING-ACCEPTANCE.md) | 按模式和能力选择任务，区分规范准入与具体工具验收 |
 | [驱动契约](contract/driver-contract.json) | 扩展错误码、回执推导规则、错误详情、效果与范围的机器形式 |
 | [机器结构](schemas/) | 计划、回执、操作状态、工作流、批量、列表、reference、context、doctor、scope 等 Schema |
 | [示例索引](examples/index.json) | 应通过与应拒绝的正反例 |
@@ -42,10 +46,11 @@ ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文
 
 ## 直接使用与毕业入口
 
-从 [种子工程](starter/README.md) 实例化新工具，或先运行 [已实现的 SVG 文件适配器](examples/engineering/README.md)。原生适配器尚未实现时明确拒绝，不把模板自检当作硬件任务完成。规范与各工具的验收边界、Xpedition/KiCad/Creo 的首批任务，见 [工程任务验收](docs/ENGINEERING-ACCEPTANCE.md)。
+从 [种子工程](starter/README.md) 按模式实例化新工具，或先运行 [SVG 文件模式参考实现](examples/engineering/README.md)。规范与具体能力的验收边界、品牌无关的任务选择，见 [能力验收与规范毕业](docs/ENGINEERING-ACCEPTANCE.md)；既有工程工具材料另列在[非规范性案例附录](docs/ENGINEERING-CASE-STUDIES.md)。
+三个模式都有开发脚手架和协议支持；仓库的真实产物参考试验使用 SVG。它不要求采用方支持 SVG，也不能证明任意文件格式、会话应用或设备已经可用。原生适配器尚未实现时明确拒绝，模板自检不能代替真实任务完成。
 
 ```powershell
-python scripts/instantiate_starter.py --name demo-cad-cli --profile session --output D:/work/demo-cad-cli
+python scripts/instantiate_starter.py --name sample-driver --profile file --output D:/work/sample-driver
 python examples/engineering/svg_title_driver.py reference --index
 python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-acceptance-new
 ```

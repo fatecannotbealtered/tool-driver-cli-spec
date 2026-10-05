@@ -44,6 +44,38 @@ class StarterTests(unittest.TestCase):
         self.assertEqual([item["ok"] for item in self.response["data"]["self_check"]], [True, True, True, False])
         self.assertEqual(self.response["data"]["base"]["tag"], "v1.6.3")
 
+    def test_each_mode_generates_an_unimplemented_backend_with_real_cli_guards(self):
+        for profile in ("file", "session", "device"):
+            with self.subTest(profile=profile):
+                name = f"sample-{profile}-driver"
+                project = self.base / name
+                result = run([str(SCRIPT), "--name", name, "--profile", profile, "--output", str(project)], self.base)
+                response = json.loads(result.stdout)
+                self.assertEqual(result.returncode, 0, response)
+                self.assertEqual(response["data"]["native_status"], "not_implemented")
+                package = name.replace("-", "_")
+                result = run(["-m", package, "reference"], project)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                reference = json.loads(result.stdout)["data"]
+                self.assertEqual(reference["release_readiness"]["level"], "unpublishable")
+                targets = [command for command in reference["commands"] if command["path"].startswith("target ")]
+                self.assertEqual({command["path"] for command in targets}, {"target inspect", "target apply"})
+                for command in targets:
+                    self.assertEqual(command["driver"]["modes"], [profile])
+                    self.assertEqual(command["driver"]["maturity"], "draft")
+                    self.assertEqual(command["driver"]["evidence_refs"], [])
+                    self.assertNotIn("physical", command["driver"]["effects"])
+                result = run(["-m", package, "context"], project)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                components = json.loads(result.stdout)["data"]["environment"]["components"]
+                backend = next(item for item in components if item["name"] == f"unimplemented {profile} adapter")
+                self.assertEqual((backend["role"], backend["identity_status"]), ("adapter", "unavailable"))
+                self.assertEqual(run(["check_project.py"], project).returncode, 0)
+                # Generated tests exercise real subprocess CLI boundaries: native refusal, scope/confirmation,
+                # forged tokens, discovery and FCC. Passing them does not claim that a backend exists.
+                result = run(["-m", "unittest", "discover", "-s", "tests", "-v"], project, timeout=600)
+                self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace")[-3000:])
+
     def test_extracted_source_does_not_borrow_an_ancestor_checkout_identity(self):
         sys.path.insert(0, str(ROOT / 'scripts'))
         import instantiate_starter

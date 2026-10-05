@@ -2,6 +2,8 @@
 
 Rules the SDK cannot enforce for you:
 - run() and plan() never change the target; plan() returns the target, its baseline snapshot and the changes it expects.
+- Capture all inputs and dependencies that affect the result; applicable units, state and checker coverage belong
+  to the capability, not a vendor or this template. A device mode is not proof of a physical implementation.
 - apply() re-checks the baseline (or implement revision(target)), dispatches, reads the result back and returns
   receipt fields that report what was observed. Never report saved, delivered or verified without observing it.
 - Raise DriverError with the real dispatch_state: not_started, dispatched or unknown.
@@ -12,13 +14,13 @@ from __future__ import annotations
 
 from tool_driver_sdk import DriverError
 
-NOT_IMPLEMENTED = "The native adapter is not implemented yet; nothing was sent to the application."
+NOT_IMPLEMENTED = "The native adapter is not implemented yet; nothing was sent to the target backend."
 
 
 class Adapter:
     def environment(self) -> dict:
         return {
-            "components": [{"name": "native application", "role": "application", "version": None, "build_id": None,
+            "components": [{"name": "unimplemented {{PROFILE}} adapter", "role": "adapter", "version": None, "build_id": None,
                             "location": "unknown", "identity_status": "unavailable", "reason": "The adapter is not implemented."}],
             "connection": {"status": "not_connected", "instance_id": None, "generation": None, "ownership": None,
                            "reason": "The adapter is not implemented."},
