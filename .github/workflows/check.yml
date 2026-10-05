@@ -41,7 +41,10 @@ jobs:
         shell: bash
         run: |
           spec_version=$(cat VERSION)
-          browser=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          browser=/opt/google/chrome/chrome
+          if [ ! -x "$browser" ]; then
+            browser=$(command -v chromium || command -v chromium-browser || command -v msedge)
+          fi
           test -n "$browser"
           digest=$(cut -d ' ' -f1 "dist/tool-driver-cli-spec-${spec_version}.sha256")
           python scripts/check_graduation.py --audit --browser "$browser" --output dist/acceptance \
@@ -56,6 +59,24 @@ jobs:
           if (!$browser) { throw 'No preinstalled supported browser; independent consumption cannot be skipped.' }
           $digest = (Get-Content "dist/tool-driver-cli-spec-$specVersion.sha256").Split(' ')[0]
           python scripts/check_graduation.py --audit --browser $browser --output dist/acceptance --bundle "dist/tool-driver-cli-spec-$specVersion.zip" --expected-sha256 $digest
+      - name: Show package acceptance failures
+        if: failure()
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          root = Path("dist/acceptance")
+          report = root / "acceptance.json"
+          if report.is_file():
+              data = json.loads(report.read_text(encoding="utf-8"))
+              print(json.dumps({key: data[key] for key in ("local_passed", "release_ready", "source_unchanged")}))
+              for check in data["checks"]:
+                  print(json.dumps(check))
+                  if not check["passed"]:
+                      for stream in ("stdout", "stderr"):
+                          log = root / (check["id"] + "." + stream + ".log")
+                          if log.is_file():
+                              print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
       - name: Retain exact package acceptance artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -40,7 +40,10 @@ jobs:
         shell: bash
         run: |
           spec_version=$(cat VERSION)
-          browser=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          browser=/opt/google/chrome/chrome
+          if [ ! -x "$browser" ]; then
+            browser=$(command -v chromium || command -v chromium-browser || command -v msedge)
+          fi
           test -n "$browser"
           digest=$(cut -d ' ' -f1 "dist/tool-driver-cli-spec-${spec_version}.sha256")
           python scripts/check_graduation.py --audit --browser "$browser" --output dist/acceptance \
