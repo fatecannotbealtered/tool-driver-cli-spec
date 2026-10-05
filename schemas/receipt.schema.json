@@ -1,34 +1,59 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:tool-driver-cli-spec:receipt:1.0",
+  "$id": "urn:tool-driver-cli-spec:receipt:2.0",
   "title": "receipt",
+  "description": "What a modifying call actually did, reported per dimension.",
   "type": "object",
   "properties": {
     "operation_id": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
     },
-    "target": {
-      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
+    "capability_id": {
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
     },
-    "authorization_scope_id": {
+    "plan_id": {
       "anyOf": [
         {
-          "type": "string",
-          "minLength": 1
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
         },
         {
           "type": "null"
         }
       ]
     },
+    "request_id": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target": {
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/target"
+    },
+    "authorization_scope_id": {
+      "anyOf": [
+        {
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "authorization_unavailable_reason": {
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
+    },
     "effects": {
-      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/effects"
     },
     "snapshot_before": {
       "anyOf": [
         {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/snapshot"
         },
         {
           "type": "null"
@@ -38,7 +63,7 @@
     "snapshot_after": {
       "anyOf": [
         {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/snapshot"
         },
         {
           "type": "null"
@@ -46,7 +71,16 @@
       ]
     },
     "outcome": {
-      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/outcome"
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/outcome"
+    },
+    "failed_stage": {
+      "enum": [
+        "apply",
+        "persist",
+        "deliver",
+        "verify",
+        null
+      ]
     },
     "changed_items": {
       "type": "array",
@@ -54,16 +88,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
           },
           "change": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
           },
           "evidence_ref": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
           }
         },
         "required": [
@@ -80,18 +111,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
           },
           "path": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
           },
           "sha256": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/sha256"
               },
               {
                 "type": "null"
@@ -99,8 +127,7 @@
             ]
           },
           "source_snapshot_id": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
           }
         },
         "required": [
@@ -108,6 +135,55 @@
           "path",
           "sha256",
           "source_snapshot_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "deliveries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "not_attempted",
+              "delivered",
+              "rejected",
+              "unknown"
+            ]
+          },
+          "evidence_ref": {
+            "anyOf": [
+              {
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
+          }
+        },
+        "required": [
+          "destination",
+          "artifact_id",
+          "status",
+          "evidence_ref"
         ],
         "additionalProperties": false
       }
@@ -126,8 +202,7 @@
           ]
         },
         "reason": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
         },
         "supported": {
           "type": "boolean"
@@ -140,24 +215,30 @@
       ],
       "additionalProperties": false
     },
+    "replayed": {
+      "type": "boolean"
+    },
+    "_untrusted": {
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/untrusted"
+    },
     "extensions": {
       "type": "object"
-    },
-    "authorization_unavailable_reason": {
-      "type": "string",
-      "minLength": 1
     }
   },
   "required": [
     "operation_id",
+    "capability_id",
+    "plan_id",
     "target",
     "authorization_scope_id",
     "effects",
     "snapshot_before",
     "snapshot_after",
     "outcome",
+    "failed_stage",
     "changed_items",
     "artifacts",
+    "deliveries",
     "recovery"
   ],
   "additionalProperties": false

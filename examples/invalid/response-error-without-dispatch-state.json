@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_NOT_FOUND",
+    "message": "part-09 is not open.",
+    "retryable": false,
+    "details": {
+      "next_action": "Run feature list or context to see the open parts."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

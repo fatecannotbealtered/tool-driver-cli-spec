@@ -10,6 +10,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_file_consumer_probe as probe
+from validate_contract import validate_value
+
+
+def state(result):
+    """Driver objects live in data on success and in error.details on failure (COR-002)."""
+    return result["data"] if result["ok"] else result["error"]["details"]
 
 
 def simulated_readback(*_args):
@@ -35,14 +41,20 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.addCleanup(self.commit.stop)
 
     def run_simulated(self):
-        return probe.run_probe(self.browser, self.output, consumer_kind="simulated_adapter")
+        result = probe.run_probe(self.browser, self.output, consumer_kind="simulated_adapter")
+        self.assertEqual(validate_value("response", result), [])
+        evidence = state(result).get("evidence")
+        if evidence is not None:
+            self.assertEqual(validate_value("evidence", evidence), [])
+        return result
 
     def test_missing_browser_refuses_before_creating_output(self):
         result = probe.run_probe(self.root / "missing.exe", self.output)
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "E_CONFIG")
         self.assertFalse(self.output.exists())
-        self.assertNotIn("receipt", result["data"])
+        self.assertNotIn("receipt", result["error"]["details"])
+        self.assertEqual(validate_value("response", result), [])
 
     def test_existing_directory_is_never_overwritten(self):
         self.output.mkdir()
@@ -69,20 +81,20 @@ class FileConsumerProbeTests(unittest.TestCase):
     def test_timeout_after_write_preserves_applied_state(self):
         with patch.object(probe, "read_browser", side_effect=probe.ProbeError("E_VERIFY_INCOMPLETE", "simulated timeout")):
             result = self.run_simulated()
-        outcome = result["data"]["receipt"]["outcome"]
+        outcome = state(result)["receipt"]["outcome"]
         self.assertFalse(result["ok"])
         self.assertEqual(outcome["change"], "applied")
         self.assertEqual(outcome["persistence"], "saved")
         self.assertEqual(outcome["verification"]["status"], "incomplete")
         self.assertFalse(result["error"]["retryable"])
-        self.assertEqual(result["data"]["evidence"]["kind"], "simulated_adapter")
+        self.assertEqual(state(result)["evidence"]["kind"], "simulated_adapter")
 
     def test_failed_independent_check_does_not_claim_no_write(self):
         wrong = simulated_readback()
         wrong["bbox"]["x"] = 99
         with patch.object(probe, "read_browser", return_value=wrong):
             result = self.run_simulated()
-        outcome = result["data"]["receipt"]["outcome"]
+        outcome = state(result)["receipt"]["outcome"]
         self.assertFalse(result["ok"])
         self.assertEqual(outcome["execution"], "completed")
         self.assertEqual(outcome["change"], "applied")
@@ -100,9 +112,9 @@ class FileConsumerProbeTests(unittest.TestCase):
                 probe, "read_browser", side_effect=probe.ProbeError("E_VERIFY_INCOMPLETE", "simulated timeout")):
             result = self.run_simulated()
         self.assertFalse(result["ok"])
-        self.assertEqual(result["data"]["receipt"]["outcome"]["change"], "applied")
-        self.assertEqual(result["data"]["evidence"]["kind"], "simulated_adapter")
-        self.assertTrue(result["meta"]["notices"])
+        self.assertEqual(state(result)["receipt"]["outcome"]["change"], "applied")
+        self.assertEqual(state(result)["evidence"]["kind"], "simulated_adapter")
+        self.assertTrue(result["error"]["details"]["retention_failures"])
 
     def test_incomplete_file_write_is_not_success_or_rollback(self):
         original = probe.apply_plan
@@ -115,23 +127,34 @@ class FileConsumerProbeTests(unittest.TestCase):
 
         with patch.object(probe, "apply_plan", side_effect=partial_write):
             result = self.run_simulated()
-        outcome = result["data"]["receipt"]["outcome"]
+        outcome = state(result)["receipt"]["outcome"]
         self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "E_OUTCOME_UNKNOWN")
         self.assertEqual(outcome["change"], "unknown")
         self.assertEqual(outcome["persistence"], "unknown")
-        self.assertEqual(outcome["verification"]["status"], "incomplete")
+        self.assertEqual(outcome["verification"]["status"], "not_run")
 
     def test_mocked_success_is_marked_simulated_and_lost_reply_query_does_not_rewrite(self):
         with patch.object(probe, "read_browser", side_effect=simulated_readback) as reader:
             result = self.run_simulated()
         self.assertTrue(result["ok"])
         self.assertEqual(reader.call_count, 3)
-        self.assertEqual(result["data"]["evidence"]["kind"], "simulated_adapter")
-        self.assertIn("mocked", " ".join(result["data"]["evidence"]["limitations"]))
+        self.assertEqual(state(result)["evidence"]["kind"], "simulated_adapter")
+        self.assertIn("mocked", " ".join(state(result)["evidence"]["limitations"]))
         record = json.loads((self.output / "operation-record.json").read_text(encoding="utf-8"))
-        self.assertEqual(record["operation_id"], result["data"]["receipt"]["operation_id"])
+        self.assertEqual(record["operation_id"], state(result)["receipt"]["operation_id"])
         self.assertEqual(record["writes"], 1)
-        self.assertEqual(probe.digest(self.output / "sample.svg"), result["data"]["receipt"]["snapshot_after"]["revision"][7:])
+        self.assertEqual(probe.digest(self.output / "sample.svg"), state(result)["receipt"]["snapshot_after"]["revision"][7:])
+
+    def test_missing_machine_metadata_preserves_valid_evidence_and_records_unknown(self):
+        with patch.object(probe.platform, "machine", return_value=""), patch.object(
+                probe, "read_browser", side_effect=simulated_readback):
+            result = self.run_simulated()
+        self.assertTrue(result["ok"])
+        evidence = state(result)["evidence"]
+        self.assertEqual(evidence["environment"]["arch"], "unknown")
+        self.assertIn("CPU architecture could not be observed", " ".join(evidence["limitations"]))
+        self.assertEqual(evidence["kind"], "simulated_adapter")
 
     def test_version_change_keeps_written_file_but_marks_identity_incomplete(self):
         with patch.object(probe, "browser_version", side_effect=["154.0.8037.59", "154.0.8037.93"]), patch.object(
@@ -139,11 +162,11 @@ class FileConsumerProbeTests(unittest.TestCase):
             result = self.run_simulated()
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "E_VERIFY_INCOMPLETE")
-        outcome = result["data"]["receipt"]["outcome"]
+        outcome = state(result)["receipt"]["outcome"]
         self.assertEqual(outcome["change"], "applied")
         self.assertEqual(outcome["persistence"], "saved")
         self.assertEqual(outcome["verification"]["status"], "incomplete")
-        evidence = result["data"]["evidence"]
+        evidence = state(result)["evidence"]
         self.assertEqual(evidence["environment"]["components"][0]["identity_status"], "unavailable")
         self.assertIsNone(evidence["environment"]["components"][0]["version"])
         self.assertEqual(evidence["extensions"]["browser_identity"]["after"]["version"], "154.0.8037.93")
@@ -175,8 +198,8 @@ class FileConsumerProbeTests(unittest.TestCase):
             result = probe.run_probe(browser, self.output, consumer_kind="simulated_adapter")
         self.assertGreaterEqual(browser_reads, 2, "Both browser identity observations must receive the injected hashes.")
         self.assertFalse(result["ok"])
-        self.assertEqual(result["data"]["receipt"]["outcome"]["verification"]["status"], "incomplete")
-        identity = result["data"]["evidence"]["extensions"]["browser_identity"]
+        self.assertEqual(state(result)["receipt"]["outcome"]["verification"]["status"], "incomplete")
+        identity = state(result)["evidence"]["extensions"]["browser_identity"]
         self.assertEqual(identity["before"]["version"], identity["after"]["version"])
         self.assertNotEqual(identity["before"]["sha256"], identity["after"]["sha256"])
 
@@ -184,7 +207,7 @@ class FileConsumerProbeTests(unittest.TestCase):
         with patch.object(probe, "read_browser", side_effect=simulated_readback):
             result = self.run_simulated()
         self.assertTrue(result["ok"])
-        evidence = result["data"]["evidence"]
+        evidence = state(result)["evidence"]
         self.assertEqual(len(evidence["checks"]), 7)
         self.assertTrue(evidence["extensions"]["browser_identity"]["stable"])
         self.assertEqual(evidence["environment"]["components"][0]["identity_status"], "observed")
@@ -195,7 +218,7 @@ class FileConsumerProbeTests(unittest.TestCase):
         with patch.object(sys, "argv", ["run_file_consumer_probe.py"]), patch.object(sys, "stdout") as stdout:
             stdout.write.side_effect = stream.write
             result = probe.main()
-        self.assertEqual(result, 1)
+        self.assertEqual(result, 2)
         self.assertEqual(json.loads(stream.getvalue())["error"]["code"], "E_VALIDATION")
 
 

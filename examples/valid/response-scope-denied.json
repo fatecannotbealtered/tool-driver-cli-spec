@@ -1,0 +1,65 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_FORBIDDEN",
+    "message": "No task scope allows changing part-01.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "scope": {
+        "authorization": {
+          "status": "read_only",
+          "scope_id": null,
+          "source": {
+            "kind": "none",
+            "path": null
+          },
+          "effects": [
+            "observe"
+          ],
+          "roots": [],
+          "outputs": [],
+          "destinations": [],
+          "dangerous": false,
+          "expires_at": null,
+          "reason": null
+        },
+        "missing": {
+          "effects": [
+            "change"
+          ],
+          "paths": [],
+          "targets": [
+            "session://instance-01/part-01"
+          ]
+        },
+        "grant_file": "C:/Users/agent/.demo-cad-cli/scope.json",
+        "grant_example": {
+          "scope_id": "<id>",
+          "tool": "demo-cad-cli",
+          "granted_by": "<person>",
+          "granted_at": "<ISO 8601>",
+          "expires_at": null,
+          "effects": [
+            "observe",
+            "change"
+          ],
+          "dangerous": false,
+          "roots": [],
+          "outputs": [],
+          "targets": [
+            {
+              "engine_id": "demo-cad",
+              "instance_id": "instance-01"
+            }
+          ]
+        }
+      },
+      "next_action": "Stop and ask the user to grant a scope for this target; do not write the scope file yourself unless the user tells you to."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

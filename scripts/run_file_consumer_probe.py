@@ -46,12 +46,12 @@ def save_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def save_optional(path, value, response):
+def save_optional(path, value, failures):
     try:
         save_json(path, value)
         return True
     except OSError as error:
-        response["meta"].setdefault("notices", []).append(f"Could not retain {path.name}: {error}")
+        failures.append(f"Could not retain {path.name}: {error}")
         return False
 
 
@@ -191,46 +191,60 @@ def apply_plan(value):
 
 
 def receipt_for(operation_id, path, before, after, checks, status, change="applied", persistence="saved", execution="completed"):
-    return {"operation_id": operation_id,
+    failed_stage = None
+    if execution in {"failed", "interrupted"}:
+        failed_stage = "apply"
+    elif execution == "completed" and status in {"failed", "incomplete"}:
+        failed_stage = "verify"
+    return {"operation_id": operation_id, "capability_id": "controlled-svg-file-probe", "plan_id": "plan-" + operation_id,
             "target": {"mode": "file", "engine_id": "svg-file-probe", "instance_id": None,
                        "object_id": "body", "locator": path.as_uri()},
             "authorization_scope_id": "caller-new-output-directory", "effects": ["change", "persist"],
             "snapshot_before": before, "snapshot_after": after,
-            "outcome": {"execution": execution, "change": change, "persistence": persistence,
+            "outcome": {"execution": execution, "change": change, "persistence": persistence, "delivery": "not_applicable",
                         "verification": {"status": status, "scope": "generated_svg_file_probe_only",
                                          "snapshot_id": after["id"] if after else None,
                                          "coverage": "complete" if status in ("passed", "failed") else "partial",
                                          "checks": checks, "not_checked": [],
-                                         "evidence_refs": [c["evidence_ref"] for c in checks if "evidence_ref" in c]}},
+                                         "evidence_refs": [c["evidence_ref"] for c in checks if "evidence_ref" in c],
+                                         **({} if status in ("passed", "failed", "not_run") else {"reason": "The probe could not finish every required check."})}},
+            "failed_stage": failed_stage,
             "changed_items": [{"id": "body", "change": "x:5->12", "evidence_ref": path.as_uri()}] if change == "applied" else [],
             "artifacts": [{"id": "controlled-svg", "path": str(path), "sha256": after["revision"][7:],
-                           "source_snapshot_id": after["id"]}] if after else [],
+                           "source_snapshot_id": after["id"]}] if after and change == "applied" else [],
+            "deliveries": [],
             "recovery": {"action": "none" if status == "passed" else "inspect", "supported": True,
                          "reason": "Fresh browser readback passed." if status == "passed" else "Inspect the retained file and observations; do not blindly replay."}}
 
 
 def make_evidence(browser, version, browser_sha, code_sha, commit, output, before, after, checks, receipt, consumer_kind, user_agent, identity):
+    arch = platform.machine()
     limitations = ["Development probe; no released package was tested.", "Only self-generated SVG file operations were tested; CAD, GUI sessions and physical devices were not tested.",
                    "State drift and response loss are local fixture injections, not distributed exactly-once or cancellation evidence.",
                    "A fresh isolated browser profile and networking suppression flags were used; this is not a general network sandbox.",
-                   "The source commit is read from Git or a locally checked specification manifest; the code fingerprint identifies the actual probe file.",
-                   "The local plan and operation record are controlled fixtures; only response, receipt and evidence claim their public Schema shapes."]
+                    "The source commit is read from Git or a locally checked specification manifest; the code fingerprint identifies the actual probe file.",
+                    "The local plan and operation record are controlled fixtures; only response, receipt and evidence claim their public Schema shapes."]
+    if not arch:
+        arch = "unknown"
+        limitations.append("CPU architecture could not be observed: platform.machine() returned an empty value.")
     if consumer_kind == "simulated_adapter":
         limitations.append("Browser observations were mocked for contract testing; no real browser validation is claimed.")
     if after is None:
         limitations.append("No final file snapshot is available; this record is bound only to the observed baseline.")
     component = {"name": browser.name, "role": "validator", "version": version,
-                 "build_id": browser_sha, "identity_status": "observed"}
+                 "build_id": browser_sha, "location": "disk", "identity_status": "observed"}
     if not identity or not identity["stable"]:
         component.update(version=None, build_id=None, identity_status="unavailable",
                          reason="The browser identity was not verified as stable across the consumer runs; observed metadata is retained separately.")
         limitations.append("Starting executable metadata is not asserted to identify every consumer run.")
     return {"evidence_id": "evidence-" + receipt["operation_id"], "spec_version": (ROOT / "VERSION").read_text().strip(),
-            "schema_version": "1.0", "evidence_context": "development", "kind": consumer_kind,
+            "schema_version": "2.0", "evidence_context": "development", "kind": consumer_kind,
             "source_commit": commit, "source_fingerprint_sha256": code_sha, "package_sha256": None,
-            "recorded_at": now(), "environment": {"platform": sys.platform, "arch": platform.machine(), "components": [component]},
+            "recorded_at": now(), "environment": {"platform": sys.platform, "arch": arch, "components": [component]},
             "input_fingerprint_sha256": before["revision"][7:], "target": receipt["target"],
-            "snapshot_id": (after or before)["id"], "capabilities": ["controlled-svg-file-probe"], "checks": checks, "limitations": limitations,
+            "snapshot_id": (after or before)["id"], "capabilities": ["controlled-svg-file-probe"],
+            "commands": [f"{browser.name} --headless=new --dump-dom <generated wrapper> (first read, reopen, deliberate failed expectation)"],
+            "checks": checks, "limitations": limitations,
             "extensions": {"browser_user_agent": user_agent, "browser_executable": str(browser), "browser_identity": identity,
                            "initial_browser_metadata": {"version": version, "sha256": browser_sha}, "probe_output": str(output),
                            "headless_reference": "https://developer.chrome.com/docs/automation-and-testing/headless-cli"}}
@@ -238,10 +252,12 @@ def make_evidence(browser, version, browser_sha, code_sha, commit, output, befor
 
 def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer"):
     started = time.monotonic()
-    request_id, operation_id = "request-" + uuid.uuid4().hex, "operation-" + uuid.uuid4().hex
-    response = {"ok": False, "schema_version": "1.0", "request_id": request_id, "phase": "verify", "data": {}, "meta": {"duration_ms": 0}}
+    operation_id = "operation-" + uuid.uuid4().hex
+    retention = []
+    payload = {}
+    failure = None
     before, after, checks, path, write_started, write_completed = None, None, [], None, False, False
-    user_agent, identity = None, None
+    user_agent, identity, version, browser_sha, code_sha, commit = None, None, None, None, None, None
     try:
         browser, output = Path(browser).resolve(), Path(output).resolve()
         if not browser.is_file() or browser.name.lower() not in {"chrome.exe", "msedge.exe", "chrome", "chromium", "chromium-browser", "msedge"}:
@@ -255,11 +271,12 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
         path.write_text(SVG, encoding="utf-8")
         before = snapshot(path, "before-" + operation_id)
         planned = plan(path, operation_id)
-        save_json(output / "operation-record.json", {"request_id": request_id, "operation_id": operation_id, "state": "planned", "plan": planned})
+        save_json(output / "operation-record.json", {"operation_id": operation_id, "state": "planned", "plan": planned})
 
         def check(label, passed, evidence_path, status="failed"):
             checks.append({"id": label, "status": "passed" if passed else status,
-                           "required": True, "evidence_ref": evidence_path.as_uri()})
+                           "required": True, "evidence_ref": evidence_path.as_uri(),
+                           **({} if passed or status != "incomplete" else {"reason": f"{label} could not be established"})})
             if not passed:
                 raise ProbeError("E_VERIFY_INCOMPLETE" if status == "incomplete" else "E_VERIFY_FAILED",
                                  f"Probe check failed: {label}", status)
@@ -279,8 +296,7 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
             rejected = error.code == "E_CONFLICT"
         save_json(output / "drift-case.json", {"rejected": rejected, "sha256_after_external_edit": drift_hash, "sha256_after_refusal": digest(drift_path)})
         check("state-drift-refused", rejected and digest(drift_path) == drift_hash, output / "drift-case.json")
-        save_json(output / "operation-record.json", {"request_id": request_id, "operation_id": operation_id,
-                  "state": "running", "write_attempts": 1, "plan": planned})
+        save_json(output / "operation-record.json", {"operation_id": operation_id, "state": "dispatched", "write_attempts": 1, "plan": planned})
         write_started = True
         apply_plan(planned)
         write_completed, after = True, snapshot(path, "after-" + operation_id)
@@ -289,17 +305,16 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
         check("independent-svg-readback", matches(first, 12), output / "browser-first-observation.json")
         second = read_browser(browser, path, output, "browser-reopened", timeout)
         check("persistent-reopen", matches(second, 12) and digest(path) == after["revision"][7:], output / "browser-reopened-observation.json")
-        failure = read_browser(browser, path, output, "browser-failed-expectation", timeout)
+        wrong = read_browser(browser, path, output, "browser-failed-expectation", timeout)
         failed_checks = [{"id": "deliberately-wrong-x", "status": "failed", "required": True,
                           "evidence_ref": (output / "browser-failed-expectation-observation.json").as_uri()}]
         failed_receipt = receipt_for(operation_id, path, before, after, failed_checks, "failed")
-        save_json(output / "write-after-failed-check.json", {"expected_x": 13, "actual": failure, "receipt": failed_receipt})
-        check("failed-check-keeps-written-state", not matches(failure, 13) and matches(failure, 12)
+        save_json(output / "write-after-failed-check.json", {"expected_x": 13, "actual": wrong, "receipt": failed_receipt})
+        check("failed-check-keeps-written-state", not matches(wrong, 13) and matches(wrong, 12)
               and failed_receipt["outcome"]["change"] == "applied", output / "write-after-failed-check.json")
         result = receipt_for(operation_id, path, before, after, checks, "passed")
-        record = {"request_id": request_id, "operation_id": operation_id, "state": "completed", "writes": 1, "receipt": result}
-        save_json(output / "operation-record.json", record)
-        # Inject loss by discarding the in-memory response, then query the pre-known ID.
+        save_json(output / "operation-record.json", {"operation_id": operation_id, "state": "completed", "writes": 1, "receipt": result})
+        # Inject loss by discarding the in-memory reply, then query the pre-known ID.
         queried = json.loads((output / "operation-record.json").read_text(encoding="utf-8"))
         check("lost-reply-record-query", queried["operation_id"] == operation_id and queried["writes"] == 1
               and digest(path) == after["revision"][7:], output / "operation-record.json")
@@ -312,38 +327,58 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
         save_json(output / "consumer-identity-case.json", identity)
         check("consumer-identity-stable", identity["stable"], output / "consumer-identity-case.json", "incomplete")
         if digest(Path(__file__)) != code_sha:
-            raise ProbeError("E_CONFLICT", "Probe code changed during this experiment.")
-        response["data"]["receipt"] = receipt_for(operation_id, path, before, after, checks, "passed")
-        response["ok"] = True
+            raise ProbeError("E_VERIFY_INCOMPLETE", "Probe code changed during this experiment.", "incomplete")
+        payload["receipt"] = receipt_for(operation_id, path, before, after, checks, "passed")
     except (ProbeError, OSError, ValueError, subprocess.SubprocessError, KeyError, AttributeError) as error:
         code, status = getattr(error, "code", "E_VERIFY_INCOMPLETE"), getattr(error, "status", "incomplete")
-        response["error"] = {"code": code, "message": str(error), "retryable": False,
-                             "details": {"next_action": "inspect existing output and operation record; use a different new directory for a new experiment"}}
+        failure = {"code": code, "message": str(error), "status": status}
         if before:
             try:
-                after = snapshot(path, "after-" + operation_id)
+                after = snapshot(path, "after-" + operation_id) if write_completed else None
             except OSError:
                 after = None
             diagnostic = output / "probe-error.json"
-            retained = save_optional(diagnostic, {"code": code, "message": str(error),
-                                     "write_started": write_started, "write_completed": write_completed}, response)
-            checks.append({"id": "probe-completion", "status": status, "required": True,
-                           "reason": str(error), "evidence_ref": diagnostic.as_uri() if retained else "urn:probe:" + request_id + ":error"})
-            response["data"]["receipt"] = receipt_for(operation_id, path, before, after, checks, status,
-                "applied" if write_completed else "unknown" if write_started else "not_applied",
-                "saved" if write_completed and after else "unknown" if write_started else "unchanged",
-                "completed" if write_completed else "failed" if write_started else "not_started")
-            save_optional(output / "operation-record.json", {"request_id": request_id, "operation_id": operation_id,
-                          "state": "failed" if status == "failed" else "unknown", "receipt": response["data"]["receipt"]}, response)
-            save_optional(output / "failure-response.json", response, response)
-    response["meta"]["duration_ms"] = round((time.monotonic() - started) * 1000, 3)
+            retained = save_optional(diagnostic, {"code": code, "message": str(error), "write_started": write_started,
+                                                  "write_completed": write_completed}, retention)
+            if write_completed:
+                checks.append({"id": "probe-completion", "status": status, "required": True, "reason": str(error),
+                               "evidence_ref": diagnostic.as_uri() if retained else "urn:probe:" + operation_id + ":error"})
+                payload["receipt"] = receipt_for(operation_id, path, before, after, checks, status)
+            elif write_started:
+                failure["code"] = "E_OUTCOME_UNKNOWN"
+                payload["receipt"] = receipt_for(operation_id, path, before, None, [], "not_run", "unknown", "unknown", "unknown")
+            else:
+                failure["code"] = "E_NATIVE_FAILURE" if code in {"E_VERIFY_FAILED", "E_VERIFY_INCOMPLETE"} else code
+                if failure["code"] == "E_NATIVE_FAILURE":
+                    payload["receipt"] = receipt_for(operation_id, path, before, before, checks, "failed" if status == "failed" else "incomplete",
+                                                     "not_applied", "unchanged", "failed")
+            save_optional(output / "operation-record.json", {"operation_id": operation_id,
+                          "state": "unknown" if failure["code"] == "E_OUTCOME_UNKNOWN" else "failed", "receipt": payload.get("receipt")}, retention)
+    if path and before and "receipt" in payload:
+        evidence = make_evidence(browser, version, browser_sha, code_sha, commit, output, before, after, checks,
+                                 payload["receipt"], consumer_kind, user_agent, identity)
+        save_optional(output / "evidence.json", evidence, retention)
+        payload["evidence"] = evidence
+    meta = {"duration_ms": round((time.monotonic() - started) * 1000, 3)}
+    if failure is None:
+        if retention:
+            payload["retention_failures"] = retention
+        response = {"ok": True, "schema_version": "1.0", "data": payload, "meta": meta}
+    else:
+        details = {"next_action": "Inspect the existing output and operation record; use a different new directory for a new experiment.",
+                   "dispatch_state": "dispatched" if write_started else "not_started", **payload}
+        if write_started or "receipt" in payload:
+            details["operation_id"] = operation_id
+        if failure["code"] == "E_OUTCOME_UNKNOWN":
+            details["lookup"] = f"inspect {(output / 'operation-record.json')}" if output else "inspect the probe output"
+        if failure["code"] == "E_VALIDATION":
+            details["problem"] = "invalid_value"
+        if retention:
+            details["retention_failures"] = retention
+        response = {"ok": False, "schema_version": "1.0", "meta": meta,
+                    "error": {"code": failure["code"], "message": failure["message"], "retryable": False, "details": details}}
     if path:
-        if before and "receipt" in response["data"]:
-            evidence = make_evidence(browser, version, browser_sha, code_sha, commit, output, before, after, checks,
-                                     response["data"]["receipt"], consumer_kind, user_agent, identity)
-            save_optional(output / "evidence.json", evidence, response)
-            response["data"]["evidence"] = evidence
-        save_optional(output / "response.json", response, response)
+        save_optional(output / "response.json", response, retention)
     return response
 
 
@@ -361,11 +396,13 @@ def main():
         args = parser.parse_args()
         response = run_probe(args.browser, args.output, args.timeout)
     except ProbeError as error:
-        response = {"ok": False, "schema_version": "1.0", "request_id": "request-" + uuid.uuid4().hex, "phase": "verify",
-                    "error": {"code": error.code, "message": str(error), "retryable": False, "details": {}}, "meta": {"duration_ms": 0}}
+        response = {"ok": False, "schema_version": "1.0", "meta": {"duration_ms": 0},
+                    "error": {"code": error.code, "message": str(error), "retryable": False,
+                              "details": {"problem": "invalid_value", "dispatch_state": "not_started",
+                                          "next_action": "Pass --browser <chrome or edge executable> --output <new directory>."}}}
     sys.stdout.reconfigure(encoding="utf-8")
     print(json.dumps(response, ensure_ascii=False))
-    return 0 if response["ok"] else 1
+    return 0 if response["ok"] else {"E_CONFIG": 4, "E_VALIDATION": 2, "E_OUTCOME_UNKNOWN": 6}.get(response["error"]["code"], 1)
 
 
 if __name__ == "__main__":

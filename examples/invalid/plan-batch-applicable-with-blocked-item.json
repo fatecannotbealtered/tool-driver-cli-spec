@@ -1,0 +1,95 @@
+{
+  "plan_id": "plan-batch-01",
+  "operation_id": "operation-batch-01",
+  "capability_id": "feature-create",
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "change"
+  ],
+  "level": "estimate",
+  "changes": [],
+  "outputs": [],
+  "unknowns": [
+    "Regeneration of downstream features is computed only when the change is applied."
+  ],
+  "constraints": [
+    "Every part must still be at its planned revision when the batch is confirmed."
+  ],
+  "trial_snapshot": null,
+  "can_apply": true,
+  "expires_at": "2026-10-04T00:10:00Z",
+  "total": 2,
+  "targets": [
+    "part-a",
+    "part-b"
+  ],
+  "items": [
+    {
+      "key": "part-a",
+      "operation_id": "operation-a",
+      "target": {
+        "mode": "session",
+        "engine_id": "demo-cad",
+        "instance_id": "instance-01",
+        "object_id": "part-a",
+        "locator": "session://instance-01/part-a"
+      },
+      "base_snapshot": {
+        "id": "snapshot-01",
+        "source": "live",
+        "revision": "memory-01",
+        "observed_at": "2026-10-04T00:00:00Z",
+        "dependencies": [
+          {
+            "identity": "template-01",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "changes": [
+        {
+          "action": "create",
+          "resource": "feature",
+          "summary": "Add a 10 mm extrusion on sketch-03 of part-a."
+        }
+      ],
+      "outputs": [],
+      "can_apply": true
+    },
+    {
+      "key": "part-b",
+      "operation_id": "operation-b",
+      "target": {
+        "mode": "session",
+        "engine_id": "demo-cad",
+        "instance_id": "instance-01",
+        "object_id": "part-b",
+        "locator": "session://instance-01/part-b"
+      },
+      "base_snapshot": {
+        "id": "snapshot-01",
+        "source": "live",
+        "revision": "memory-01",
+        "observed_at": "2026-10-04T00:00:00Z",
+        "dependencies": [
+          {
+            "identity": "template-01",
+            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "changes": [
+        {
+          "action": "create",
+          "resource": "feature",
+          "summary": "Add a 10 mm extrusion on sketch-03 of part-b."
+        }
+      ],
+      "outputs": [],
+      "can_apply": false,
+      "unknowns": [
+        "part-b has no sketch-03."
+      ]
+    }
+  ]
+}

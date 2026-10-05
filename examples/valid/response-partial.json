@@ -1,90 +1,103 @@
 {
   "ok": false,
   "schema_version": "1.0",
-  "request_id": "request-apply-02",
-  "phase": "apply",
-  "data": {
-    "receipt": {
-      "operation_id": "operation-02",
-      "target": {
-        "mode": "session",
-        "engine_id": "editor-engine",
-        "instance_id": "instance-01",
-        "object_id": "document-01",
-        "locator": "session://instance-01/document-01"
-      },
-      "authorization_scope_id": "scope-isolated-01",
-      "effects": [
-        "change"
-      ],
-      "snapshot_before": {
-        "id": "snapshot-01",
-        "source": "live",
-        "revision": "memory-01",
-        "observed_at": "2026-10-02T00:00:00Z",
-        "dependencies": [
-          {
-            "identity": "template-01",
-            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        ]
-      },
-      "snapshot_after": {
-        "id": "snapshot-02",
-        "source": "live",
-        "revision": "memory-02",
-        "observed_at": "2026-10-02T00:00:01Z",
-        "dependencies": [
-          {
-            "identity": "template-01",
-            "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          }
-        ]
-      },
-      "outcome": {
-        "execution": "failed",
-        "change": "partial",
-        "persistence": "unsaved",
-        "verification": {
-          "status": "incomplete",
-          "scope": "dependent_workflow",
-          "snapshot_id": "snapshot-02",
-          "coverage": "partial",
-          "checks": [],
-          "not_checked": [
+  "error": {
+    "code": "E_PARTIAL",
+    "message": "The feature was created but saving failed.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "dispatched",
+      "operation_id": "operation-01",
+      "receipt": {
+        "operation_id": "operation-01",
+        "capability_id": "feature-create",
+        "plan_id": "plan-01",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-01",
+          "locator": "session://instance-01/part-01"
+        },
+        "authorization_scope_id": "scope-isolated-01",
+        "effects": [
+          "change",
+          "persist"
+        ],
+        "snapshot_before": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
             {
-              "id": "downstream-step",
-              "required": true,
-              "reason": "Skipped after prerequisite failure."
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }
-          ],
-          "evidence_refs": []
+          ]
+        },
+        "snapshot_after": {
+          "id": "snapshot-02",
+          "source": "live",
+          "revision": "memory-02",
+          "observed_at": "2026-10-04T00:00:01Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "outcome": {
+          "execution": "failed",
+          "change": "applied",
+          "persistence": "unchanged",
+          "delivery": "not_applicable",
+          "verification": {
+            "status": "passed",
+            "scope": "declared_operation_postconditions",
+            "snapshot_id": "snapshot-02",
+            "coverage": "complete",
+            "checks": [
+              {
+                "id": "check-object-readback",
+                "status": "passed",
+                "required": true,
+                "evidence_ref": "evidence://synthetic/readback-01"
+              }
+            ],
+            "not_checked": [
+              {
+                "id": "domain-suitability",
+                "required": false,
+                "reason": "Outside the declared operation scope."
+              }
+            ],
+            "evidence_refs": [
+              "evidence://synthetic/readback-01"
+            ]
+          }
+        },
+        "failed_stage": "persist",
+        "changed_items": [
+          {
+            "id": "feature-07",
+            "change": "created",
+            "evidence_ref": "evidence://synthetic/readback-01"
+          }
+        ],
+        "artifacts": [],
+        "deliveries": [],
+        "recovery": {
+          "action": "inspect",
+          "reason": "The feature exists in memory; saving failed.",
+          "supported": true
         }
       },
-      "changed_items": [
-        {
-          "id": "object-02",
-          "change": "created",
-          "evidence_ref": "evidence://synthetic/readback-01"
-        }
-      ],
-      "artifacts": [],
-      "recovery": {
-        "action": "inspect",
-        "reason": "A real operation was partially applied.",
-        "supported": true
-      }
+      "next_action": "Read the receipt; save again with a new --dry-run after checking the disk, never resend the whole request."
     }
   },
   "meta": {
     "duration_ms": 12
-  },
-  "error": {
-    "code": "E_PARTIAL",
-    "message": "One dependent step applied; the next step failed.",
-    "retryable": false,
-    "details": {
-      "next_action": "inspect"
-    }
   }
 }

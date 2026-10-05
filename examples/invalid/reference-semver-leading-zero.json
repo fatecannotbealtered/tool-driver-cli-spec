@@ -1,2359 +1,1236 @@
 {
-  "tool": "demo-driver",
-  "tool_version": "01.2.0",
-  "spec_version": "1.0.0",
-  "schema_version": "1.0",
-  "capabilities": [
+  "tool": "demo-cad-cli",
+  "version": "01.0.0",
+  "risk_tier": "T1",
+  "release_readiness": {
+    "level": "beta",
+    "fcc_status": "verified",
+    "mock_upstream_status": "verified",
+    "live_smoke_status": "missing",
+    "reason": "Live smoke against a licensed application is not recorded yet."
+  },
+  "commands": [
     {
-      "id": "document-create-object",
-      "command": "document create-object",
-      "effects": [
-        "change"
-      ],
-      "modes": [
-        "session"
-      ],
-      "request_schema": "urn:demo-driver:create-object:1.0",
-      "result_schema": "urn:tool-driver-cli-spec:response:1.0",
-      "maturity": "experimental",
-      "environments": [
+      "path": "changelog",
+      "type": "read",
+      "description": "Versions newer than --since, from the embedded CHANGELOG.",
+      "params": [
         {
-          "application": "document-editor",
-          "application_version": "3.2.0",
-          "platform": "windows",
-          "arch": "amd64",
-          "adapter_version": "1.2.0",
-          "mode": "session",
-          "limitations": [
-            "Synthetic example; no application was run."
-          ]
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "multiple": false
         }
       ],
-      "limits": [
-        "Single target document per request."
-      ],
-      "recovery": {
-        "atomicity": "none",
-        "undo": false,
-        "idempotent": false,
-        "cancel": false
-      },
-      "evidence_refs": [],
-      "description": "Plan or create one object in an explicitly selected document.",
-      "phases": [
-        "plan",
-        "apply"
-      ],
-      "parameters": [
-        {
-          "name": "--target-id",
-          "location": "option",
-          "binding": "/properties/target_id",
-          "required": true,
-          "description": "Input field: target_id"
-        },
-        {
-          "name": "--name",
-          "location": "option",
-          "binding": "/properties/name",
-          "required": true,
-          "description": "Input field: name"
-        },
-        {
-          "name": "--request-id",
-          "location": "option",
-          "binding": "/properties/request_id",
-          "required": true,
-          "description": "Input field: request_id"
-        },
-        {
-          "name": "--authorization-ref",
-          "location": "option",
-          "binding": "/properties/authorization_ref",
-          "required": true,
-          "description": "Input field: authorization_ref"
-        },
-        {
-          "name": "--phase",
-          "location": "option",
-          "binding": "/properties/phase",
-          "required": true,
-          "description": "Input field: phase"
-        }
-      ],
+      "output_schema": "changelog",
       "examples": [
-        {
-          "argv": [
-            "document",
-            "create-object",
-            "--target-id",
-            "doc-a",
-            "--name",
-            "item-a",
-            "--request-id",
-            "req-a",
-            "--authorization-ref",
-            "task-a",
-            "--phase",
-            "plan"
-          ],
-          "description": "Synthetic invocation; identifiers require substitution in a real authorized environment.",
-          "phase": "plan",
-          "request": {
-            "target_id": "doc-a",
-            "name": "item-a",
-            "request_id": "req-a",
-            "authorization_ref": "task-a",
-            "phase": "plan"
+        "demo-cad-cli changelog --compact"
+      ],
+      "driver": {
+        "capability_id": "changelog",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
           }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "context",
+      "type": "read",
+      "description": "CLI, adapter, running service and application identity; the active task scope.",
+      "params": [],
+      "output_schema": "context",
+      "examples": [
+        "demo-cad-cli context --compact"
+      ],
+      "driver": {
+        "capability_id": "context",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "doctor",
+      "type": "read",
+      "description": "Readiness checks with a fix for each failure.",
+      "params": [],
+      "output_schema": "doctor",
+      "examples": [
+        "demo-cad-cli doctor --compact"
+      ],
+      "driver": {
+        "capability_id": "doctor",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "drawing export",
+      "type": "write",
+      "description": "Export the drawing of a part to a new SVG file under an authorized output root.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "output",
+          "type": "path",
+          "required": true,
+          "multiple": false
         }
       ],
-      "error_codes": [
-        "E_VALIDATION",
-        "E_CONFLICT",
-        "E_OUTCOME_UNKNOWN"
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli drawing export --part part-01 --output D:/work/out/part-01.svg --dry-run",
+        "demo-cad-cli drawing export --part part-01 --output D:/work/out/part-01.svg --confirm <confirm_token>"
       ],
-      "profiles": [
-        "core"
-      ]
-    }
-  ],
-  "error_codes": [
-    {
-      "code": "E_VALIDATION",
-      "exit_code": 2,
-      "description": "Input rejected before applying changes."
+      "driver": {
+        "capability_id": "drawing-export",
+        "effects": [
+          "artifact"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE"
+        ],
+        "evidence_refs": []
+      }
     },
     {
-      "code": "E_CONFLICT",
-      "exit_code": 6,
-      "description": "Target or baseline changed."
+      "path": "drawing publish",
+      "type": "write",
+      "description": "Export the drawing of a part and send it to the release share; the share keeps what it receives.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "share",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli drawing publish --part part-01 --share release --dry-run --dangerous",
+        "demo-cad-cli drawing publish --part part-01 --share release --confirm <confirm_token> --dangerous"
+      ],
+      "driver": {
+        "capability_id": "drawing-publish",
+        "effects": [
+          "artifact",
+          "deliver"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": []
+      },
+      "dangerous": true
     },
     {
-      "code": "E_OUTCOME_UNKNOWN",
-      "exit_code": 1,
-      "description": "Inspect the existing operation; do not blindly repeat it."
+      "path": "feature create",
+      "type": "write",
+      "description": "Create an extrusion feature on a sketch of a part open in the running application.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "sketch",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "depth",
+          "type": "number",
+          "required": true,
+          "multiple": false,
+          "unit": "mm",
+          "description": "Extrusion depth in millimetres"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --dry-run",
+        "demo-cad-cli feature create --part part-01 --sketch sketch-03 --depth 10 --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "feature-create",
+        "effects": [
+          "change"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": [],
+        "request_schema": "urn:demo-cad-cli:feature-create-request:1",
+        "result_schema": "urn:tool-driver-cli-spec:receipt:2.0",
+        "stages": [
+          {
+            "stage": "plan",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "apply",
+            "effects": [
+              "change"
+            ]
+          },
+          {
+            "stage": "verify",
+            "effects": [
+              "change"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "feature list",
+      "type": "read",
+      "description": "List the features of a part with completeness information.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 50
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "feature_page",
+      "examples": [
+        "demo-cad-cli feature list --compact"
+      ],
+      "driver": {
+        "capability_id": "feature-list",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core",
+          "query_page"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_BACKEND_UNAVAILABLE"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation list",
+      "type": "read",
+      "description": "Recent operation records from the local store.",
+      "params": [
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "multiple": false,
+          "enum": [
+            "planned",
+            "pending",
+            "running",
+            "cancel_requested",
+            "succeeded",
+            "partial",
+            "failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "multiple": false,
+          "default": 20
+        }
+      ],
+      "output_schema": "operation_page",
+      "examples": [
+        "demo-cad-cli operation list --status unknown --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-list",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core",
+          "query_page"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation resolve",
+      "type": "read",
+      "description": "Record what an independent read-back showed about an unresolved operation; updates only the local record.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "required": true,
+          "multiple": false,
+          "enum": [
+            "applied",
+            "not_applied",
+            "partial"
+          ]
+        },
+        {
+          "name": "evidence",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "operation",
+      "examples": [
+        "demo-cad-cli operation resolve --id operation-01 --outcome applied --evidence 'feature list shows feature-07' --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-resolve",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND",
+          "E_FORBIDDEN",
+          "E_CONFLICT"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "operation show",
+      "type": "read",
+      "description": "One operation record: plan, status, receipt and resolution.",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "operation",
+      "examples": [
+        "demo-cad-cli operation show --id operation-01 --compact"
+      ],
+      "driver": {
+        "capability_id": "operation-show",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_NOT_FOUND"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "part save",
+      "type": "write",
+      "description": "Save a part to the file it was opened from.",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true,
+          "multiple": false
+        }
+      ],
+      "output_schema": "receipt",
+      "examples": [
+        "demo-cad-cli part save --part part-01 --dry-run",
+        "demo-cad-cli part save --part part-01 --confirm <confirm_token>"
+      ],
+      "driver": {
+        "capability_id": "part-save",
+        "effects": [
+          "persist"
+        ],
+        "phases": [
+          "plan",
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": false,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION",
+          "E_FORBIDDEN",
+          "E_CONFIRMATION_REQUIRED",
+          "E_CONFLICT",
+          "E_BUSY",
+          "E_NATIVE_FAILURE",
+          "E_PARTIAL",
+          "E_OUTCOME_UNKNOWN",
+          "E_VERIFY_FAILED",
+          "E_VERIFY_INCOMPLETE",
+          "E_HUMAN_REQUIRED"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "reference",
+      "type": "read",
+      "description": "This reference; --index for one line per command, --command for one command.",
+      "params": [
+        {
+          "name": "index",
+          "type": "boolean",
+          "required": false,
+          "multiple": false,
+          "default": false
+        },
+        {
+          "name": "command",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "reference",
+      "examples": [
+        "demo-cad-cli reference --compact"
+      ],
+      "driver": {
+        "capability_id": "reference",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "observe"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "none",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_VALIDATION"
+        ],
+        "evidence_refs": []
+      }
+    },
+    {
+      "path": "update",
+      "type": "write",
+      "description": "Base self-update: one call, no confirm token; verifies the release before replacing the binary.",
+      "params": [
+        {
+          "name": "check",
+          "type": "boolean",
+          "required": false,
+          "multiple": false,
+          "default": false
+        },
+        {
+          "name": "target-version",
+          "type": "string",
+          "required": false,
+          "multiple": false
+        }
+      ],
+      "output_schema": "update_result",
+      "examples": [
+        "demo-cad-cli update --check --compact",
+        "demo-cad-cli update --compact"
+      ],
+      "driver": {
+        "capability_id": "update",
+        "effects": [
+          "observe"
+        ],
+        "phases": [
+          "apply"
+        ],
+        "modes": [
+          "session"
+        ],
+        "maturity": "experimental",
+        "environments": [
+          {
+            "application": "Demo CAD",
+            "application_version": "12.0.1",
+            "platform": "windows",
+            "arch": "amd64",
+            "adapter_version": "0.4.0",
+            "mode": "session",
+            "limitations": [
+              "Synthetic declaration for examples."
+            ]
+          }
+        ],
+        "limits": [
+          "Synthetic declaration; no application was driven."
+        ],
+        "recovery": {
+          "atomicity": "whole",
+          "undo": false,
+          "idempotent": true,
+          "cancel": false
+        },
+        "profiles": [
+          "core"
+        ],
+        "error_codes": [
+          "E_USAGE",
+          "E_NETWORK",
+          "E_INTEGRITY",
+          "E_IO",
+          "E_INTERRUPTED"
+        ],
+        "evidence_refs": []
+      }
     }
   ],
   "schemas": {
-    "urn:demo-driver:create-object:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:demo-driver:create-object:1.0",
-      "type": "object",
-      "properties": {
-        "target_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "request_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "authorization_ref": {
-          "type": "string",
-          "minLength": 1
-        },
-        "phase": {
-          "enum": [
-            "plan",
-            "apply"
-          ]
-        }
-      },
-      "required": [
-        "target_id",
-        "name",
-        "request_id",
-        "authorization_ref",
-        "phase"
+    "ack": {
+      "shape": "object",
+      "fields": [
+        "ok"
       ],
-      "additionalProperties": false
+      "untrusted_fields": []
     },
-    "urn:tool-driver-cli-spec:response:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:response:1.0",
-      "title": "response",
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        },
-        "schema_version": {
-          "const": "1.0"
-        },
-        "request_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "phase": {
-          "enum": [
-            "observe",
-            "plan",
-            "apply",
-            "submit",
-            "status",
-            "result",
-            "verify"
-          ]
-        },
-        "data": {
-          "type": "object",
-          "properties": {
-            "receipt": {
-              "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-            },
-            "plan": {
-              "$ref": "urn:tool-driver-cli-spec:plan:1.0"
-            },
-            "operation_status": {
-              "$ref": "urn:tool-driver-cli-spec:operation-status:1.0"
-            },
-            "workflow": {
-              "$ref": "urn:tool-driver-cli-spec:workflow:1.0"
-            },
-            "query_page": {
-              "$ref": "urn:tool-driver-cli-spec:query-page:1.0"
-            }
-          },
-          "additionalProperties": true
-        },
-        "error": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/error"
-        },
-        "meta": {
-          "type": "object",
-          "properties": {
-            "duration_ms": {
-              "type": "number",
-              "minimum": 0
-            },
-            "notices": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          },
-          "required": [
-            "duration_ms"
-          ],
-          "additionalProperties": false
-        },
-        "extensions": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "ok",
-        "schema_version",
-        "request_id",
-        "phase",
-        "meta"
+    "changelog": {
+      "shape": "object",
+      "fields": [
+        "current_version",
+        "since",
+        "entries"
       ],
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": false
-              }
-            },
-            "required": [
-              "ok"
-            ]
-          },
-          "then": {
-            "required": [
-              "error"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": true
-              }
-            },
-            "required": [
-              "ok"
-            ]
-          },
-          "then": {
-            "required": [
-              "data"
-            ],
-            "not": {
-              "required": [
-                "error"
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": true
-              },
-              "phase": {
-                "enum": [
-                  "apply",
-                  "result"
-                ]
-              }
-            },
-            "required": [
-              "ok",
-              "phase"
-            ]
-          },
-          "then": {
-            "properties": {
-              "data": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "receipt"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "workflow"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": true
-              },
-              "phase": {
-                "enum": [
-                  "submit",
-                  "status"
-                ]
-              }
-            },
-            "required": [
-              "ok",
-              "phase"
-            ]
-          },
-          "then": {
-            "properties": {
-              "data": {
-                "required": [
-                  "operation_status"
-                ]
-              }
-            }
-          }
-        }
-      ]
+      "untrusted_fields": []
     },
-    "urn:tool-driver-cli-spec:common:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:common:1.0",
-      "$defs": {
-        "target": {
-          "type": "object",
-          "properties": {
-            "mode": {
-              "enum": [
-                "session",
-                "file",
-                "device"
-              ]
-            },
-            "engine_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "instance_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "object_id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "locator": {
-              "type": "string",
-              "minLength": 1
-            },
-            "extensions": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "mode",
-            "engine_id",
-            "instance_id",
-            "object_id",
-            "locator"
-          ],
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "mode": {
-                    "enum": [
-                      "session",
-                      "device"
-                    ]
-                  }
-                },
-                "required": [
-                  "mode"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "instance_id": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
-              }
-            }
-          ]
-        },
-        "snapshot": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string",
-              "minLength": 1
-            },
-            "source": {
-              "enum": [
-                "live",
-                "disk",
-                "mixed",
-                "device",
-                "trial"
-              ]
-            },
-            "revision": {
-              "type": "string",
-              "minLength": 1
-            },
-            "observed_at": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "dependencies": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "identity": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "revision": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "identity",
-                  "revision"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "source_details": {
-              "type": "object"
-            },
-            "extensions": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "id",
-            "source",
-            "revision",
-            "observed_at",
-            "dependencies"
-          ],
-          "additionalProperties": false
-        },
-        "effects": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "observe",
-              "session",
-              "artifact",
-              "change",
-              "persist",
-              "deliver",
-              "configure",
-              "physical"
-            ]
-          },
-          "uniqueItems": true,
-          "minItems": 1
-        },
-        "verification": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "enum": [
-                "not_run",
-                "passed",
-                "failed",
-                "incomplete",
-                "not_applicable"
-              ]
-            },
-            "scope": {
-              "type": "string",
-              "minLength": 1
-            },
-            "snapshot_id": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "coverage": {
-              "enum": [
-                "none",
-                "partial",
-                "complete"
-              ]
-            },
-            "checks": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "status": {
-                    "enum": [
-                      "not_run",
-                      "passed",
-                      "failed",
-                      "incomplete",
-                      "not_applicable"
-                    ]
-                  },
-                  "required": {
-                    "type": "boolean"
-                  },
-                  "evidence_ref": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "extensions": {
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "id",
-                  "status",
-                  "required"
-                ],
-                "additionalProperties": false,
-                "allOf": [
-                  {
-                    "if": {
-                      "properties": {
-                        "status": {
-                          "enum": [
-                            "passed",
-                            "failed"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "status"
-                      ]
-                    },
-                    "then": {
-                      "required": [
-                        "evidence_ref"
-                      ]
-                    }
-                  },
-                  {
-                    "if": {
-                      "properties": {
-                        "status": {
-                          "enum": [
-                            "not_applicable"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "status"
-                      ]
-                    },
-                    "then": {
-                      "required": [
-                        "reason"
-                      ]
-                    }
-                  }
-                ]
-              }
-            },
-            "not_checked": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "required": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "id",
-                  "required",
-                  "reason"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "evidence_refs": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
-            "extensions": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "status",
-            "scope",
-            "snapshot_id",
-            "coverage",
-            "checks",
-            "not_checked",
-            "evidence_refs"
-          ],
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "enum": [
-                      "passed"
-                    ]
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "snapshot_id": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "coverage": {
-                    "enum": [
-                      "complete"
-                    ]
-                  },
-                  "checks": {
-                    "minItems": 1
-                  },
-                  "evidence_refs": {
-                    "minItems": 1
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "enum": [
-                      "not_applicable"
-                    ]
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "required": [
-                  "reason"
-                ]
-              }
-            }
-          ]
-        },
-        "outcome": {
-          "type": "object",
-          "properties": {
-            "execution": {
-              "enum": [
-                "not_started",
-                "running",
-                "completed",
-                "failed",
-                "interrupted",
-                "unknown"
-              ]
-            },
-            "change": {
-              "enum": [
-                "not_applied",
-                "applied",
-                "partial",
-                "rolled_back",
-                "unknown"
-              ]
-            },
-            "persistence": {
-              "enum": [
-                "not_applicable",
-                "unchanged",
-                "unsaved",
-                "saved",
-                "partial",
-                "unknown"
-              ]
-            },
-            "verification": {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/verification"
-            }
-          },
-          "required": [
-            "execution",
-            "change",
-            "persistence",
-            "verification"
-          ],
-          "additionalProperties": false
-        },
-        "error": {
-          "type": "object",
-          "properties": {
-            "code": {
-              "type": "string",
-              "pattern": "^E_[A-Z0-9_]+$"
-            },
-            "message": {
-              "type": "string",
-              "minLength": 1
-            },
-            "retryable": {
-              "type": "boolean"
-            },
-            "details": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "retryable",
-            "details"
-          ],
-          "additionalProperties": false
-        },
-        "environment": {
-          "type": "object",
-          "properties": {
-            "application": {
-              "type": "string",
-              "minLength": 1
-            },
-            "application_version": {
-              "type": "string",
-              "minLength": 1
-            },
-            "platform": {
-              "type": "string",
-              "minLength": 1
-            },
-            "arch": {
-              "type": "string",
-              "minLength": 1
-            },
-            "adapter_version": {
-              "type": "string",
-              "minLength": 1
-            },
-            "mode": {
-              "enum": [
-                "session",
-                "file",
-                "device"
-              ]
-            },
-            "limitations": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          },
-          "required": [
-            "application",
-            "application_version",
-            "platform",
-            "arch",
-            "adapter_version",
-            "mode",
-            "limitations"
-          ],
-          "additionalProperties": false
-        },
-        "semver": {
-          "type": "string",
-          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
-        }
-      }
-    },
-    "urn:tool-driver-cli-spec:plan:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:plan:1.0",
-      "title": "plan",
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "operation_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "target": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
-        },
-        "base_snapshot": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-        },
-        "authorization_scope_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "effects": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
-        },
-        "preview": {
-          "type": "object",
-          "properties": {
-            "level": {
-              "enum": [
-                "plan",
-                "estimate",
-                "trial_observed"
-              ]
-            },
-            "known_changes": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "unknowns": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "constraints": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "trial_snapshot": {
-              "anyOf": [
-                {
-                  "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "level",
-            "known_changes",
-            "unknowns",
-            "constraints",
-            "trial_snapshot"
-          ],
-          "additionalProperties": false
-        },
-        "can_apply": {
-          "type": "boolean"
-        },
-        "expires_at": {
-          "anyOf": [
-            {
-              "type": "string",
-              "format": "date-time"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "extensions": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "plan_id",
-        "operation_id",
-        "target",
-        "base_snapshot",
-        "authorization_scope_id",
-        "effects",
-        "preview",
-        "can_apply",
-        "expires_at"
+    "context": {
+      "shape": "object",
+      "fields": [
+        "version",
+        "credentials",
+        "driver_profile",
+        "authorization",
+        "environment",
+        "state"
       ],
-      "additionalProperties": false
+      "untrusted_fields": []
     },
-    "urn:tool-driver-cli-spec:receipt:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:receipt:1.0",
-      "title": "receipt",
-      "type": "object",
-      "properties": {
-        "operation_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "target": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
-        },
-        "authorization_scope_id": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "effects": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
-        },
-        "snapshot_before": {
-          "anyOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "snapshot_after": {
-          "anyOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "outcome": {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/outcome"
-        },
-        "changed_items": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "change": {
-                "type": "string",
-                "minLength": 1
-              },
-              "evidence_ref": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": [
-              "id",
-              "change",
-              "evidence_ref"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "artifacts": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "sha256": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{64}$"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "source_snapshot_id": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": [
-              "id",
-              "path",
-              "sha256",
-              "source_snapshot_id"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "recovery": {
-          "type": "object",
-          "properties": {
-            "action": {
-              "enum": [
-                "none",
-                "inspect",
-                "resume",
-                "retry",
-                "restore",
-                "human_review"
-              ]
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
-            "supported": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "action",
-            "reason",
-            "supported"
-          ],
-          "additionalProperties": false
-        },
-        "extensions": {
-          "type": "object"
-        },
-        "authorization_unavailable_reason": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "operation_id",
-        "target",
-        "authorization_scope_id",
-        "effects",
-        "snapshot_before",
-        "snapshot_after",
-        "outcome",
-        "changed_items",
-        "artifacts",
-        "recovery"
+    "doctor": {
+      "shape": "object",
+      "fields": [
+        "checks"
       ],
-      "additionalProperties": false
+      "untrusted_fields": []
     },
-    "urn:tool-driver-cli-spec:operation-status:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:operation-status:1.0",
-      "title": "operation-status",
-      "description": "可选操作状态 profile。状态与回执分开；取消受理、原生停止、目标恢复分别取证。",
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "const": "1.0"
-        },
-        "spec_version": {
-          "allOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
-            },
-            {
-              "pattern": "^1\\."
-            }
-          ]
-        },
-        "operation_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "request_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "target": {
-          "anyOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "status": {
-          "enum": [
-            "queued",
-            "running",
-            "cancel_requested",
-            "completed",
-            "failed",
-            "cancelled",
-            "unknown"
-          ]
-        },
-        "stage": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "observed_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "started_at": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "wait_timeout_ms": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 0,
-          "description": "调用方等待上限，null 表示未设置；到期不等于停止原生执行。"
-        },
-        "execution_deadline": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time",
-          "description": "声明的原生执行期限；null 表示未设置或未提供该能力，具体限制记入 record.limitations。"
-        },
-        "record": {
-          "type": "object",
-          "properties": {
-            "availability": {
-              "enum": [
-                "available",
-                "expired",
-                "unavailable"
-              ]
-            },
-            "retain_until": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "format": "date-time"
-            },
-            "survives_cli_exit": {
-              "type": "boolean"
-            },
-            "survives_reconnect": {
-              "type": "boolean"
-            },
-            "survives_instance_restart": {
-              "type": "boolean"
-            },
-            "limitations": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          },
-          "required": [
-            "availability",
-            "retain_until",
-            "survives_cli_exit",
-            "survives_reconnect",
-            "survives_instance_restart",
-            "limitations"
-          ],
-          "additionalProperties": false
-        },
-        "commands": {
-          "type": "object",
-          "properties": {
-            "lookup": {
-              "$ref": "#/$defs/readCommand"
-            },
-            "result": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/readCommand"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "cancel": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/controlCommand"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "lookup",
-            "result",
-            "cancel"
-          ],
-          "additionalProperties": false
-        },
-        "blocked": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "reason": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "required_action": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "resume": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/controlCommand"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "required": [
-                "reason",
-                "required_action",
-                "resume"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "stop_observed": {
-          "type": "boolean"
-        },
-        "stop_evidence_ref": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "receipt": {
-          "anyOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "extensions": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "schema_version",
-        "spec_version",
-        "operation_id",
-        "request_id",
-        "target",
+    "update_result": {
+      "shape": "object",
+      "fields": [
         "status",
-        "stage",
-        "observed_at",
-        "started_at",
-        "wait_timeout_ms",
-        "execution_deadline",
-        "record",
-        "commands",
-        "blocked",
-        "stop_observed",
-        "stop_evidence_ref",
-        "receipt"
+        "current_version",
+        "target_version",
+        "update_available",
+        "install_method",
+        "command",
+        "signature_status",
+        "skill_sync_status"
       ],
-      "additionalProperties": false,
-      "$defs": {
-        "readCommand": {
-          "type": "object",
-          "properties": {
-            "argv": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "minItems": 1,
-              "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
-            },
-            "read_only": {
-              "const": true
-            }
-          },
-          "required": [
-            "argv",
-            "read_only"
-          ],
-          "additionalProperties": false
-        },
-        "controlCommand": {
-          "type": "object",
-          "properties": {
-            "argv": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "minItems": 1,
-              "description": "从 reference 命令路径开始的参数数组，不含可执行程序或 shell 包装；每项都是数据。"
-            },
-            "read_only": {
-              "const": false
-            }
-          },
-          "required": [
-            "argv",
-            "read_only"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "allOf": [
-        {
-          "anyOf": [
-            {
-              "properties": {
-                "operation_id": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              }
-            },
-            {
-              "properties": {
-                "request_id": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              }
-            }
-          ]
-        },
-        {
-          "if": {
-            "properties": {
-              "stop_observed": {
-                "const": true
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "stop_evidence_ref": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "stop_observed": {
-                "const": false
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "stop_evidence_ref": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "cancelled"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "stop_observed": {
-                "const": true
-              },
-              "blocked": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "enum": [
-                  "completed",
-                  "failed"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "blocked": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "record": {
-                "properties": {
-                  "availability": {
-                    "enum": [
-                      "expired",
-                      "unavailable"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "status": {
-                "const": "unknown"
-              },
-              "receipt": {
-                "type": "null"
-              },
-              "record": {
-                "properties": {
-                  "limitations": {
-                    "minItems": 1
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "enum": [
-                  "queued",
-                  "running",
-                  "cancel_requested",
-                  "completed",
-                  "failed",
-                  "cancelled"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "operation_id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "target": {
-                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
-              },
-              "record": {
-                "properties": {
-                  "availability": {
-                    "const": "available"
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "record": {
-                "properties": {
-                  "retain_until": {
-                    "type": "null"
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "record": {
-                "properties": {
-                  "limitations": {
-                    "minItems": 1
-                  }
-                }
-              }
-            }
-          }
-        }
-      ]
+      "untrusted_fields": []
     },
-    "urn:tool-driver-cli-spec:workflow:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:workflow:1.0",
-      "title": "workflow",
-      "description": "可选组合结果 profile。只描述步骤关系与实际结果，不定义执行脚本、原子事务或自动重放。",
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "const": "1.0"
-        },
-        "spec_version": {
-          "allOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
-            },
-            {
-              "pattern": "^1\\."
-            }
-          ]
-        },
-        "operation_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "observed_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "kind": {
-          "enum": [
-            "independent_batch",
-            "dependent_workflow"
-          ]
-        },
-        "failure_policy": {
-          "enum": [
-            "stop",
-            "continue_independent"
-          ]
-        },
-        "steps": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "depends_on": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "uniqueItems": true
-              },
-              "operation_id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "minLength": 1
-              },
-              "status": {
-                "enum": [
-                  "not_started",
-                  "running",
-                  "completed",
-                  "failed",
-                  "skipped",
-                  "cancelled",
-                  "unknown"
-                ]
-              },
-              "receipt": {
-                "anyOf": [
-                  {
-                    "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "output_refs": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "uniqueItems": true
-              },
-              "skip_reason": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "minLength": 1
-              },
-              "error": {
-                "anyOf": [
-                  {
-                    "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/error"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "checkpoint_ref": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "minLength": 1
-              },
-              "extensions": {
-                "type": "object"
-              },
-              "phase": {
-                "enum": [
-                  "observe",
-                  "plan",
-                  "apply",
-                  "submit",
-                  "status",
-                  "result",
-                  "verify"
-                ]
-              },
-              "effects": {
-                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/effects"
-              }
-            },
-            "required": [
-              "id",
-              "depends_on",
-              "operation_id",
-              "status",
-              "receipt",
-              "output_refs",
-              "skip_reason",
-              "error",
-              "phase",
-              "effects"
-            ],
-            "additionalProperties": false,
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "status": {
-                      "const": "skipped"
-                    }
-                  }
-                },
-                "then": {
-                  "properties": {
-                    "skip_reason": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  }
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "status": {
-                      "enum": [
-                        "not_started",
-                        "running",
-                        "completed",
-                        "failed",
-                        "cancelled",
-                        "unknown"
-                      ]
-                    }
-                  }
-                },
-                "then": {
-                  "properties": {
-                    "skip_reason": {
-                      "type": "null"
-                    }
-                  }
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "status": {
-                      "const": "completed"
-                    }
-                  }
-                },
-                "then": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "receipt": {
-                          "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-                        }
-                      }
-                    },
-                    {
-                      "properties": {
-                        "output_refs": {
-                          "minItems": 1
-                        }
-                      }
-                    }
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "receipt": {
-                      "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-                    }
-                  }
-                },
-                "then": {
-                  "properties": {
-                    "operation_id": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  }
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "status": {
-                      "const": "failed"
-                    }
-                  }
-                },
-                "then": {
-                  "anyOf": [
-                    {
-                      "properties": {
-                        "error": {
-                          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/error"
-                        }
-                      }
-                    },
-                    {
-                      "properties": {
-                        "receipt": {
-                          "$ref": "urn:tool-driver-cli-spec:receipt:1.0"
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        },
-        "summary": {
-          "type": "object",
-          "properties": {
-            "total": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "not_started": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "running": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "completed": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "failed": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "skipped": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "cancelled": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "unknown": {
-              "type": "integer",
-              "minimum": 0
-            }
-          },
-          "required": [
-            "total",
-            "not_started",
-            "running",
-            "completed",
-            "failed",
-            "skipped",
-            "cancelled",
-            "unknown"
-          ],
-          "additionalProperties": false
-        },
-        "extensions": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "schema_version",
-        "spec_version",
-        "operation_id",
-        "observed_at",
-        "kind",
-        "failure_policy",
-        "steps",
-        "summary"
-      ],
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "independent_batch"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "steps": {
-                "items": {
-                  "properties": {
-                    "depends_on": {
-                      "maxItems": 0
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
-    "urn:tool-driver-cli-spec:query-page:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:tool-driver-cli-spec:query-page:1.0",
-      "title": "query-page",
-      "description": "可选集合读取 profile。正常分页与无法完整读取分开；弱一致性不能冒充固定快照。",
-      "type": "object",
-      "properties": {
-        "schema_version": {
-          "const": "1.0"
-        },
-        "spec_version": {
-          "allOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
-            },
-            {
-              "pattern": "^1\\."
-            }
-          ]
-        },
-        "scope": {
-          "type": "object",
-          "properties": {
-            "targets": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/target"
-              }
-            },
-            "description": {
-              "type": "string",
-              "minLength": 1
-            },
-            "selector": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "targets",
-            "description",
-            "selector"
-          ],
-          "additionalProperties": false
-        },
-        "snapshot": {
-          "anyOf": [
-            {
-              "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "snapshot_unavailable_reason": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "consistency": {
-          "type": "object",
-          "properties": {
-            "mode": {
-              "enum": [
-                "snapshot",
-                "live",
-                "best_effort"
-              ]
-            },
-            "drift_policy": {
-              "enum": [
-                "reject",
-                "report"
-              ]
-            },
-            "limitations": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          },
-          "required": [
-            "mode",
-            "drift_policy",
-            "limitations"
-          ],
-          "additionalProperties": false
-        },
-        "sort": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "properties": {
-              "field": {
-                "type": "string",
-                "minLength": 1
-              },
-              "direction": {
-                "enum": [
-                  "asc",
-                  "desc"
-                ]
-              }
-            },
-            "required": [
-              "field",
-              "direction"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "items": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          },
-          "description": "具体条目字段由该能力的 result_schema 约束；本 profile 不伪造统一领域对象。"
-        },
-        "has_more": {
-          "type": "boolean"
-        },
-        "truncated": {
-          "type": "boolean"
-        },
-        "next_cursor": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "limits": {
-          "type": "object",
-          "properties": {
-            "requested": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 1
-            },
-            "effective": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 1
-            },
-            "truncation_reason": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "minLength": 1
-            }
-          },
-          "required": [
-            "requested",
-            "effective",
-            "truncation_reason"
-          ],
-          "additionalProperties": false
-        },
-        "unread_scopes": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "scope": {
-                "type": "string",
-                "minLength": 1
-              },
-              "reason": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": [
-              "scope",
-              "reason"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "extensions": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "schema_version",
-        "spec_version",
-        "scope",
-        "snapshot",
-        "snapshot_unavailable_reason",
-        "consistency",
-        "sort",
-        "count",
+    "feature_page": {
+      "shape": "object",
+      "fields": [
         "items",
+        "count",
         "has_more",
         "truncated",
         "next_cursor",
-        "limits",
-        "unread_scopes"
+        "scope",
+        "snapshot",
+        "sort"
       ],
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "snapshot": {
-                "type": "null"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "snapshot_unavailable_reason": {
-                "type": "string",
-                "minLength": 1
-              },
-              "consistency": {
-                "properties": {
-                  "mode": {
-                    "enum": [
-                      "live",
-                      "best_effort"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "snapshot_unavailable_reason": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "consistency": {
-                "properties": {
-                  "mode": {
-                    "const": "snapshot"
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "snapshot": {
-                "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/snapshot"
-              },
-              "consistency": {
-                "properties": {
-                  "drift_policy": {
-                    "const": "reject"
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "consistency": {
-                "properties": {
-                  "mode": {
-                    "enum": [
-                      "live",
-                      "best_effort"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "consistency": {
-                "properties": {
-                  "limitations": {
-                    "minItems": 1
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "has_more": {
-                "const": false
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "next_cursor": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "has_more": {
-                "const": true
-              },
-              "truncated": {
-                "const": false
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "next_cursor": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "truncated": {
-                "const": true
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "limits": {
-                "properties": {
-                  "truncation_reason": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                }
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "limits": {
-                "properties": {
-                  "truncation_reason": {
-                    "type": "null"
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "unread_scopes": {
-                "minItems": 1
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "truncated": {
-                "const": true
-              }
-            }
-          }
-        }
+      "untrusted_fields": [
+        "items"
       ]
+    },
+    "operation": {
+      "shape": "object",
+      "fields": [
+        "operation_status"
+      ],
+      "untrusted_fields": []
+    },
+    "operation_page": {
+      "shape": "object",
+      "fields": [
+        "items",
+        "count",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "scope",
+        "snapshot",
+        "sort"
+      ],
+      "untrusted_fields": []
+    },
+    "receipt": {
+      "shape": "object",
+      "fields": [
+        "receipt",
+        "preview",
+        "confirm_token",
+        "expires_at"
+      ],
+      "untrusted_fields": [
+        "receipt.changed_items"
+      ],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
+    },
+    "reference": {
+      "shape": "object",
+      "fields": [
+        "tool",
+        "version",
+        "commands",
+        "schemas",
+        "driver_profile"
+      ],
+      "untrusted_fields": []
+    }
+  },
+  "exit_codes": {
+    "0": "success",
+    "1": "failure, not retryable; read the envelope",
+    "2": "usage or validation; fix the call",
+    "3": "not found",
+    "4": "permission, scope, configuration or backend unavailable",
+    "5": "confirmation required",
+    "6": "conflict or outcome unknown; re-read state first",
+    "7": "transient; retry with backoff",
+    "8": "timeout before dispatch",
+    "9": "a person must act first",
+    "130": "interrupted before anything was dispatched"
+  },
+  "error_codes": {
+    "E_USAGE": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_VALIDATION": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_NOT_FOUND": {
+      "exit": 3,
+      "retryable": false
+    },
+    "E_AUTH": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_FORBIDDEN": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_CONFIG": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_CONFIRMATION_REQUIRED": {
+      "exit": 5,
+      "retryable": false
+    },
+    "E_CONFLICT": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_NETWORK": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_RATE_LIMITED": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_SERVER": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_TIMEOUT": {
+      "exit": 8,
+      "retryable": true
+    },
+    "E_INTEGRITY": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_IO": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_INTERRUPTED": {
+      "exit": 130,
+      "retryable": true
+    },
+    "E_UNKNOWN": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_UNSUPPORTED": {
+      "exit": 2,
+      "retryable": false
+    },
+    "E_BACKEND_UNAVAILABLE": {
+      "exit": 4,
+      "retryable": false
+    },
+    "E_PROTOCOL": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_BUSY": {
+      "exit": 7,
+      "retryable": true
+    },
+    "E_NATIVE_FAILURE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_PARTIAL": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_OUTCOME_UNKNOWN": {
+      "exit": 6,
+      "retryable": false
+    },
+    "E_VERIFY_FAILED": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_VERIFY_INCOMPLETE": {
+      "exit": 1,
+      "retryable": false
+    },
+    "E_HUMAN_REQUIRED": {
+      "exit": 9,
+      "retryable": false
+    }
+  },
+  "driver_profile": {
+    "spec": "tool-driver-cli-spec",
+    "spec_version": "1.0.0",
+    "schema_version": "2.0",
+    "base": {
+      "spec": "ai-native-cli-spec",
+      "version": "v1.6.3"
+    },
+    "record": {
+      "store": "local SQLite file in the tool state directory",
+      "retain_days": 30,
+      "survives_cli_exit": true,
+      "survives_reconnect": true,
+      "survives_instance_restart": true,
+      "limitations": [
+        "A running apply whose CLI process ends reports unknown once its lease expires."
+      ]
+    }
+  },
+  "json_schemas": {
+    "urn:demo-cad-cli:feature-create-request:1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:demo-cad-cli:feature-create-request:1",
+      "type": "object",
+      "properties": {
+        "part": {
+          "type": "string"
+        },
+        "sketch": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "sketch",
+        "depth"
+      ],
+      "additionalProperties": false
     }
   }
 }

@@ -20,6 +20,11 @@ SPEC_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 SOURCE_COMMIT = "a" * 40
 SOURCE_PATH = "schemas/sample.schema.json"
 MANAGED_PATH = ".agent/schemas/sample.schema.json"
+BASE_BYTES = (ROOT / "base/base-lock.json").read_bytes()
+BASE_LOCK = json.loads(BASE_BYTES)
+sys.path.insert(0, str(ROOT / "scripts"))
+from bundle_layout import required_payload
+HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SCHEMA_BYTES = (json.dumps({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:synthetic:sample:1.0", "type": "object", "description": "合成契约样本", "properties": {"text": {"type": "string"}}, "additionalProperties": False}, ensure_ascii=False) + "\n").encode("utf-8")
 
 
@@ -34,14 +39,16 @@ class DeliveryCLITests(unittest.TestCase):
         self.copy_path = self.project / MANAGED_PATH
         self.copy_path.parent.mkdir(parents=True)
         self.copy_path.write_bytes(SCHEMA_BYTES)
-        self.payloads = {"VERSION": (SPEC_VERSION + "\n").encode(), SOURCE_PATH: SCHEMA_BYTES}
+        self.payloads = {path: (ROOT / path).read_bytes() for path in required_payload()}
+        self.payloads.update({"VERSION": (SPEC_VERSION + "\n").encode(), SOURCE_PATH: SCHEMA_BYTES,
+                              "STATUS": b"experimental\n"})
         self.manifest = {
             "artifact_kind": "specification", "name": "synthetic-contract-package",
-            "version": SPEC_VERSION, "spec_version": SPEC_VERSION, "status": "experimental",
+            "version": SPEC_VERSION, "spec_version": SPEC_VERSION, "base": {"spec": "ai-native-cli-spec", "version": "v1.6.3"}, "status": "experimental",
             "source_commit": SOURCE_COMMIT, "source_dirty": False,
             "target": {"os": "any", "arch": "any"},
             "components": [
-                {"name": path, "version": SPEC_VERSION, "path": path, "sha256": hashlib.sha256(payload).hexdigest(), "role": "schema" if path.startswith("schemas/") else "documentation"}
+                {"name": path, "version": SPEC_VERSION, "path": path, "sha256": hashlib.sha256(payload).hexdigest(), "role": "schema" if path.startswith("schemas/") else "base" if path.startswith("base/") else "documentation"}
                 for path, payload in self.payloads.items()
             ],
             "compatibility": {"application": [], "plugin": [], "protocol": [], "skill": []},
@@ -50,8 +57,9 @@ class DeliveryCLITests(unittest.TestCase):
         }
         self.write_bundle()
         self.lock = {
-            "spec_version": SPEC_VERSION, "schema_version": "1.0", "source_commit": SOURCE_COMMIT,
-            "package_sha256": self.bundle_digest(),
+            "spec_version": SPEC_VERSION, "schema_version": "2.0", "source_kind": "bundle", "source_commit": SOURCE_COMMIT,
+            "source_dirty": False, "package_sha256": self.bundle_digest(),
+            "base": {key: BASE_LOCK[key] for key in ("spec", "tag", "commit")},
             "files": [{"path": MANAGED_PATH, "source_path": SOURCE_PATH, "sha256": hashlib.sha256(SCHEMA_BYTES).hexdigest()}],
         }
         self.write_lock()
@@ -78,16 +86,16 @@ class DeliveryCLITests(unittest.TestCase):
     def invoke(self, script, *arguments, expected=0):
         environment = os.environ.copy()
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        result = subprocess.run([sys.executable, str(ROOT / "scripts" / script), *map(str, arguments)], capture_output=True, timeout=30, env=environment, cwd=self.base)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts" / script), *map(str, arguments)], capture_output=True, timeout=30, env=environment, cwd=self.base, creationflags=HIDDEN)
         self.assertEqual(result.returncode, expected, result.stderr.decode("utf-8", errors="replace") + result.stdout.decode("utf-8", errors="replace"))
         self.assertFalse(result.stdout.startswith(b"\xef\xbb\xbf"))
         response = json.loads(result.stdout.decode("utf-8"))
-        self.assertEqual(response["phase"], "verify")
+        self.assertEqual(set(response), {"ok", "schema_version", "meta", "data" if expected == 0 else "error"})
         self.assertEqual(response["schema_version"], "1.0")
         self.assertEqual(response["ok"], expected == 0)
-        self.assertTrue(response["request_id"])
         if expected:
             self.assertFalse(response["error"]["retryable"])
+            self.assertIn("next_action", response["error"]["details"])
         return response
 
     def verify(self, *arguments, expected=0):
@@ -100,7 +108,7 @@ class DeliveryCLITests(unittest.TestCase):
         response = self.verify("--expected-sha256", self.bundle_digest())
         self.assertTrue(response["data"]["expected_digest_matched"])
         self.assertFalse(response["data"]["origin_authenticated"])
-        self.assertEqual(response["data"]["component_count"], 2)
+        self.assertEqual(response["data"]["component_count"], len(self.payloads))
 
     def test_no_expected_digest_reports_internal_consistency_only(self):
         response = self.verify()
@@ -115,13 +123,13 @@ class DeliveryCLITests(unittest.TestCase):
         self.verify("--checksum", checksum, expected=2)
 
     def test_wrong_package_digest_is_integrity_failure(self):
-        self.assertEqual(self.verify("--expected-sha256", "0" * 64, expected=2)["error"]["code"], "E_INTEGRITY")
+        self.assertEqual(self.verify("--expected-sha256", "0" * 64, expected=1)["error"]["code"], "E_INTEGRITY")
 
     def test_member_tampering_is_rejected_even_with_updated_archive_digest(self):
         payloads = dict(self.payloads)
         payloads[SOURCE_PATH] = SCHEMA_BYTES[:-1] + b" "
         self.write_bundle(payloads=payloads)
-        response = self.verify("--expected-sha256", self.bundle_digest(), expected=2)
+        response = self.verify("--expected-sha256", self.bundle_digest(), expected=1)
         self.assertEqual(response["error"]["code"], "E_INTEGRITY")
 
     def test_unlisted_or_missing_files_are_rejected(self):
@@ -181,7 +189,7 @@ class DeliveryCLITests(unittest.TestCase):
         self.write_bundle(manifest=manifest)
         self.verify(expected=2)
         manifest = copy.deepcopy(self.manifest)
-        manifest["components"][0]["version"] = "2.0.0"
+        manifest["components"][0]["version"] = "9.0.0"
         self.write_bundle(manifest=manifest)
         self.verify(expected=2)
 
@@ -190,12 +198,65 @@ class DeliveryCLITests(unittest.TestCase):
         self.assertIn("uncompressed", self.verify("--max-uncompressed", "65536", expected=2)["error"]["message"])
 
     def test_manifest_identity_and_version_must_be_consistent(self):
-        for field, value in [("source_commit", "not-a-commit"), ("version", "2.0.0"), ("source_dirty", True)]:
+        for field, value in [("source_commit", "not-a-commit"), ("version", "9.0.0"), ("source_dirty", True)]:
             with self.subTest(field=field):
                 manifest = copy.deepcopy(self.manifest)
                 manifest[field] = value
                 self.write_bundle(manifest=manifest)
                 self.verify(expected=2)
+
+    def test_embedded_status_must_match_manifest_even_with_valid_hashes(self):
+        payloads = dict(self.payloads, STATUS=b"experimental\n")
+        manifest = copy.deepcopy(self.manifest)
+        self.write_bundle(payloads=payloads, manifest=manifest)
+        self.verify("--expected-sha256", self.bundle_digest())
+        manifest["status"] = "stable"
+        self.write_bundle(payloads=payloads, manifest=manifest)
+        response = self.verify("--expected-sha256", self.bundle_digest(), expected=2)
+        self.assertIn("STATUS", response["error"]["message"])
+
+    def test_self_consistent_missing_required_payload_is_rejected(self):
+        for missing in ("VERSION", "STATUS", "base/base-lock.json", "schemas/receipt.schema.json",
+                        "docs/CORE-SPEC.md", "packages/tool_driver_sdk/runtime.py",
+                        "starter/common/package/adapter.py"):
+            with self.subTest(missing=missing):
+                payloads = {path: payload for path, payload in self.payloads.items() if path != missing}
+                manifest = copy.deepcopy(self.manifest)
+                manifest["components"] = [item for item in manifest["components"] if item["path"] != missing]
+                self.write_bundle(payloads=payloads, manifest=manifest)
+                response = self.verify("--expected-sha256", self.bundle_digest(), expected=2)
+                self.assertIn("missing required", response["error"]["message"])
+                self.assertIn(missing, response["error"]["message"])
+
+    def test_base_bytes_must_match_pinned_lock_even_when_manifest_hash_is_updated(self):
+        path = BASE_LOCK["files"][0]["path"]
+        payloads = dict(self.payloads)
+        payloads[path] += b"\nchanged\n"
+        manifest = copy.deepcopy(self.manifest)
+        for component in manifest["components"]:
+            if component["path"] == path:
+                component["sha256"] = hashlib.sha256(payloads[path]).hexdigest()
+        self.write_bundle(payloads=payloads, manifest=manifest)
+        self.assertIn("pinned base", self.verify(expected=1)["error"]["message"])
+
+    def test_base_lock_cannot_omit_a_present_normative_file(self):
+        lock = copy.deepcopy(BASE_LOCK)
+        lock['files'] = lock['files'][1:]
+        payloads = dict(self.payloads)
+        payloads['base/base-lock.json'] = json.dumps(lock).encode()
+        manifest = copy.deepcopy(self.manifest)
+        for component in manifest['components']:
+            if component['path'] == 'base/base-lock.json':
+                component['sha256'] = hashlib.sha256(payloads['base/base-lock.json']).hexdigest()
+        self.write_bundle(payloads=payloads, manifest=manifest)
+        self.assertIn('complete pinned base inventory', self.verify(expected=2)['error']['message'])
+
+    def test_embedded_base_lock_must_match_manifest(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["base"]["version"] = "v1.6.4"
+        self.write_bundle(manifest=manifest)
+        response = self.verify("--expected-sha256", self.bundle_digest(), expected=2)
+        self.assertIn("base lock", response["error"]["message"])
 
     def test_adoption_compares_source_and_copy_bytes_without_writing_project(self):
         before = {path.relative_to(self.project).as_posix(): path.read_bytes() for path in self.project.rglob("*") if path.is_file()}
@@ -207,7 +268,17 @@ class DeliveryCLITests(unittest.TestCase):
 
     def test_same_size_schema_drift_is_rejected(self):
         self.copy_path.write_bytes(SCHEMA_BYTES[:-1] + b" ")
-        self.assertEqual(self.adopt(expected=2)["error"]["code"], "E_INTEGRITY")
+        self.assertEqual(self.adopt(expected=1)["error"]["code"], "E_INTEGRITY")
+
+    def test_lock_base_pin_must_match_the_bundle(self):
+        self.lock["base"]["commit"] = "e" * 40
+        self.write_lock()
+        self.assertEqual(self.adopt(expected=1)["error"]["code"], "E_INTEGRITY")
+
+    def test_a_lock_taken_from_a_checkout_is_not_a_bundle_pin(self):
+        self.lock.update(source_kind="git_checkout", source_dirty=True, package_sha256=None)
+        self.write_lock()
+        self.assertIn("not a specification bundle", self.adopt(expected=2)["error"]["message"])
 
     def test_lock_bundle_hash_source_commit_and_schema_hash_are_checked(self):
         original = copy.deepcopy(self.lock)
@@ -219,7 +290,7 @@ class DeliveryCLITests(unittest.TestCase):
                 else:
                     self.lock[field] = "0" * (40 if field == "source_commit" else 64)
                 self.write_lock()
-                self.assertEqual(self.adopt(expected=2)["error"]["code"], "E_INTEGRITY")
+                self.assertEqual(self.adopt(expected=1)["error"]["code"], "E_INTEGRITY")
 
     def test_unknown_sources_and_duplicate_destinations_are_rejected(self):
         original = copy.deepcopy(self.lock)
@@ -265,7 +336,7 @@ class DeliveryCLITests(unittest.TestCase):
         self.copy_path.unlink()
         directory = self.copy_path.parent
         directory.rmdir()
-        created = subprocess.run(["cmd", "/c", "mklink", "/J", str(directory), str(outside)], capture_output=True, timeout=15)
+        created = subprocess.run(["cmd", "/c", "mklink", "/J", str(directory), str(outside)], capture_output=True, timeout=15, creationflags=HIDDEN)
         if created.returncode:
             self.skipTest("test filesystem does not permit junction creation")
         try:

@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_CONFLICT",
+    "message": "Operation operation-01 on part-01 is still running.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "conflict": "lock_held",
+      "active_operation": "operation-01",
+      "lookup": "demo-cad-cli operation show --id operation-01",
+      "lookup_argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-01"
+      ],
+      "next_action": "Wait for it with the lookup command, then plan again; do not resolve it while it runs."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

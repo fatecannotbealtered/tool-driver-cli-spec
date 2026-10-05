@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_CONFLICT",
+    "message": "An earlier operation is unresolved.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "conflict": "unresolved_operation",
+      "next_action": "Resolve it first."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

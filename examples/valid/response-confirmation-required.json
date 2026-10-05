@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_CONFIRMATION_REQUIRED",
+    "message": "feature create changes the part and needs a confirm token.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "problem": "confirmation_required",
+      "next_action": "Run the same command with --dry-run, review data.preview, then rerun it with --confirm <confirm_token>."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

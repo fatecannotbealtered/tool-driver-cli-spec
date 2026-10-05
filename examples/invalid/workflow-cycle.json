@@ -1,53 +1,46 @@
 {
-  "schema_version": "1.0",
-  "spec_version": "1.0.0",
   "operation_id": "workflow-01",
-  "observed_at": "2026-10-03T00:00:10Z",
-  "kind": "dependent_workflow",
+  "observed_at": "2026-10-04T00:01:00Z",
   "failure_policy": "stop",
   "steps": [
     {
-      "id": "inspect",
+      "id": "open",
       "depends_on": [
-        "plan"
+        "save"
       ],
-      "operation_id": null,
-      "status": "completed",
-      "receipt": null,
-      "output_refs": [
-        "evidence://synthetic/read-snapshot-01"
-      ],
-      "skip_reason": null,
-      "error": null,
-      "phase": "observe",
+      "phase": "apply",
       "effects": [
-        "observe"
-      ]
+        "session"
+      ],
+      "operation_id": "operation-c1",
+      "status": "not_started",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
     },
     {
-      "id": "plan",
+      "id": "save",
       "depends_on": [
-        "inspect"
+        "open"
       ],
-      "operation_id": null,
-      "status": "completed",
-      "receipt": null,
-      "output_refs": [
-        "plan://synthetic/plan-01"
-      ],
-      "skip_reason": null,
-      "error": null,
-      "phase": "plan",
+      "phase": "apply",
       "effects": [
-        "observe"
-      ]
+        "persist"
+      ],
+      "operation_id": "operation-c2",
+      "status": "not_started",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": null
     }
   ],
   "summary": {
     "total": 2,
-    "not_started": 0,
+    "not_started": 2,
     "running": 0,
-    "completed": 2,
+    "completed": 0,
     "failed": 0,
     "skipped": 0,
     "cancelled": 0,

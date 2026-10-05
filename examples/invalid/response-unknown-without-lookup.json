@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_OUTCOME_UNKNOWN",
+    "message": "The application stopped replying after the change was sent.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "unknown",
+      "operation_id": "operation-01",
+      "plan_id": "plan-01",
+      "lookup_argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-01"
+      ],
+      "next_action": "Run the lookup, read back the part, then record the result with operation resolve before any further write."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

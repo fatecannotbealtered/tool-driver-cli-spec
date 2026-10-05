@@ -1,4 +1,8 @@
-"""Create a no-clobber native CLI seed from local, explicitly pinned resources."""
+"""Create a new driver CLI project from the starter: templates, pinned specification and SDK copies, generated contract.
+
+The output directory must not exist. Nothing is downloaded, installed, published or started.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -6,174 +10,132 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import stat
 import subprocess
 import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 sys.dont_write_bytecode = True
 SOURCE = Path(__file__).resolve().parents[1]
+TEMPLATE = SOURCE / "starter" / "common"
 VERSION = "0.1.0"
+HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+TEXT_SUFFIXES = {".md", ".json", ".py", ".toml", ".yml", ".txt", ""}
+VENDORED_SCRIPTS = ("check_spec.py", "contract_io.py", "validate_contract.py", "generate_product.py", "check_agent_eval.py")
 
 
-def sha(payload):
+class StarterError(ValueError):
+    def __init__(self, message: str, code: str = "E_VALIDATION", next_action: str = "Fix the argument and run again."):
+        super().__init__(message)
+        self.code, self.next_action = code, next_action
+
+
+def sha(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def regular_bytes(path):
-    value = path.lstat()
-    if not stat.S_ISREG(value.st_mode) or getattr(value, "st_file_attributes", 0) & 0x400:
-        raise ValueError("Source must be a regular file without a link: " + str(path))
-    if value.st_size > 8 * 1024 * 1024:
-        raise ValueError("Source resource exceeds the declared 8 MiB file limit.")
+def regular_bytes(path: Path) -> bytes:
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & REPARSE_POINT:
+        raise StarterError(f"source must be a regular file without a link: {path}", "E_CONFIG")
+    if info.st_size > 8 * 1024 * 1024:
+        raise StarterError("source file exceeds the 8 MiB limit", "E_CONFIG")
     return path.read_bytes()
 
 
-def check_output(path):
-    path = Path(os.path.abspath(path))
-    if os.path.lexists(path):
-        raise ValueError("Output already exists; no files were changed.")
-    for ancestor in path.parents:
-        if ancestor.exists():
-            value = ancestor.lstat()
-            if not stat.S_ISDIR(value.st_mode) or getattr(value, "st_file_attributes", 0) & 0x400:
-                raise ValueError("Output cannot traverse a non-directory or linked ancestor.")
-    return path.resolve()
+def destination_of(relative: str, name: str, package: str) -> str:
+    if relative == "gitignore":
+        return ".gitignore"
+    for prefix, replacement in (("agent/", ".agent/"), ("github/", ".github/"), ("package/", package + "/"), ("skill/", f"skills/{name}/")):
+        if relative.startswith(prefix):
+            return replacement + relative[len(prefix):]
+    return relative
 
 
-def replace_values(value, replacements):
-    if isinstance(value, dict):
-        return {replace_values(key, replacements): replace_values(item, replacements) for key, item in value.items()}
-    if isinstance(value, list):
-        return [replace_values(item, replacements) for item in value]
-    if isinstance(value, str):
-        for original, replacement in replacements.items():
-            value = value.replace(original, replacement)
-    return value
-
-
-def source_identity(copied):
-    manifest_path = SOURCE / "manifest.json"
-    if manifest_path.is_file():
-        manifest = json.loads(regular_bytes(manifest_path).decode("utf-8"))
-        declared = {item["path"]: item["sha256"] for item in manifest["components"]}
-        for source_path, payload in copied.items():
-            if declared.get(source_path) != sha(payload):
-                raise ValueError("Copied source does not match its specification manifest: " + source_path)
-        commit = manifest["source_commit"]
-        dirty = bool(manifest["source_dirty"])
-        kind = "local_specification_manifest"
-    else:
-        flags = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
-        result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=SOURCE, capture_output=True, text=True, timeout=10, **flags)
-        if result.returncode:
-            raise ValueError("A local specification manifest or observable source Git commit is required.")
-        commit = result.stdout.strip()
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=SOURCE, capture_output=True, text=True, timeout=10, **flags)
-        if status.returncode:
-            raise ValueError("Source working-tree status could not be observed.")
-        dirty, kind = bool(status.stdout.strip()), "git_checkout"
-    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
-        raise ValueError("Invalid observed source commit.")
-    return {"source_commit": commit, "source_dirty": dirty, "kind": kind,
+def source_identity() -> dict:
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=SOURCE, capture_output=True, text=True, timeout=10,
+                             creationflags=HIDDEN)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=SOURCE, capture_output=True, text=True, timeout=10,
+                                creationflags=HIDDEN)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=SOURCE, capture_output=True, text=True, timeout=10,
+                                creationflags=HIDDEN)
+    except (OSError, subprocess.SubprocessError):
+        top = commit = status = None
+    if (top is None or top.returncode or Path(top.stdout.strip()).resolve() != SOURCE.resolve()
+            or commit is None or commit.returncode or status is None or status.returncode
+            or not re.fullmatch(r"[0-9a-f]{40}", commit.stdout.strip())):
+        return {"source_commit": None, "source_dirty": None, "kind": "unversioned_copy", "origin_authenticated": False,
+                "limitations": ["No Git commit was observable; the file hashes below are the only identity of these copies."]}
+    return {"source_commit": commit.stdout.strip(), "source_dirty": bool(status.stdout.strip()), "kind": "git_checkout",
             "origin_authenticated": False,
             "limitations": ["Local provenance and copy hashes do not authenticate a publisher.",
-                            "When source_dirty is true, copied file hashes identify the working bytes; the commit alone cannot reproduce them."]}
+                            "When source_dirty is true, the hashes identify the working bytes; the commit alone cannot reproduce them."]}
 
 
-def vendor_payloads():
-    payloads, sources, origins = {}, {}, {}
-    for directory in ("schemas", "scripts", "development"):
-        base = SOURCE / directory
-        if not base.exists():
-            continue
-        for path in sorted(base.rglob("*")):
-            if "__pycache__" in path.parts or not path.is_file() or path.suffix not in {".py", ".json", ".md", ".txt"}:
-                continue
-            relative = path.relative_to(SOURCE).as_posix()
-            content = regular_bytes(path)
-            destination = ".agent/vendor/spec/" + relative
-            payloads[destination], sources[relative] = content, content
-            origins[destination] = relative
-    for name in ("VERSION", "STATUS", "requirements-dev.txt"):
-        content = regular_bytes(SOURCE / name)
-        payloads[".agent/vendor/spec/" + name], sources[name] = content, content
-        origins[".agent/vendor/spec/" + name] = name
-    base = SOURCE / "packages" / "tool_driver_sdk"
-    if (base / "tool_driver_sdk" / "__init__.py").is_file():
-        base = base / "tool_driver_sdk"
-    if not (base / "__init__.py").is_file():
-        raise ValueError("The local SDK package is not present; no output was created.")
-    for path in sorted(base.rglob("*")):
-        if "__pycache__" in path.parts or not path.is_file() or path.suffix not in {".py", ".md", ".json"}:
-            continue
-        content = regular_bytes(path)
-        relative = path.relative_to(base).as_posix()
-        source_path = path.relative_to(SOURCE).as_posix()
-        payloads[".agent/vendor/sdk/tool_driver_sdk/" + relative] = content
-        origins[".agent/vendor/sdk/tool_driver_sdk/" + relative] = source_path
-        sources[source_path] = content
-    return payloads, sources, origins
+def vendored() -> dict[str, tuple[str, bytes]]:
+    """destination -> (source path, bytes) for every pinned copy."""
+    files: dict[str, tuple[str, bytes]] = {}
+
+    def add(source: Path, destination: str):
+        files[destination] = (source.relative_to(SOURCE).as_posix(), regular_bytes(source))
+
+    for name in ("VERSION", "STATUS"):
+        add(SOURCE / name, f".agent/driver/{name}")
+    for folder, pattern in (("base", "**/*"), ("contract", "*.json"), ("docs", "*.md"), ("schemas", "*.schema.json")):
+        for path in sorted((SOURCE / folder).glob(pattern)):
+            if path.is_file():
+                add(path, f".agent/driver/{path.relative_to(SOURCE).as_posix()}")
+    for name in VENDORED_SCRIPTS:
+        add(SOURCE / "scripts" / name, f".agent/driver/scripts/{name}")
+    for path in sorted((SOURCE / "packages" / "tool_driver_sdk").glob("*.py")):
+        add(path, f".agent/vendor/sdk/tool_driver_sdk/{path.name}")
+    return files
 
 
-def instantiate(name, output, profile, registry_path=None):
+def instantiate(name: str, output: Path, profile: str) -> dict:
     if len(name) > 64 or not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name):
-        raise ValueError("Name must be a lowercase product identifier of at most 64 characters.")
+        raise StarterError("--name must be a lowercase kebab-case product name of at most 64 characters.",
+                           next_action="Use a name such as demo-cad-cli.")
     if profile not in {"file", "session", "device"}:
-        raise ValueError("Profile must be file, session or device.")
-    output = check_output(output)
-    template = SOURCE / "starter" / "common"
-    replacements = {"{{NAME}}": name, "{{VERSION}}": VERSION, "{{PROFILE}}": profile}
-    payloads = {path.name: replace_values(regular_bytes(path).decode("utf-8"), replacements).encode("utf-8")
-                for path in sorted(template.iterdir()) if path.is_file()}
-    registry = json.loads(regular_bytes(Path(registry_path)).decode("utf-8")) if registry_path else json.loads(payloads["registry.json"])
-    previous_name = registry["name"]
-    if registry_path:
-        registry = replace_values(registry, {"urn:" + previous_name + ":": "urn:" + name + ":"})
-    registry.update(name=name, product_version=VERSION, entrypoint=name)
-    for command in registry["commands"]:
-        command.update(modes=[profile], maturity="draft", evidence_refs=[])
-        for environment in command["environments"]:
-            environment.update(mode=profile, adapter_version=VERSION)
-            environment.setdefault("limitations", []).append("Starter selection is a declared mode, not a native environment verification.")
-    from generate_product import build_contract
-    contract = build_contract(registry, public_root=SOURCE)
-    for endpoint in ("context", "doctor"):
-        commands = [command for command in registry["commands"] if command["path"] == endpoint]
-        if len(commands) != 1 or commands[0]["phases"] != ["observe"] or commands[0]["effects"] != ["observe"] or commands[0]["parameters"]:
-            raise ValueError("The starter requires unambiguous read-only context/doctor declarations without arguments.")
-    # These are caller-selected specification code paths, never strings supplied by the registry.
-    sys.path.insert(0, str(SOURCE / "packages"))
-    from tool_driver_sdk import ContractValidator, ErrorCatalog, StubAdapter, serve_cli
-    callbacks_spec = importlib.util.spec_from_file_location("_starter_readonly_callbacks", template / "callbacks.py")
-    callbacks = importlib.util.module_from_spec(callbacks_spec)
-    callbacks_spec.loader.exec_module(callbacks)
-    project = {"name": name, "product_version": VERSION, "profile": profile, "native_status": "not_configured"}
-    validator = ContractValidator(SOURCE)
-    catalog = ErrorCatalog.from_reference(contract["reference"])
-    stub = StubAdapter(validator, catalog)
-    for endpoint in ("context", "doctor"):
-        result = serve_cli(contract, validator, stub, [endpoint],
-                           context_provider=lambda invocation: callbacks.context(registry, project),
-                           doctor_provider=lambda invocation: callbacks.doctor(registry, project))
-        if not result.envelope["ok"]:
-            raise ValueError("Registry result declarations do not match the starter's read-only callback DTOs.")
-    payloads["registry.json"] = (json.dumps(registry, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    vendor, sources, origins = vendor_payloads()
-    identity = source_identity(sources)
-    identity["managed_source_sha256"] = sha(json.dumps({path: sha(content) for path, content in sorted(sources.items())},
-                                                     sort_keys=True).encode("utf-8"))
-    lock = {"format_version": "1.0", "spec_version": (SOURCE / "VERSION").read_text().strip(),
-            "schema_version": "1.0", "source": identity,
-            "files": [{"path": path, "source_path": origins[path], "sha256": sha(content)} for path, content in sorted(vendor.items())]}
-    payloads.update(vendor)
-    payloads[".agent/starter-lock.json"] = (json.dumps(lock, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    payloads[".agent/project.json"] = (json.dumps(project, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    payloads["requirements.txt"] = regular_bytes(SOURCE / "requirements-dev.txt")
-    payloads[".gitignore"] = b"__pycache__/\n*.pyc\n.venv/\ndist/\n"
-    if len(payloads) > 4096 or sum(map(len, payloads.values())) > 32 * 1024 * 1024:
-        raise ValueError("Starter payload exceeds the declared file count or byte limit.")
+        raise StarterError("--profile must be file, session or device.")
+    output = Path(os.path.abspath(output))
+    if os.path.lexists(output):
+        raise StarterError("The output already exists; nothing was changed.", "E_CONFLICT", "Choose a new output directory.")
+    package = name.replace("-", "_")
+    replacements = {"{{NAME}}": name, "{{PACKAGE}}": package, "{{VERSION}}": VERSION, "{{PROFILE}}": profile,
+                    "{{DATE}}": datetime.now(timezone.utc).date().isoformat(), "{{ENV_PREFIX}}": name.upper().replace("-", "_")}
+    payloads: dict[str, bytes] = {}
+    for path in sorted(TEMPLATE.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        relative = path.relative_to(TEMPLATE).as_posix()
+        content = regular_bytes(path)
+        if path.suffix in TEXT_SUFFIXES:
+            text = content.decode("utf-8")
+            for key, value in replacements.items():
+                text = text.replace(key, value)
+            content = text.encode("utf-8")
+        payloads[destination_of(relative, name, package)] = content
+    copies = vendored()
+    base_lock = json.loads(copies[".agent/driver/base/base-lock.json"][1])
+    source = source_identity()
+    # An adoption lock (adoption-lock schema) for copies taken from a checkout rather than a published bundle.
+    lock = {"spec_version": (SOURCE / "VERSION").read_text(encoding="utf-8").strip(), "schema_version": "2.0",
+            "source_kind": source["kind"], "source_commit": source["source_commit"], "source_dirty": source["source_dirty"],
+            "package_sha256": None,
+            "base": {"spec": base_lock["spec"], "tag": base_lock["tag"], "commit": base_lock["commit"]},
+            "files": [{"path": destination, "source_path": source_path, "sha256": sha(content)}
+                      for destination, (source_path, content) in sorted(copies.items())],
+            "limitations": source["limitations"]}
+    for destination, (_, content) in copies.items():
+        payloads[destination] = content
+    payloads[".agent/driver/starter-lock.json"] = (json.dumps(lock, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     output.mkdir(parents=True, exist_ok=False)
     written = []
     try:
@@ -183,34 +145,87 @@ def instantiate(name, output, profile, registry_path=None):
             with destination.open("xb") as stream:
                 stream.write(content)
             written.append(relative)
-    except OSError as error:
-        # Preserve actual partial output for inspection; never delete an unverified tree.
-        return {"ok": False, "error": "Partial starter creation: " + str(error), "output": str(output),
-                "state": "partial", "written_files": written, "native_status": "not_configured"}
-    return {"ok": True, "output": str(output), "name": name, "product_version": VERSION,
-            "spec_version": lock["spec_version"], "profile": profile, "files": len(written),
-            "source": identity, "native_status": "not_configured", "native_verified": False,
-            "scope": "local_development_starter_only"}
+    except OSError as exc:
+        raise StarterError(f"Partial starter creation after {len(written)} files: {exc}", "E_IO",
+                           "Inspect the partial output; it was not deleted.") from exc
+    sys.path.insert(0, str(SOURCE / "scripts"))
+    from generate_product import GenerationError, generate_registry, load_registry
+    from validate_contract import validate_value
+    problems = validate_value("adoption-lock", lock)
+    if problems:
+        raise StarterError("The starter lock does not satisfy the adoption-lock schema: " + "; ".join(problems[:5]), "E_CONFIG",
+                           "Report this starter defect; the output directory was kept for inspection.")
+    try:
+        generated = generate_registry(load_registry(output / "registry.json"), output / package / "generated", registry_dir=output)
+    except GenerationError as exc:
+        raise StarterError(f"The starter registry could not be generated: {exc} {exc.errors[:5]}", "E_CONFIG",
+                           "Report this starter defect; the output directory was kept for inspection.") from exc
+    smoke = self_check(output, package, name)
+    return {"output": str(output), "name": name, "package": package, "profile": profile, "product_version": VERSION,
+            "spec_version": lock["spec_version"], "base": lock["base"], "files": len(written) + len(generated["files"]) + 1,
+            "source": {"kind": lock["source_kind"], "commit": lock["source_commit"], "dirty": lock["source_dirty"],
+                       "origin_authenticated": False, "limitations": lock["limitations"]},
+            "self_check": smoke, "native_status": "not_implemented",
+            "next_steps": [f"cd {output}", "python -m pip install -r requirements.txt", "python check_project.py",
+                           "python -m unittest discover -s tests -v", f"python -m {package} reference --index",
+                           f"implement {package}/adapter.py, then raise each command's maturity only with evidence"]}
+
+
+def self_check(output: Path, package: str, name: str) -> list[dict]:
+    """Run reference, context and doctor in process with the stub adapter and an isolated state directory."""
+    sys.path.insert(0, str(SOURCE / "packages"))
+    from tool_driver_sdk import ContractValidator, DriverCLI, load_contract
+    spec = importlib.util.spec_from_file_location("_starter_adapter", output / package / "adapter.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    contract = load_contract(output / package / "generated" / "product_contract.json")
+    prefix = name.upper().replace("-", "_")
+    results = []
+    with tempfile.TemporaryDirectory(prefix="starter-check-") as temporary:
+        environ = {prefix + "_STATE_DIR": str(Path(temporary) / "state"), prefix + "_SCOPE_FILE": str(Path(temporary) / "none.json")}
+        with DriverCLI(contract, module.Adapter(), validator=ContractValidator(output / ".agent" / "driver"), environ=environ,
+                       home=Path(temporary)) as cli:
+            for argv in (["reference", "--index"], ["context"], ["doctor"], ["target", "inspect", "--target-id", "t1"]):
+                result = cli.run(argv)
+                results.append({"argv": argv, "exit_code": result.exit_code, "ok": result.envelope["ok"],
+                                "code": None if result.envelope["ok"] else result.envelope["error"]["code"]})
+    expected = [True, True, True, False]
+    if [item["ok"] for item in results] != expected or results[-1]["code"] != "E_UNSUPPORTED":
+        raise StarterError("The generated project did not pass its own self-check.", "E_CONFIG",
+                           "Report this starter defect; the output directory was kept for inspection.")
+    return results
+
+
+EXIT = {"E_USAGE": 2, "E_VALIDATION": 2, "E_CONFLICT": 6, "E_CONFIG": 4, "E_IO": 1}
 
 
 class Parser(argparse.ArgumentParser):
     def error(self, message):
-        raise ValueError(message)
+        raise StarterError(message, "E_USAGE", "Run with --name <name> --profile file|session|device --output <new dir>.")
 
 
-def main(argv=None):
+def main(argv=None) -> int:
+    started = time.monotonic()
     parser = Parser(description=__doc__)
     parser.add_argument("--name", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--profile", choices=["file", "session", "device"], required=True)
-    parser.add_argument("--registry", type=Path)
     try:
         args = parser.parse_args(argv)
-        result = instantiate(args.name, args.output, args.profile, args.registry)
-    except (OSError, ValueError, KeyError, ImportError, subprocess.SubprocessError) as error:
-        result = {"ok": False, "error": str(error), "state": "not_created", "native_verified": False}
-    sys.stdout.buffer.write((json.dumps(result, ensure_ascii=False) + "\n").encode("utf-8"))
-    return 0 if result["ok"] else 2
+        value = {"ok": True, "schema_version": "1.0", "data": instantiate(args.name, args.output, args.profile)}
+        code = 0
+    except StarterError as exc:
+        value = {"ok": False, "schema_version": "1.0",
+                 "error": {"code": exc.code, "message": str(exc), "retryable": False, "details": {"next_action": exc.next_action}}}
+        code = EXIT[exc.code]
+    except (OSError, KeyError, ImportError) as exc:
+        value = {"ok": False, "schema_version": "1.0",
+                 "error": {"code": "E_IO", "message": f"The starter could not be created: {exc}", "retryable": False,
+                           "details": {"next_action": "Check the source checkout and the output path."}}}
+        code = 1
+    value["meta"] = {"duration_ms": round((time.monotonic() - started) * 1000, 3)}
+    sys.stdout.buffer.write((json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    return code
 
 
 if __name__ == "__main__":

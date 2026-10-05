@@ -1,80 +1,69 @@
 {
   "operation_id": "operation-01",
+  "capability_id": "carriage-move",
+  "plan_id": "plan-01",
   "target": {
     "mode": "device",
-    "engine_id": "device-controller",
-    "instance_id": "device-01",
-    "object_id": "actuator-01",
-    "locator": "device://device-01/actuator-01"
+    "engine_id": "demo-plotter",
+    "instance_id": "plotter-01",
+    "object_id": "pen-carriage",
+    "locator": "device://plotter-01/pen-carriage"
   },
   "authorization_scope_id": "scope-isolated-01",
   "effects": [
     "physical"
   ],
   "snapshot_before": {
-    "id": "snapshot-01",
+    "id": "snapshot-d1",
     "source": "device",
-    "revision": "memory-01",
-    "observed_at": "2026-10-02T00:00:00Z",
-    "dependencies": [
-      {
-        "identity": "template-01",
-        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      }
-    ]
+    "revision": "telemetry-41",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": []
   },
   "snapshot_after": {
-    "id": "snapshot-02",
+    "id": "snapshot-d2",
     "source": "device",
-    "revision": "memory-02",
-    "observed_at": "2026-10-02T00:00:01Z",
-    "dependencies": [
-      {
-        "identity": "template-01",
-        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      }
-    ]
+    "revision": "telemetry-42",
+    "observed_at": "2026-10-04T00:00:02Z",
+    "dependencies": []
   },
   "outcome": {
     "execution": "completed",
     "change": "applied",
     "persistence": "not_applicable",
+    "delivery": "not_applicable",
     "verification": {
       "status": "passed",
       "scope": "declared_operation_postconditions",
-      "snapshot_id": "snapshot-02",
+      "snapshot_id": "snapshot-d2",
       "coverage": "complete",
       "checks": [
         {
-          "id": "check-object-readback",
+          "id": "check-position",
           "status": "passed",
           "required": true,
-          "evidence_ref": "evidence://synthetic/readback-01"
+          "evidence_ref": "evidence://synthetic/telemetry-42"
         }
       ],
-      "not_checked": [
-        {
-          "id": "domain-suitability",
-          "required": false,
-          "reason": "Outside the declared operation scope."
-        }
-      ],
+      "not_checked": [],
       "evidence_refs": [
-        "evidence://synthetic/readback-01"
+        "evidence://synthetic/telemetry-42"
       ]
     }
   },
+  "failed_stage": null,
   "changed_items": [
     {
-      "id": "object-02",
-      "change": "created",
-      "evidence_ref": "evidence://synthetic/readback-01"
+      "id": "pen-carriage",
+      "change": "moved to x=120 mm",
+      "evidence_ref": "evidence://synthetic/telemetry-42"
     }
   ],
   "artifacts": [],
+  "deliveries": [],
   "recovery": {
     "action": "none",
-    "reason": "Declared in-memory operation verified; save was not requested.",
+    "reason": "Position read back from fresh telemetry.",
     "supported": true
   }
 }

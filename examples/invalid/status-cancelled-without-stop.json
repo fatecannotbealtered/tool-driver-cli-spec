@@ -1,73 +1,60 @@
 {
-  "schema_version": "1.0",
-  "spec_version": "1.0.0",
   "operation_id": "operation-01",
-  "request_id": "request-submit-01",
+  "capability_id": "feature-create",
+  "request_id": null,
+  "plan_id": "plan-01",
   "target": {
     "mode": "session",
-    "engine_id": "editor-engine",
+    "engine_id": "demo-cad",
     "instance_id": "instance-01",
-    "object_id": "document-01",
-    "locator": "session://instance-01/document-01"
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
   },
   "status": "cancelled",
-  "stage": "stopped",
-  "observed_at": "2026-10-03T00:00:10Z",
-  "started_at": "2026-10-03T00:00:00Z",
+  "stage": "apply",
+  "observed_at": "2026-10-04T00:00:10Z",
+  "started_at": "2026-10-04T00:00:00Z",
+  "finished_at": null,
   "wait_timeout_ms": 10000,
   "execution_deadline": null,
+  "progress": null,
   "record": {
     "availability": "available",
-    "retain_until": "2026-10-10T00:00:00Z",
+    "retain_until": "2026-10-11T00:00:00Z",
     "survives_cli_exit": true,
     "survives_reconnect": true,
     "survives_instance_restart": false,
     "limitations": [
-      "Synthetic example; no application was run.",
-      "No native execution deadline is provided.",
-      "Application restart can make the native task outcome unknown."
+      "Synthetic example; no application was run."
     ]
   },
   "commands": {
     "lookup": {
       "argv": [
         "operation",
-        "status",
+        "show",
         "--id",
         "operation-01"
       ],
       "read_only": true
     },
-    "result": {
-      "argv": [
-        "operation",
-        "result",
-        "--id",
-        "operation-01"
-      ],
-      "read_only": true
-    },
-    "cancel": {
-      "argv": [
-        "operation",
-        "cancel",
-        "--id",
-        "operation-01"
-      ],
-      "read_only": false
-    }
+    "result": null,
+    "cancel": null
   },
   "blocked": null,
+  "resolution": null,
   "stop_observed": false,
   "stop_evidence_ref": null,
   "receipt": {
     "operation_id": "operation-01",
+    "capability_id": "feature-create",
+    "plan_id": "plan-01",
     "target": {
       "mode": "session",
-      "engine_id": "editor-engine",
+      "engine_id": "demo-cad",
       "instance_id": "instance-01",
-      "object_id": "document-01",
-      "locator": "session://instance-01/document-01"
+      "object_id": "part-01",
+      "locator": "session://instance-01/part-01"
     },
     "authorization_scope_id": "scope-isolated-01",
     "effects": [
@@ -77,7 +64,7 @@
       "id": "snapshot-01",
       "source": "live",
       "revision": "memory-01",
-      "observed_at": "2026-10-02T00:00:00Z",
+      "observed_at": "2026-10-04T00:00:00Z",
       "dependencies": [
         {
           "identity": "template-01",
@@ -86,10 +73,10 @@
       ]
     },
     "snapshot_after": {
-      "id": "snapshot-02",
+      "id": "snapshot-01",
       "source": "live",
-      "revision": "memory-02",
-      "observed_at": "2026-10-02T00:00:01Z",
+      "revision": "memory-01",
+      "observed_at": "2026-10-04T00:00:00Z",
       "dependencies": [
         {
           "identity": "template-01",
@@ -99,35 +86,26 @@
     },
     "outcome": {
       "execution": "interrupted",
-      "change": "partial",
-      "persistence": "unsaved",
+      "change": "not_applied",
+      "persistence": "unchanged",
+      "delivery": "not_applicable",
       "verification": {
-        "status": "incomplete",
+        "status": "not_run",
         "scope": "declared_operation_postconditions",
-        "snapshot_id": "snapshot-02",
-        "coverage": "partial",
+        "snapshot_id": null,
+        "coverage": "none",
         "checks": [],
-        "not_checked": [
-          {
-            "id": "remaining-step",
-            "required": true,
-            "reason": "Skipped after observed cancellation."
-          }
-        ],
+        "not_checked": [],
         "evidence_refs": []
       }
     },
-    "changed_items": [
-      {
-        "id": "object-02",
-        "change": "created",
-        "evidence_ref": "evidence://synthetic/readback-01"
-      }
-    ],
+    "failed_stage": "apply",
+    "changed_items": [],
     "artifacts": [],
+    "deliveries": [],
     "recovery": {
-      "action": "inspect",
-      "reason": "Execution stopped after partial application; no rollback is claimed.",
+      "action": "none",
+      "reason": "Stopped before the feature was created.",
       "supported": true
     }
   }

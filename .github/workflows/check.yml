@@ -20,11 +20,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install validation dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt -r requirements-workflow.txt
+      - name: Check Python syntax and undefined names
+        run: python -m ruff check --isolated --no-cache --select E9,F63,F7,F82 scripts packages tests examples/engineering starter/common
       - name: Validate specification and examples
         run: python scripts/check_spec.py
-      - name: Exercise command and delivery boundaries
-        run: python -m unittest discover -s tests -v
       - name: Generate and check product declarations
         run: |
           python scripts/generate_product.py --registry examples/development/product-registry.json --output dist/generated-product
@@ -36,3 +36,34 @@ jobs:
         run: |
           spec_version=$(cat VERSION)
           python scripts/verify_spec_bundle.py --bundle "dist/tool-driver-cli-spec-${spec_version}.zip" --checksum "dist/tool-driver-cli-spec-${spec_version}.sha256"
+      - name: Consume package and retain acceptance (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          spec_version=$(cat VERSION)
+          browser=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          test -n "$browser"
+          digest=$(cut -d ' ' -f1 "dist/tool-driver-cli-spec-${spec_version}.sha256")
+          python scripts/check_graduation.py --audit --browser "$browser" --output dist/acceptance \
+            --bundle "dist/tool-driver-cli-spec-${spec_version}.zip" --expected-sha256 "$digest"
+      - name: Consume package and retain acceptance (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $specVersion = (Get-Content VERSION).Trim()
+          $candidates = @("$env:ProgramFiles/Google/Chrome/Application/chrome.exe", "${env:ProgramFiles(x86)}/Microsoft/Edge/Application/msedge.exe")
+          $browser = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$browser) { throw 'No preinstalled supported browser; independent consumption cannot be skipped.' }
+          $digest = (Get-Content "dist/tool-driver-cli-spec-$specVersion.sha256").Split(' ')[0]
+          python scripts/check_graduation.py --audit --browser $browser --output dist/acceptance --bundle "dist/tool-driver-cli-spec-$specVersion.zip" --expected-sha256 $digest
+      - name: Retain exact package acceptance artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: specification-acceptance-${{ runner.os }}
+          path: |
+            dist/tool-driver-cli-spec-*.zip
+            dist/tool-driver-cli-spec-*.manifest.json
+            dist/tool-driver-cli-spec-*.sha256
+            dist/acceptance/
+          if-no-files-found: warn

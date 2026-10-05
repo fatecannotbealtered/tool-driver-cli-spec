@@ -1,41 +1,55 @@
 {
-  "evidence_id": "evidence-contract-01",
+  "evidence_id": "evidence-development-01",
   "spec_version": "1.0.0",
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "evidence_context": "development",
-  "kind": "contract",
-  "source_commit": "0000000000000000000000000000000000000000",
-  "source_fingerprint_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "kind": "simulated_adapter",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "package_sha256": null,
-  "recorded_at": "2026-10-02T00:00:00Z",
+  "recorded_at": "2026-10-04T00:00:00Z",
   "environment": {
-    "platform": "synthetic",
-    "arch": "any",
+    "platform": "windows",
+    "arch": "amd64",
     "components": [
       {
-        "name": "fixture-validator",
-        "role": "validator",
-        "version": "1.0.0",
-        "build_id": null,
+        "name": "demo-cad-cli",
+        "role": "cli",
+        "version": "0.4.0",
+        "build_id": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "location": "disk",
         "identity_status": "observed"
+      },
+      {
+        "name": "simulated adapter",
+        "role": "adapter",
+        "version": "0.4.0",
+        "build_id": null,
+        "location": "disk",
+        "identity_status": "unavailable",
+        "reason": "Test double; no build identity."
       }
     ]
   },
-  "input_fingerprint_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "input_fingerprint_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "target": null,
   "snapshot_id": null,
   "capabilities": [
-    "response-envelope"
+    "feature-create"
+  ],
+  "commands": [
+    "demo-cad-cli feature create --part p --sketch s --depth 10 --dry-run"
   ],
   "checks": [
     {
-      "id": "parse-json",
+      "id": "contract-envelope",
       "status": "passed",
       "required": true,
-      "evidence_ref": "evidence://synthetic/parse-json"
+      "evidence_ref": "tests/test_contract.py::test_envelope"
     }
   ],
   "limitations": [
-    "Synthetic structure only; no real application or device has been verified."
+    "Simulated adapter: protocol behaviour only; no application, persistence or artifact was verified.",
+    "No product package was built."
   ]
 }

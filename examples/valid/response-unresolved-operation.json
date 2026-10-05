@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_CONFLICT",
+    "message": "An earlier operation on part-01 has an unknown outcome.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "conflict": "unresolved_operation",
+      "active_operation": "operation-01",
+      "lookup": "demo-cad-cli operation show --id operation-01",
+      "lookup_argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-01"
+      ],
+      "next_action": "Run the lookup, read back part-01, record the result with operation resolve, then plan again."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

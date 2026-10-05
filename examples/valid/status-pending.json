@@ -1,0 +1,49 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "feature-create",
+  "request_id": null,
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "status": "pending",
+  "stage": null,
+  "observed_at": "2026-10-04T00:00:10Z",
+  "started_at": null,
+  "finished_at": null,
+  "wait_timeout_ms": 10000,
+  "execution_deadline": null,
+  "progress": null,
+  "record": {
+    "availability": "available",
+    "retain_until": "2026-10-11T00:00:00Z",
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": false,
+    "limitations": [
+      "Synthetic example; no application was run."
+    ]
+  },
+  "commands": {
+    "lookup": {
+      "argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-01"
+      ],
+      "read_only": true
+    },
+    "result": null,
+    "cancel": null
+  },
+  "blocked": null,
+  "resolution": null,
+  "stop_observed": false,
+  "stop_evidence_ref": null,
+  "receipt": null
+}

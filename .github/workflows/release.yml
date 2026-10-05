@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -24,17 +25,53 @@ jobs:
           test "$GITHUB_REF_NAME" = "v${spec_version}"
           test "$(cat STATUS)" = stable
       - name: Install checking dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt -r requirements-workflow.txt
+      - name: Check Python syntax and undefined names
+        run: python -m ruff check --isolated --no-cache --select E9,F63,F7,F82 scripts packages tests examples/engineering starter/common
       - name: Validate specification
         run: python scripts/check_spec.py
-      - name: Run command and delivery tests
-        run: python -m unittest discover -s tests -v
       - name: Build and verify committed bundle
         shell: bash
         run: |
           spec_version=$(cat VERSION)
           python scripts/build_spec_bundle.py
           python scripts/verify_spec_bundle.py --bundle "dist/tool-driver-cli-spec-${spec_version}.zip" --checksum "dist/tool-driver-cli-spec-${spec_version}.sha256"
+      - name: Consume exact package and retain independent evidence
+        shell: bash
+        run: |
+          spec_version=$(cat VERSION)
+          browser=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          test -n "$browser"
+          digest=$(cut -d ' ' -f1 "dist/tool-driver-cli-spec-${spec_version}.sha256")
+          python scripts/check_graduation.py --audit --browser "$browser" --output dist/acceptance \
+            --bundle "dist/tool-driver-cli-spec-${spec_version}.zip" --expected-sha256 "$digest"
+          python -c "import json; from pathlib import Path; r=json.loads(Path('dist/acceptance/acceptance.json').read_text()); assert r['release_ready'], 'release acceptance incomplete'"
+          python -m zipfile -c "dist/specification-acceptance-${spec_version}.zip" dist/acceptance
+      - name: Sign and verify release checksum identity
+        shell: bash
+        run: |
+          spec_version=$(cat VERSION)
+          sha256sum "dist/tool-driver-cli-spec-${spec_version}.zip" \
+            "dist/tool-driver-cli-spec-${spec_version}.manifest.json" \
+            "dist/specification-acceptance-${spec_version}.zip" > dist/checksums.txt
+          python -m sigstore sign --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
+          python -m sigstore verify identity --bundle dist/checksums.txt.sigstore.json \
+            --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --cert-oidc-issuer https://token.actions.githubusercontent.com dist/checksums.txt
+      - name: Release notes from CHANGELOG
+        shell: bash
+        run: |
+          spec_version=$(cat VERSION)
+          awk -v version="$spec_version" '
+            index($0, "## " version " ") == 1 || $0 == "## " version { printing = 1; next }
+            /^## / && printing { exit }
+            printing { print }
+          ' CHANGELOG.md > dist/release-notes.md
+          test -s dist/release-notes.md
+          if grep -q "未发布" <(grep -m1 "^## ${spec_version}" CHANGELOG.md); then
+            echo "CHANGELOG still marks ${spec_version} as unreleased" >&2
+            exit 1
+          fi
       - name: Publish immutable version assets
         shell: bash
         env:
@@ -45,5 +82,7 @@ jobs:
             "dist/tool-driver-cli-spec-${spec_version}.zip" \
             "dist/tool-driver-cli-spec-${spec_version}.manifest.json" \
             "dist/tool-driver-cli-spec-${spec_version}.sha256" \
+            "dist/specification-acceptance-${spec_version}.zip" \
+            dist/checksums.txt dist/checksums.txt.sigstore.json \
             --verify-tag --title "tool-driver-cli-spec ${spec_version}" \
-            --notes-file docs/RELEASE-NOTES.md
+            --notes-file dist/release-notes.md

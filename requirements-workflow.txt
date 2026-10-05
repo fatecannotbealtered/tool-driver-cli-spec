@@ -1,0 +1,4 @@
+# Optional validation/signing tools. Runtime specification checks use requirements-dev.txt.
+pip-audit==2.10.0
+ruff==0.15.16
+sigstore==4.3.0

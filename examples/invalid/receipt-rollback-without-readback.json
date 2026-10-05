@@ -1,0 +1,70 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "feature-create",
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "change"
+  ],
+  "snapshot_before": {
+    "id": "snapshot-01",
+    "source": "live",
+    "revision": "memory-01",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "snapshot_after": {
+    "id": "snapshot-02",
+    "source": "live",
+    "revision": "memory-02",
+    "observed_at": "2026-10-04T00:00:01Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "outcome": {
+    "execution": "interrupted",
+    "change": "rolled_back",
+    "persistence": "unsaved",
+    "delivery": "not_applicable",
+    "verification": {
+      "status": "not_run",
+      "scope": "declared_operation_postconditions",
+      "snapshot_id": null,
+      "coverage": "none",
+      "checks": [],
+      "not_checked": [],
+      "evidence_refs": []
+    }
+  },
+  "failed_stage": "apply",
+  "changed_items": [
+    {
+      "id": "feature-07",
+      "change": "created",
+      "evidence_ref": "evidence://synthetic/readback-01"
+    }
+  ],
+  "artifacts": [],
+  "deliveries": [],
+  "recovery": {
+    "action": "none",
+    "reason": "Declared in-memory change verified; saving was not requested.",
+    "supported": true
+  }
+}

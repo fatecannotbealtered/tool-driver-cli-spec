@@ -1,0 +1,82 @@
+{
+  "items": [
+    {
+      "target": "part-a",
+      "ok": true
+    },
+    {
+      "target": "part-b",
+      "ok": false,
+      "operation_id": "operation-b",
+      "receipt": {
+        "operation_id": "operation-b",
+        "capability_id": "feature-create",
+        "plan_id": "plan-01",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-b",
+          "locator": "session://instance-01/part-b"
+        },
+        "authorization_scope_id": "scope-isolated-01",
+        "effects": [
+          "change"
+        ],
+        "snapshot_before": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "snapshot_after": null,
+        "outcome": {
+          "execution": "failed",
+          "change": "not_applied",
+          "persistence": "unchanged",
+          "delivery": "not_applicable",
+          "verification": {
+            "status": "not_run",
+            "scope": "declared_operation_postconditions",
+            "snapshot_id": null,
+            "coverage": "none",
+            "checks": [],
+            "not_checked": [],
+            "evidence_refs": []
+          }
+        },
+        "failed_stage": "apply",
+        "changed_items": [],
+        "artifacts": [],
+        "deliveries": [],
+        "recovery": {
+          "action": "inspect",
+          "reason": "The application rejected the feature on part-b.",
+          "supported": true
+        }
+      },
+      "error": {
+        "code": "E_NATIVE_FAILURE",
+        "retryable": false
+      }
+    },
+    {
+      "target": "part-c",
+      "ok": false,
+      "skipped_reason": "--continue-on-error false stopped after part-b."
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "succeeded": 1,
+    "failed": 1,
+    "skipped": 1
+  },
+  "continue_on_error": false
+}

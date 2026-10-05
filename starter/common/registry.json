@@ -1,608 +1,95 @@
 {
-  "registry_version": "1.0",
+  "registry_version": "2.0",
   "name": "{{NAME}}",
   "product_version": "{{VERSION}}",
-  "entrypoint": "{{NAME}}",
-  "description": "Draft native-driver seed with explicit unsupported adapter boundaries.",
-  "error_codes": [
-    {
-      "code": "E_VALIDATION",
-      "exit_code": 2,
-      "description": "Invalid input; no native call was made."
-    },
-    {
-      "code": "E_UNSUPPORTED",
-      "exit_code": 3,
-      "description": "The native adapter is not implemented."
-    },
-    {
-      "code": "E_OUTCOME_UNKNOWN",
-      "exit_code": 4,
-      "description": "The backend result is unknown; do not blindly resend."
-    },
-    {
-      "code": "E_CONFIG",
-      "exit_code": 5,
-      "description": "Missing or invalid configuration."
-    },
-    {
-      "code": "E_INTEGRITY",
-      "exit_code": 6,
-      "description": "Managed vendor data has drifted."
-    },
-    {
-      "code": "E_IO",
-      "exit_code": 1,
-      "description": "Input or output I/O failed."
-    },
-    {
-      "code": "E_NATIVE_FAILURE",
-      "exit_code": 7,
-      "description": "Native execution failed."
-    },
-    {
-      "code": "E_BACKEND_UNAVAILABLE",
-      "exit_code": 3,
-      "description": "Native backend is unavailable."
-    },
-    {
-      "code": "E_INTERNAL",
-      "exit_code": 1,
-      "description": "A protocol component failed."
-    }
-  ],
+  "description": "{{NAME}} drives a {{PROFILE}}-mode target for AI agents. The native adapter is not implemented yet.",
+  "risk_tier": "T1",
+  "changelog": "CHANGELOG.md",
+  "record": {
+    "store": "SQLite file in the tool state directory",
+    "retain_days": 30,
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": true,
+    "limitations": ["A synchronous apply whose CLI process ends reports unknown once its lease expires."]
+  },
+  "builtins": {
+    "maturity": "experimental",
+    "evidence_refs": []
+  },
   "schemas": {
-    "urn:{{NAME}}:empty:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:empty:1.0",
-      "type": "object",
-      "properties": {},
-      "required": [],
-      "additionalProperties": false
+    "target_view": {
+      "shape": "object",
+      "fields": ["target", "snapshot", "properties"],
+      "untrusted_fields": ["properties"]
     },
-    "urn:{{NAME}}:target-request:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:target-request:1.0",
-      "type": "object",
-      "properties": {
-        "target_id": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "target_id"
-      ],
-      "additionalProperties": false
-    },
-    "urn:{{NAME}}:context-data:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:context-data:1.0",
-      "type": "object",
-      "properties": {
-        "product": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "version": {
-              "type": "string",
-              "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$"
-            }
-          },
-          "required": [
-            "name",
-            "version"
-          ],
-          "additionalProperties": false
-        },
-        "profile": {
-          "enum": [
-            "{{PROFILE}}"
-          ]
-        },
-        "native": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "enum": [
-                "not_connected",
-                "connected",
-                "unknown"
-              ]
-            },
-            "application_version": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "minLength": 1
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "status",
-            "application_version",
-            "reason"
-          ],
-          "additionalProperties": false
-        },
-        "limitations": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      },
-      "required": [
-        "product",
-        "profile",
-        "native",
-        "limitations"
-      ],
-      "additionalProperties": false
-    },
-    "urn:{{NAME}}:doctor-data:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:doctor-data:1.0",
-      "type": "object",
-      "properties": {
-        "product": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "version": {
-              "type": "string",
-              "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$"
-            }
-          },
-          "required": [
-            "name",
-            "version"
-          ],
-          "additionalProperties": false
-        },
-        "profile": {
-          "enum": [
-            "{{PROFILE}}"
-          ]
-        },
-        "native": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "enum": [
-                "not_connected",
-                "connected",
-                "unknown"
-              ]
-            },
-            "application_version": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "minLength": 1
-            },
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "status",
-            "application_version",
-            "reason"
-          ],
-          "additionalProperties": false
-        },
-        "limitations": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "ready": {
-          "type": "boolean"
-        },
-        "checks": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "status": {
-                "enum": [
-                  "not_run",
-                  "passed",
-                  "failed",
-                  "incomplete",
-                  "not_applicable"
-                ]
-              },
-              "reason": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": [
-              "id",
-              "status",
-              "reason"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "product",
-        "profile",
-        "native",
-        "limitations",
-        "ready",
-        "checks"
-      ],
-      "additionalProperties": false
-    },
-    "urn:{{NAME}}:context-response:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:context-response:1.0",
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "urn:tool-driver-cli-spec:response:1.0"
-        },
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": true
-              }
-            },
-            "required": [
-              "ok"
-            ]
-          },
-          "then": {
-            "properties": {
-              "data": {
-                "$ref": "urn:{{NAME}}:context-data:1.0"
-              }
-            },
-            "required": [
-              "data"
-            ]
-          }
-        }
-      ]
-    },
-    "urn:{{NAME}}:doctor-response:1.0": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:{{NAME}}:doctor-response:1.0",
-      "type": "object",
-      "allOf": [
-        {
-          "$ref": "urn:tool-driver-cli-spec:response:1.0"
-        },
-        {
-          "if": {
-            "properties": {
-              "ok": {
-                "const": true
-              }
-            },
-            "required": [
-              "ok"
-            ]
-          },
-          "then": {
-            "properties": {
-              "data": {
-                "$ref": "urn:{{NAME}}:doctor-data:1.0"
-              }
-            },
-            "required": [
-              "data"
-            ]
-          }
-        }
-      ]
+    "receipt": {
+      "shape": "object",
+      "fields": ["receipt", "preview", "confirm_token", "expires_at"],
+      "untrusted_fields": ["receipt.changed_items"],
+      "json_schema": {
+        "$ref": "urn:tool-driver-cli-spec:receipt:2.0"
+      }
     }
   },
   "commands": [
     {
-      "id": "context",
-      "path": "context",
-      "description": "Development stub; no real application or device is connected.",
-      "phases": [
-        "observe"
+      "path": "target inspect",
+      "type": "read",
+      "description": "Observe one explicitly named target and its revision without changing it.",
+      "params": [
+        {"name": "target-id", "type": "string", "required": true, "multiple": false, "description": "the target to observe; never chosen by window focus"}
       ],
-      "effects": [
-        "observe"
-      ],
-      "modes": [
-        "{{PROFILE}}"
-      ],
-      "maturity": "draft",
-      "environments": [
-        {
-          "application": "native-adapter-placeholder",
-          "application_version": "unconfigured",
-          "platform": "any",
-          "arch": "any",
-          "adapter_version": "{{VERSION}}",
-          "mode": "{{PROFILE}}",
-          "limitations": [
-            "Descriptor only; no native environment has been observed or verified."
-          ]
-        }
-      ],
-      "limits": [
-        "The starter never opens, creates, modifies or saves a native target."
-      ],
-      "recovery": {
-        "atomicity": "none",
-        "undo": false,
-        "idempotent": false,
-        "cancel": false
-      },
-      "request_schema": "urn:{{NAME}}:empty:1.0",
-      "result_schema": "urn:{{NAME}}:context-response:1.0",
-      "parameters": [],
-      "examples": [
-        {
-          "argv": [
-            "context"
-          ],
-          "description": "The native stub rejects execution; context and doctor report unavailable facts.",
-          "phase": "observe",
-          "request": {}
-        }
-      ],
-      "error_codes": [
-        "E_VALIDATION",
-        "E_UNSUPPORTED",
-        "E_OUTCOME_UNKNOWN",
-        "E_CONFIG",
-        "E_INTEGRITY",
-        "E_IO",
-        "E_NATIVE_FAILURE",
-        "E_BACKEND_UNAVAILABLE",
-        "E_INTERNAL"
-      ],
-      "evidence_refs": []
+      "output_schema": "target_view",
+      "examples": ["{{NAME}} target inspect --target-id <target-id> --compact"],
+      "driver": {
+        "capability_id": "target-inspect",
+        "effects": ["observe"],
+        "phases": ["observe"],
+        "modes": ["{{PROFILE}}"],
+        "maturity": "draft",
+        "environments": [
+          {"application": "native application (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
+           "adapter_version": "{{VERSION}}", "mode": "{{PROFILE}}", "limitations": ["Declaration only; the adapter refuses every native call."]}
+        ],
+        "limits": ["The starter adapter refuses this command with E_UNSUPPORTED."],
+        "recovery": {"atomicity": "none", "undo": false, "idempotent": true, "cancel": false},
+        "profiles": ["core"],
+        "error_codes": ["E_USAGE", "E_VALIDATION", "E_NOT_FOUND", "E_UNSUPPORTED", "E_BACKEND_UNAVAILABLE", "E_HUMAN_REQUIRED"],
+        "evidence_refs": []
+      }
     },
     {
-      "id": "doctor",
-      "path": "doctor",
-      "description": "Development stub; no real application or device is connected.",
-      "phases": [
-        "observe"
+      "path": "target apply",
+      "type": "write",
+      "description": "Apply one declared change to an explicitly named target, then read it back.",
+      "params": [
+        {"name": "target-id", "type": "string", "required": true, "multiple": false, "description": "the target to change"},
+        {"name": "change", "type": "json", "required": true, "multiple": false, "description": "the change, as JSON (inline, @file or - for stdin)"}
       ],
-      "effects": [
-        "observe"
-      ],
-      "modes": [
-        "{{PROFILE}}"
-      ],
-      "maturity": "draft",
-      "environments": [
-        {
-          "application": "native-adapter-placeholder",
-          "application_version": "unconfigured",
-          "platform": "any",
-          "arch": "any",
-          "adapter_version": "{{VERSION}}",
-          "mode": "{{PROFILE}}",
-          "limitations": [
-            "Descriptor only; no native environment has been observed or verified."
-          ]
-        }
-      ],
-      "limits": [
-        "The starter never opens, creates, modifies or saves a native target."
-      ],
-      "recovery": {
-        "atomicity": "none",
-        "undo": false,
-        "idempotent": false,
-        "cancel": false
-      },
-      "request_schema": "urn:{{NAME}}:empty:1.0",
-      "result_schema": "urn:{{NAME}}:doctor-response:1.0",
-      "parameters": [],
+      "output_schema": "receipt",
       "examples": [
-        {
-          "argv": [
-            "doctor"
-          ],
-          "description": "The native stub rejects execution; context and doctor report unavailable facts.",
-          "phase": "observe",
-          "request": {}
-        }
+        "{{NAME}} target apply --target-id <target-id> --change @change.json --dry-run",
+        "{{NAME}} target apply --target-id <target-id> --change @change.json --confirm <confirm_token>"
       ],
-      "error_codes": [
-        "E_VALIDATION",
-        "E_UNSUPPORTED",
-        "E_OUTCOME_UNKNOWN",
-        "E_CONFIG",
-        "E_INTEGRITY",
-        "E_IO",
-        "E_NATIVE_FAILURE",
-        "E_BACKEND_UNAVAILABLE",
-        "E_INTERNAL"
-      ],
-      "evidence_refs": []
-    },
-    {
-      "id": "native-inspect",
-      "path": "native inspect",
-      "description": "Development stub; no real application or device is connected.",
-      "phases": [
-        "observe"
-      ],
-      "effects": [
-        "observe"
-      ],
-      "modes": [
-        "{{PROFILE}}"
-      ],
-      "maturity": "draft",
-      "environments": [
-        {
-          "application": "native-adapter-placeholder",
-          "application_version": "unconfigured",
-          "platform": "any",
-          "arch": "any",
-          "adapter_version": "{{VERSION}}",
-          "mode": "{{PROFILE}}",
-          "limitations": [
-            "Descriptor only; no native environment has been observed or verified."
-          ]
-        }
-      ],
-      "limits": [
-        "The starter never opens, creates, modifies or saves a native target."
-      ],
-      "recovery": {
-        "atomicity": "none",
-        "undo": false,
-        "idempotent": false,
-        "cancel": false
-      },
-      "request_schema": "urn:{{NAME}}:target-request:1.0",
-      "result_schema": "urn:tool-driver-cli-spec:response:1.0",
-      "parameters": [
-        {
-          "name": "--target-id",
-          "location": "option",
-          "binding": "/properties/target_id",
-          "input_pointer": "/target_id",
-          "required": true,
-          "description": "An explicit target identity; it is data and never an executable instruction.",
-          "encoding": "scalar"
-        }
-      ],
-      "examples": [
-        {
-          "argv": [
-            "native",
-            "inspect",
-            "--target-id",
-            "sample-target"
-          ],
-          "description": "The native stub rejects execution; context and doctor report unavailable facts.",
-          "phase": "observe",
-          "request": {
-            "target_id": "sample-target"
-          }
-        }
-      ],
-      "error_codes": [
-        "E_VALIDATION",
-        "E_UNSUPPORTED",
-        "E_OUTCOME_UNKNOWN",
-        "E_CONFIG",
-        "E_INTEGRITY",
-        "E_IO",
-        "E_NATIVE_FAILURE",
-        "E_BACKEND_UNAVAILABLE",
-        "E_INTERNAL"
-      ],
-      "evidence_refs": []
-    },
-    {
-      "id": "native-apply",
-      "path": "native apply",
-      "description": "Development stub; no real application or device is connected.",
-      "phases": [
-        "apply"
-      ],
-      "effects": [
-        "change"
-      ],
-      "modes": [
-        "{{PROFILE}}"
-      ],
-      "maturity": "draft",
-      "environments": [
-        {
-          "application": "native-adapter-placeholder",
-          "application_version": "unconfigured",
-          "platform": "any",
-          "arch": "any",
-          "adapter_version": "{{VERSION}}",
-          "mode": "{{PROFILE}}",
-          "limitations": [
-            "Descriptor only; no native environment has been observed or verified."
-          ]
-        }
-      ],
-      "limits": [
-        "The starter never opens, creates, modifies or saves a native target."
-      ],
-      "recovery": {
-        "atomicity": "none",
-        "undo": false,
-        "idempotent": false,
-        "cancel": false
-      },
-      "request_schema": "urn:{{NAME}}:target-request:1.0",
-      "result_schema": "urn:tool-driver-cli-spec:response:1.0",
-      "parameters": [
-        {
-          "name": "--target-id",
-          "location": "option",
-          "binding": "/properties/target_id",
-          "input_pointer": "/target_id",
-          "required": true,
-          "description": "An explicit target identity; it is data and never an executable instruction.",
-          "encoding": "scalar"
-        }
-      ],
-      "examples": [
-        {
-          "argv": [
-            "native",
-            "apply",
-            "--target-id",
-            "sample-target",
-            "--request-id",
-            "caller-known-example"
-          ],
-          "description": "The native stub rejects execution; context and doctor report unavailable facts.",
-          "phase": "apply",
-          "request": {
-            "target_id": "sample-target"
-          }
-        }
-      ],
-      "error_codes": [
-        "E_VALIDATION",
-        "E_UNSUPPORTED",
-        "E_OUTCOME_UNKNOWN",
-        "E_CONFIG",
-        "E_INTEGRITY",
-        "E_IO",
-        "E_NATIVE_FAILURE",
-        "E_BACKEND_UNAVAILABLE",
-        "E_INTERNAL"
-      ],
-      "evidence_refs": []
+      "driver": {
+        "capability_id": "target-apply",
+        "effects": ["change"],
+        "phases": ["plan", "apply"],
+        "modes": ["{{PROFILE}}"],
+        "maturity": "draft",
+        "environments": [
+          {"application": "native application (not configured)", "application_version": "unconfigured", "platform": "any", "arch": "any",
+           "adapter_version": "{{VERSION}}", "mode": "{{PROFILE}}", "limitations": ["Declaration only; the adapter refuses every native call."]}
+        ],
+        "limits": ["The starter adapter refuses this command with E_UNSUPPORTED."],
+        "recovery": {"atomicity": "unknown", "undo": false, "idempotent": false, "cancel": false},
+        "profiles": ["core"],
+        "error_codes": ["E_USAGE", "E_VALIDATION", "E_FORBIDDEN", "E_CONFIRMATION_REQUIRED", "E_CONFLICT", "E_UNSUPPORTED", "E_BUSY",
+                        "E_BACKEND_UNAVAILABLE", "E_NATIVE_FAILURE", "E_PARTIAL", "E_OUTCOME_UNKNOWN", "E_VERIFY_FAILED",
+                        "E_VERIFY_INCOMPLETE", "E_HUMAN_REQUIRED"],
+        "evidence_refs": []
+      }
     }
   ]
 }

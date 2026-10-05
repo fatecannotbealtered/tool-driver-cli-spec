@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_HUMAN_REQUIRED",
+    "message": "The application is showing a licence sign-in window.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "action": "sign_in",
+      "blocked_by": "Sign In - Demo CAD Licensing",
+      "resume": "demo-cad-cli doctor",
+      "resume_argv": [
+        "doctor"
+      ],
+      "next_action": "Tell the user to sign in to the licence window, wait for them, then run the resume command.",
+      "_untrusted": [
+        "blocked_by"
+      ]
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

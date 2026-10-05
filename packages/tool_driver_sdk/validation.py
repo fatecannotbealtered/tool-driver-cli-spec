@@ -169,13 +169,19 @@ class ContractValidator:
         return registry
 
     def validate(self, kind: str, value):
+        normalized = self.validate_shape(kind, value)
+        name = kind.removesuffix(".schema.json")
+        errors = self._semantic.semantic_errors(name, normalized)
+        if errors:
+            raise ContractValidationError(errors)
+        return normalized
+
+    def validate_shape(self, kind: str, value):
+        """Check an adapter fragment's Schema before complete-response semantic validation."""
         name = kind.removesuffix(".schema.json")
         if name not in self._names:
             raise ContractError("unknown public Schema")
         normalized = self.validate_schema(self._names[name], value, self.schemas)
-        errors = self._semantic.semantic_errors(name, normalized)
-        if errors:
-            raise ContractValidationError(errors)
         return normalized
 
     def validate_schema(self, identity: str, value, schemas: dict):
@@ -184,7 +190,7 @@ class ContractValidator:
         normalized = clone_json(value)
         try:
             checked = Draft202012Validator(schemas[identity], registry=self.catalog(schemas), format_checker=FormatChecker())
-            errors = [f"constraint {error.validator} failed at depth {len(error.absolute_path)}" for error in checked.iter_errors(normalized)]
+            errors = [f"{'/'.join(map(str, error.absolute_path)) or '(root)'}: constraint {error.validator} failed" for error in checked.iter_errors(normalized)]
         except (Unresolvable, RecursionError) as exc:
             raise ContractError("Schema reference must resolve in the offline catalog") from exc
         if errors:
@@ -193,3 +199,19 @@ class ContractValidator:
 
     def validate_reference(self, reference):
         return self.validate("reference", reference)
+
+    def receipt_rule(self, receipt: dict) -> dict:
+        """The first matching contract.receipt_codes rule for a receipt: {when, ok, codes}."""
+        return self._semantic.receipt_rule(receipt)
+
+    def code_table(self) -> dict:
+        """Core codes from the pinned base plus driver extension codes: code -> {exit, retryable}."""
+        return self._semantic.code_table()
+
+    def validate_product(self, schema: dict, value, json_schemas: dict):
+        """Validate adapter output against a product JSON Schema that may reference public driver schemas."""
+        catalog = dict(self.schemas)
+        catalog.update(json_schemas)
+        wrapper = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:tool-driver-cli-spec:product-output:check", **schema}
+        catalog[wrapper["$id"]] = wrapper
+        return self.validate_schema(wrapper["$id"], value, catalog)

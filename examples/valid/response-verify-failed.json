@@ -1,0 +1,96 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_VERIFY_FAILED",
+    "message": "The feature was created but its depth does not read back as requested.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "dispatched",
+      "operation_id": "operation-01",
+      "receipt": {
+        "operation_id": "operation-01",
+        "capability_id": "feature-create",
+        "plan_id": "plan-01",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-01",
+          "locator": "session://instance-01/part-01"
+        },
+        "authorization_scope_id": "scope-isolated-01",
+        "effects": [
+          "change"
+        ],
+        "snapshot_before": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "snapshot_after": {
+          "id": "snapshot-02",
+          "source": "live",
+          "revision": "memory-02",
+          "observed_at": "2026-10-04T00:00:01Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "outcome": {
+          "execution": "completed",
+          "change": "applied",
+          "persistence": "unsaved",
+          "delivery": "not_applicable",
+          "verification": {
+            "status": "failed",
+            "scope": "declared_operation_postconditions",
+            "snapshot_id": "snapshot-02",
+            "coverage": "complete",
+            "checks": [
+              {
+                "id": "check-depth",
+                "status": "failed",
+                "required": true,
+                "evidence_ref": "evidence://synthetic/readback-02"
+              }
+            ],
+            "not_checked": [],
+            "evidence_refs": [
+              "evidence://synthetic/readback-02"
+            ]
+          }
+        },
+        "failed_stage": "verify",
+        "changed_items": [
+          {
+            "id": "feature-07",
+            "change": "created",
+            "evidence_ref": "evidence://synthetic/readback-01"
+          }
+        ],
+        "artifacts": [],
+        "deliveries": [],
+        "recovery": {
+          "action": "human_review",
+          "reason": "The application reports 9.5 mm instead of 10 mm.",
+          "supported": true
+        }
+      },
+      "next_action": "Inspect the feature; do not repeat the create."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

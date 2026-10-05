@@ -1,0 +1,26 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_USAGE",
+    "message": "feature create does not accept --phase.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "problem": "unknown_flag",
+      "parameter": "--phase",
+      "expected": [
+        "--part",
+        "--sketch",
+        "--depth",
+        "--name",
+        "--dry-run",
+        "--confirm"
+      ],
+      "next_action": "Use --dry-run to plan and --confirm <confirm_token> to apply; see reference --command 'feature create'."
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

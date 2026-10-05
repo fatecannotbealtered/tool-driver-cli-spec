@@ -1,0 +1,24 @@
+{
+  "scope_id": "scope-isolated-01",
+  "tool": "demo-cad-cli",
+  "granted_by": "project owner (chat instruction 2026-10-04)",
+  "granted_at": "2026-10-04T00:00:00Z",
+  "expires_at": "2026-10-05T00:00:00Z",
+  "effects": [
+    "observe",
+    "session",
+    "artifact",
+    "change",
+    "persist"
+  ],
+  "dangerous": false,
+  "roots": [],
+  "outputs": [
+    "D:/work/out"
+  ],
+  "targets": [],
+  "limits": {
+    "max_operations": 200
+  },
+  "notes": "Iterate on the copy; never touch D:/work/original."
+}

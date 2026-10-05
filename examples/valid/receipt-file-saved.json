@@ -1,22 +1,23 @@
 {
   "operation_id": "operation-01",
+  "capability_id": "part-save",
+  "plan_id": "plan-01",
   "target": {
-    "mode": "file",
-    "engine_id": "file-transformer",
-    "instance_id": null,
-    "object_id": "file-01",
-    "locator": "file:///workspace/document-01.data"
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
   },
   "authorization_scope_id": "scope-isolated-01",
   "effects": [
-    "change",
     "persist"
   ],
   "snapshot_before": {
     "id": "snapshot-01",
-    "source": "disk",
+    "source": "live",
     "revision": "memory-01",
-    "observed_at": "2026-10-02T00:00:00Z",
+    "observed_at": "2026-10-04T00:00:00Z",
     "dependencies": [
       {
         "identity": "template-01",
@@ -25,10 +26,10 @@
     ]
   },
   "snapshot_after": {
-    "id": "snapshot-02",
+    "id": "snapshot-03",
     "source": "disk",
-    "revision": "memory-02",
-    "observed_at": "2026-10-02T00:00:01Z",
+    "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "observed_at": "2026-10-04T00:00:02Z",
     "dependencies": [
       {
         "identity": "template-01",
@@ -38,44 +39,35 @@
   },
   "outcome": {
     "execution": "completed",
-    "change": "applied",
+    "change": "not_applied",
     "persistence": "saved",
+    "delivery": "not_applicable",
     "verification": {
       "status": "passed",
       "scope": "declared_operation_postconditions",
-      "snapshot_id": "snapshot-02",
+      "snapshot_id": "snapshot-03",
       "coverage": "complete",
       "checks": [
         {
-          "id": "check-object-readback",
+          "id": "check-reopen-from-disk",
           "status": "passed",
           "required": true,
-          "evidence_ref": "evidence://synthetic/readback-01"
+          "evidence_ref": "evidence://synthetic/reopen-01"
         }
       ],
-      "not_checked": [
-        {
-          "id": "domain-suitability",
-          "required": false,
-          "reason": "Outside the declared operation scope."
-        }
-      ],
+      "not_checked": [],
       "evidence_refs": [
-        "evidence://synthetic/readback-01"
+        "evidence://synthetic/reopen-01"
       ]
     }
   },
-  "changed_items": [
-    {
-      "id": "object-02",
-      "change": "created",
-      "evidence_ref": "evidence://synthetic/readback-01"
-    }
-  ],
+  "failed_stage": null,
+  "changed_items": [],
   "artifacts": [],
+  "deliveries": [],
   "recovery": {
     "action": "none",
-    "reason": "Declared in-memory operation verified; save was not requested.",
+    "reason": "Saved and reopened from disk.",
     "supported": true
   }
 }

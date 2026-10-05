@@ -1,0 +1,219 @@
+# AI 原生开源项目仓库规范
+
+
+本文定义个人所有开源项目的统一仓库标准：必备文档、模板文件、目录布局、发布约定。目标是让开十个项目长一个样，新人（含 AI Agent）进任何一个仓库都能在固定位置找到固定的东西。
+
+消费工具仓库的配套规范放在 `.agent/` 下，入口是 `AGENT.md`。
+本文作为仓库骨架标准保留在 `ai-native-cli-spec` 根目录，消费仓库不复制、
+不分叉本文件。
+
+- `AGENT.md` —— 入口/总纲：怎么在这建&扩工具，导航到本地规范与本文这份共享仓库标准。
+- `CLI-SPEC.md` —— CLI 的机器契约（工具怎么说话）。
+- `SKILL-SPEC.md` —— Skill 编写规范（Agent 怎么用）。
+- `SEC-SPEC.md` —— 安全基线（怎么不被坑、不坑人）。
+- 本文 —— 仓库骨架（项目长什么样）。
+
+## 1. 文件清单（必备矩阵）
+
+等级：**MUST** 必须有；**SHOULD** 强烈建议；**可选** 按需。
+
+| 文件 | 等级 | 职责 |
+|------|------|------|
+| `README.md` | MUST | 项目门面：是什么、装什么、怎么用 |
+| `README_zh.md` | SHOULD | 中文版（i18n 约定见 §3） |
+| `LICENSE` | MUST | 开源许可（默认 MIT） |
+| `CHANGELOG.md` | MUST | 版本变更记录（Keep a Changelog + SemVer） |
+| `CONTRIBUTING.md` | MUST | 如何贡献：环境、分支、提交、测试、PR 流程 |
+| `SECURITY.md` | MUST | 漏洞披露渠道与支持版本 |
+| `CODE_OF_CONDUCT.md` | SHOULD | 行为准则（Contributor Covenant） |
+| `NOTICE.md` | MUST† | 第三方商标 / 归属声明（†包装第三方产品时必须） |
+| `docs/COMPATIBILITY.md` | MUST† | 已验证的后端版本矩阵（†对接外部系统时必须） |
+| `docs/OPEN_SOURCE_CHECKLIST.md` | SHOULD | 首次公开 push 前的安全门禁清单 |
+| `docs/E2E.md` | SHOULD† | E2E / 集成测试环境说明（†对接外部 API 时建议） |
+| `.gitignore` | MUST | 按语言忽略产物、虚拟环境、IDE、缓存 |
+| `.github/workflows/ci.yml` | MUST | 推送 / PR 触发：lint + test |
+| `.github/workflows/release.yml` | SHOULD | tag 触发：构建 + 发布 |
+| `.github/ISSUE_TEMPLATE/` | SHOULD | bug / feature 模板 |
+| `.github/PULL_REQUEST_TEMPLATE.md` | SHOULD | PR 自检清单 |
+| `.github/dependabot.yml` | 可选 | 依赖更新 |
+| `AGENTS.md` | MUST* | 跨工具入口钩子，指向 `.agent/AGENT.md` |
+| `.agent/AGENT.md` | MUST* | AI 原生工具入口/总纲，导航到本地规范与本文这份共享仓库标准 |
+| `.agent/CLI-SPEC.md` | MUST* | CLI 工具的机器契约（*仅 CLI 类项目） |
+| `.agent/SKILL-SPEC.md` | MUST* | Skill 编写规范（*带 Skill 的项目） |
+| `.agent/SEC-SPEC.md` | MUST* | 安全基线（风险分级 + 注入/权限/凭证/供应链） |
+| `skills/<name>/SKILL.md` | MUST* | Agent Skill（*AI 原生工具必备） |
+| `skills/<name>/test-prompts.json` | SHOULD* | Skill 审查 / 达尔文式验证用回归 prompt |
+
+带 `*` 的是「AI 原生工具」专属——普通库可不带，但凡是给 Agent 用的 CLI / 工具，这几件是硬指标。带 `†` 的按场景触发：包装第三方产品（Outlook/Exchange、GitLab、Jira、Kibana 等）就必须有商标声明与兼容矩阵。
+
+## 2. README 必备骨架
+
+每个 README 按固定顺序，便于横向对比，也便于 Agent 直接接入：
+
+1. **标题 + 语言切换 + 徽章** —— 徽章顺序固定为 CI、语言质量徽章（适用时）、npm version、license。
+2. **一句话定位** —— Agent-native 工具描述。不要把这些工具定位成主要给交互式人工 CLI 使用。
+3. **Agent Install** —— Agent 可复制执行的一段安装块：npm 壳安装、Skill 安装、必要环境变量占位、`context`、`doctor`、`reference`。
+4. **What It Does** —— 一段话、风险等级，以及必要的第三方/免责声明。
+5. **Capabilities** —— 命令组概览表；README 是地图，不是完整手册。
+6. **Agent Workflow** —— 安装、配置、预检、通过 `reference` 发现能力、用 `--compact`/`--fields` 降 token、写操作用 `--dry-run` -> `--confirm`、更新后读 `changelog`。
+7. **Machine Contract** —— JSON 默认、envelope 形状、stdout/stderr 规则、错误码、`_untrusted`、`--json` 兼容说明。
+8. **Configuration** —— 配置路径、环境变量、凭据优先级与存储方式。
+9. **Project Structure** —— 顶层目录树，让每个仓库一眼可导航。
+10. **Development** —— 本地构建/测试/lint 命令。
+11. **Links** —— `AGENTS.md`、Skill、`.agent/CLI-SPEC.md`、安全、兼容性、E2E、变更记录、贡献、声明、许可证。
+
+约定：
+
+- 徽章数量保持克制。不要加入不会提升 Agent 信任或发布质量的装饰性徽章。
+- 安装块必须可被 Agent 复制执行，用密钥占位符，不放真实凭据。
+- 命令细节归实时 `reference` 输出维护。README 命令表保持高层，避免过期手册。
+- 示例命令用真实可执行的形式，时间用 ISO 8601，ID 用占位符 `<message-id>`。
+
+## 3. 国际化（i18n）约定
+
+- 主文档英文 `README.md`，中文 `README_zh.md`，文件名加 `_zh` 后缀。
+- 两份顶部互相提供切换链接。
+- 其余治理类文档（CONTRIBUTING / SECURITY / 行为准则）默认只维护英文，除非项目主要面向中文社区。
+- 双语文档**内容同步**：改一份必须改另一份，CI 可加链接 / 章节一致性检查。
+
+## 4. 版本与发布约定
+
+- **SemVer**：`MAJOR.MINOR.PATCH`。破坏性变更升 MAJOR，向后兼容新增升 MINOR，修复升 PATCH。
+- 工具版本（package 版本）与 CLI 输出的 `schema_version` 解耦——后者只在 JSON 契约破坏时升（见 `CLI-SPEC.md`）。
+- **CHANGELOG 用 Keep a Changelog 格式**：`Unreleased` 在顶，分 `Added/Changed/Fixed/Deprecated/Removed/Security`。
+- 发布即打 git tag `vX.Y.Z`，由 `release.yml` 触发构建发布。
+- 版本号单一真相源（`package.json` `version`），其余全部**派生，绝不手抄**。
+
+### 版本号改动机制（强制，不靠人手）
+
+改版本号只动一个源，由工具扇出到所有派生位置——从此一次发版不可能再漏掉某个 pin、lockfile、Skill 头或 `__version__`：
+
+- **一条命令**：`npm version <patch|minor|major|x.y.z>`。npm 离线改 `package.json` `version`（及 lockfile 顶层版本），随后 `version` 生命周期钩子跑 `scripts/sync-version.js`，把新版本同步到全部派生位置：`package.json` `optionalDependencies`、`package-lock.json`（`version`、`packages[""].version`、平台 pins）、每个 `skills/*/SKILL.md`（`version:` + `metadata.requires.min_version`）、Python `<pkg>/__init__.py` 的 `__version__`（`setup.py` 动态读取它，不再单独抄一份），并按 Keep a Changelog 把 `## [Unreleased]` 滚动为带日期的 `## [x.y.z]`。
+- **零 git 副作用**：仓库内提交的 `.npmrc` 设 `git-tag-version=false`，`npm version` 只改文件。流程保持 push → CI 绿 → 打 tag；人工审完同步后的 diff，CI 过了再打 tag。
+- **一份清单，两个消费者**：`scripts/version-files.js` 用一处定义派生位置集合；`sync-version.js`（写入）与 `scripts/check-version.js`（校验）都消费它，新增位置两边自动覆盖。
+- **CI 兜底（fail-closed）**：`scripts/check-version.js` 进 `ci.yml`（每次 push/PR）与 `release.yml` 的版本一致性步骤（tag 时）。任何位置与 `package.json` 不一致——哪怕是绕过工具的手改——都让 CI 变红。这是让漂移合不进、发不出的硬底线。
+- **测试不写死版本号**：测试动态读真源（Go：内嵌的 `packageJSONVersion()`；Python：包的 `__version__`）。升版本绝不需要改测试。
+- lockfile 仅外科式改其版本字段，**绝不**用 `npm install --package-lock-only`（那会把开发者本地的 registry 镜像 URL 写进公开 lockfile）。
+
+### CHANGELOG 单一真相源
+
+`CHANGELOG.md` 是变更的唯一人工维护源，其余皆为**派生物**，禁止单独维护、禁止把派生物提交入库：
+
+```
+CHANGELOG.md （人工维护，唯一真相源）
+   ├─ release.yml 按 "## [version]" 段落截取 → GitHub Release body（构建时生成）
+   └─ build 时嵌入二进制                      → 运行时 changelog 命令（见 CLI-SPEC.md §11）
+```
+
+- release-notes 由 `release.yml` 在发布时截取生成（`sed -n "/^## \[VERSION\]/,/^## \[/p"`），**不要在仓库里保留一份手维护的 `release-notes.md`**。
+- 运行时 `changelog` 命令复用同一份 CHANGELOG，构建时嵌入——零新真相源，只是多一个出口。
+
+**运行时 changelog 文件命名。** 为运行时 `changelog` 命令嵌入 `CHANGELOG.md` 的源文件命名为 `changelog.go`（Go）/ `changelog.py`（Python）——**单数，且不带 `_embed` 后缀**。Go 里它持有 `//go:embed` 指令，并把嵌入内容暴露为一个名为 `ChangelogMarkdown` 的包级变量。
+
+**Go 版本钉法。** Go 项目在 `go.mod` 里钉一个当前 Go 版本（`go 1.XX`），且**不**加 `toolchain` 行；CI 通过 `setup-go` 的 `go-version-file: go.mod` 读取这唯一来源，而不是在 workflow 里写死版本号。
+
+## 4b. 分发约定（npm 壳）
+
+跨语言工具统一用 npm 壳分发，让 Go 二进制、Python 包都能 `npm install -g` 装、被 Agent 一致调用：
+
+- `package.json` 声明 scope 包名、`bin` 入口与 OS/CPU 专属 optional 平台包。它是 **npm 壳的 scope/包名与版本号的单一真相源**——`scripts/run.js`、平台包生成脚本与 CI 都从 `package.json` 读取，绝不把 scope 或版本号手抄到别处。
+- `scripts/run.js`：薄转发层，解析已安装的 npm 平台包并 `execFileSync` 调其中的二进制，透传 `argv` 与 stdio，平台包缺失时给出可执行的重装提示。
+- `scripts/prepare-npm-platform-packages.js`：release 阶段把 CI 已构建的二进制打成 npm optional 平台包。npm 运行时安装不得从 GitHub 下载二进制。
+- 二进制本身（`bin/`、`*.exe`、`dist/`）进 `.gitignore`，由 CI 构建产出，不入库。
+- 发布产物附带 `checksums.txt`；release pipeline 通过 tagged GitHub Actions release workflow 用 Sigstore/Cosign keyless 模式以 `cosign sign-blob --new-bundle-format` 签署该文件（产出 Sigstore protobuf bundle），并把 bundle 与 checksum 一起发布。
+- npm 分发发布主包和全部平台包，并使用 npm provenance。npm registry tarball integrity 与 provenance 覆盖 npm 安装路径。standalone GitHub 二进制自更新路径在**进程内**验证该签名（Go 用 `sigstore-go`，Python 在冻结二进制内用 `sigstore`——不外挂 cosign、不依赖用户环境），fail-closed 且无跳过;完整性失败返回非重试的 `E_INTEGRITY`。Python 工具冻结成自包含二进制,使这条路径跨语言完全一致（详见 CLI-SPEC §14 / SEC-SPEC §5）。
+- 版本通知是面向 Agent 的结构化契约，不是全局横幅。`update --check`
+  刷新更新状态，并可在工具的用户配置目录写入短缓存；`doctor` 可以用短超时主动刷新，网络失败静默降级；`context` 和 `--help`
+  只读缓存。业务命令不得为了提示升级而主动联网。
+- 有新版本时，通知含 `type: "update_available"`、`severity`、当前/最新版本、安装方式、推荐命令、已知 release URL、检查时间和下一步。它出现在维护类命令的 `data`，并以只读方式（不联网）出现在任意命令的 `meta.notices`。`severity` 由 CHANGELOG 增量定级：增量含 `security` 条目或跨 major 版本→`warning`，否则 `info`（`critical` 保留给已 yank/有漏洞的版本）。文本/help 输出可追加一句简短提示。
+- `update` 结果字段描述命令执行后的最终状态，而不是安装前的比较结果。成功安装后，`current_version` 等于 `target_version`，`previous_version` 记录旧版本，`update_available` 必须为 `false`。已安装目标版本对应的本地 update notice cache 必须清除或在后续命令附加 `meta.notices` 前被抑制。
+- 裸 `update` 一次调用负责完整生命周期（无 confirm token、无叶子子命令）：二进制/包更新加 `skills/` 下每个 Skill 目录的同步，最终状态等同于 `npx skills add <repo> -y -g`。独立二进制经进程内 Sigstore 验签后原地替换；包管理器管理的安装则通过**驱动包管理器**（替用户执行 `npm install -g <pkg>@<version>` / `go install …`）来升级，绝不原地改被管理的文件、也绝不只是把命令打印给用户去跑。每次失败或中断都报告 `stage` + `current_version` + `binary_replaced` + `skill_sync_status`（见 CLI-SPEC §14）。
+- 幂等 no-op 判断必须先于任何包管理器命令；已经是最新版本时，不能再次执行 `npm`、`go`、`pip` 或 `brew`。update notice cache 相关测试必须隔离用户配置目录，测试二进制（包括 Windows 的 `*.test.exe`）默认不得读写真实用户 update cache。
+
+## 5. 目录布局约定
+
+```text
+project/
+├── README.md / README_zh.md
+├── LICENSE / CHANGELOG.md / CONTRIBUTING.md / SECURITY.md
+├── .gitignore
+├── AGENTS.md                   # 跨工具入口钩子，指向 .agent/AGENT.md
+├── .github/
+│   ├── workflows/{ci,release}.yml
+│   ├── ISSUE_TEMPLATE/
+│   └── PULL_REQUEST_TEMPLATE.md
+├── .agent/                     # AI 原生规范
+│   ├── AGENT.md                # 入口/总纲
+│   ├── CLI-SPEC.md             # CLI 机器契约
+│   ├── SKILL-SPEC.md           # Skill 编写规范
+│   └── SEC-SPEC.md             # 安全基线
+├── skills/<name>/              # 内置 Agent Skill
+│   ├── SKILL.md                # 可执行 Skill 契约
+│   └── test-prompts.json       # Skill 审查回归 prompt
+├── <package>/                  # 源码（包名）
+├── tests/                      # 测试，目录结构镜像源码
+├── scripts/                    # 开发 / 构建辅助脚本
+└── <build manifest>            # 语言相关：package.json / setup.py / pyproject.toml ...
+```
+
+约定：
+
+- 源码、测试、脚本、文档各归其位，不混放根目录。
+- 测试目录结构镜像源码结构，便于定位。
+- 构建产物、缓存、虚拟环境、IDE 配置一律进 `.gitignore`，不入库。
+
+### 5b. 模板模型：`common/` + `<lang>/`
+
+本仓库 `template/` 里的种子做了拆分：上面的骨架由两层拼装而成，加一门语言的成本也因此很低：
+
+```text
+template/
+├── common/        # 语言无关，拷进每一个仓库：AGENTS.md、本地 .agent/ 规范、
+│                  #   全部治理文档、.github/、package.json、
+│                  #   scripts/{run,prepare-npm-platform-packages}.js、docs/、skills/SKILL.md.tmpl、.gitignore
+├── go/            # 叠加层：ci.yml、release.yml、.goreleaser.yml、Makefile、
+│                  #   .golangci.yml、.gitignore
+└── python/        # 叠加层：ci.yml、release.yml、ruff.toml、.gitignore
+```
+
+- 实例化方式：拷 `common/.`，再叠加**恰好一种** `<lang>/.`；把 `<lang>` 的 `.gitignore` 追加到通用那份后面。详见 `template/INSTANTIATE.md`。
+- **加一门语言 = 加一个 `template/<lang>/`**（约 6 个文件：CI / release / 格式化 / 构建管线），100% 复用 `common/`。
+- `.agent/` 的行为规范（`AGENT`、`CLI-SPEC`、`SKILL-SPEC`、`SEC-SPEC`）放在 `common/`，**绝不按语言分叉**——机器契约跨语言完全一致，不同的只有构建/CI 管线。
+
+### 5c. 规范单源化：钉住、同步、守卫
+
+`.agent/` 规范与 canonical `contract/contract.json` **只在一个地方维护——本模板**——并 vendor 进各工具，绝不每仓手维护。机制对齐版本单源流程（§4）：一个注册表，两个消费者（写入器 + 失败关闭的校验器）。
+
+- **注册表：** `scripts/spec-files.js` 列出所有 spec-synced 路径（八份 `.agent/*.md`、`contract/contract.json`、以及 sync/check/codegen 工具脚本）。
+- **钉版本：** 每个工具在 `.agent/SPEC_VERSION` 记录所追踪的 spec tag（如 `v1.5.0`），与 `degit …#v1.5.0` 安装流程同一种钉法。
+- **写入器：** `scripts/sync-spec.js` 从 `ai-native-cli-spec@<pin>` 逐字节 vendor 每个注册文件，再从同步来的 `contract.json` 重新生成各语言契约模块（`contract_gen.{go,py}`）。
+- **校验器（CI，失败关闭）：** `scripts/check-spec.js` 从 `template@<pin>` 重新拉取每个注册文件并断言逐字节一致（瞬时网络故障降级为告警），并——严格、离线——断言生成的契约模块与 `contract.json` 一致。漂移即 CI 红，所以工具可以重新同步，但绝不能悄悄分叉规范或契约。
+- **编辑流程：** 只在模板改规范/契约 → tag 一个新 spec 版本 → 各工具升 `.agent/SPEC_VERSION` 并跑 `sync-spec` → diff 是机械的、守卫证明对齐。工具绝不直接编辑 `.agent/*` 或 `contract.json`。
+
+## 6. 质量门禁约定
+
+- CI 必须跑 lint + 测试，红了不许合并。
+- AI 原生 CLI 发布要求 **Functional Contract Coverage = 100%**：README、Skill、`reference`、`--help`、`context`、`doctor`、`changelog` 或 `update` 中记录的每个公开行为，都有命令级测试。数字代码覆盖率可以单独逐步抬升，但不能替代缺失的契约测试。
+- 发布就绪等级属于机器契约：`reference` 报告 `release_readiness.level`（`stable`、`beta` 或 `unpublishable`），`doctor` 包含 `release_readiness` 检查。`Stable` 要求 FCC 100%、mock upstream / contract tests 覆盖失败路径，并具备真实环境 smoke/E2E 记录。`Beta` 只适用于 FCC 和 mock 契约已具备、但真实 smoke 证据缺失或明确不可用的情况。命令级覆盖缺失即 `unpublishable`。
+- 统一格式化工具（按语言：Python 用 ruff，JS 用 prettier 等），配置入库，不靠人肉对齐。
+- PR 模板内置自检项：测试通过、文档同步、CHANGELOG 已更、双语已同步。
+
+## 7. 新建项目检查清单
+
+- [ ] `README.md`（+ 按需 `README_zh.md`）按 §2 骨架
+- [ ] `LICENSE` 选定
+- [ ] `CHANGELOG.md` 初始化，含 `Unreleased`
+- [ ] `CONTRIBUTING.md` / `SECURITY.md` 就位
+- [ ] `.gitignore` 按语言配好
+- [ ] `.github/workflows/ci.yml`（lint + test）就位
+- [ ] 版本号单一真相源；CHANGELOG 为唯一变更源，派生物不入库
+- [ ] 源码 / 测试 / 脚本目录分置，测试镜像源码
+- [ ] （AI 原生 CLI）功能契约覆盖率发布门禁已写入贡献说明和检查清单
+- [ ] （AI 原生 CLI）已实现 `reference.release_readiness` 和 `doctor.checks[].check == "release_readiness"`
+- [ ] 格式化工具配置入库，CI 强制
+- [ ] （npm 壳分发）`package.json` + `scripts/run.js` + `scripts/prepare-npm-platform-packages.js`，二进制不入库
+- [ ] （包装第三方产品）`NOTICE.md` + `docs/COMPATIBILITY.md` 就位
+- [ ] （对接外部 API）`docs/E2E.md` + 集成测试就位
+- [ ] `docs/OPEN_SOURCE_CHECKLIST.md` 就位，首次 push 前过一遍
+- [ ] （AI 原生工具）根 `AGENTS.md` + `.agent/{AGENT,CLI-SPEC,SKILL-SPEC,SEC-SPEC}.md` + `skills/<name>/{SKILL.md,test-prompts.json}` 齐
+- [ ] PR / Issue 模板就位

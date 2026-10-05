@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_FORBIDDEN",
+    "message": "No scope.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "not_started",
+      "next_action": "ask"
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

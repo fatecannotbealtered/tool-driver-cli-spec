@@ -17,8 +17,9 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from validate_contract import InputError, Parser, emit, parse_json, validate_value
+from validate_contract import InputError, Parser, UsageError, emit, parse_json, validate_value
 from contract_io import canonical_relative_path as canonical_path, path_identity, read_regular_file
+from bundle_layout import required_payload
 
 DEFAULT_MAX_UNCOMPRESSED = 32 * 1024 * 1024
 MAX_ENTRIES = 4096
@@ -167,6 +168,9 @@ def verify_bundle(bundle: Path, expected_sha256: str | None = None, max_uncompre
             raise InputError(f"specification component version differs: {component['path']}")
         if hashlib.sha256(files[component["path"]]).hexdigest() != component["sha256"]:
             raise IntegrityError(f"component SHA-256 differs: {component['path']}")
+    missing = required_payload() - files.keys()
+    if missing:
+        raise InputError("specification ZIP is missing required payload files: " + ", ".join(sorted(missing)))
     if "VERSION" in files:
         try:
             package_version = files["VERSION"].decode("utf-8").strip()
@@ -174,6 +178,46 @@ def verify_bundle(bundle: Path, expected_sha256: str | None = None, max_uncompre
             raise InputError("VERSION must use UTF-8") from exc
         if package_version != manifest["version"]:
             raise InputError("VERSION content differs from the manifest version")
+    if "STATUS" in files:
+        try:
+            package_status = files["STATUS"].decode("utf-8").strip()
+        except UnicodeError as exc:
+            raise InputError("STATUS must use UTF-8") from exc
+        if package_status != manifest["status"]:
+            raise InputError("STATUS content differs from the manifest status")
+    if "base/base-lock.json" in files:
+        base_lock = parse_json(files["base/base-lock.json"])
+        if not isinstance(base_lock, dict):
+            raise InputError("the embedded base lock must be a JSON object")
+        if (base_lock.get("spec"), base_lock.get("tag")) != (manifest["base"]["spec"], manifest["base"]["version"]):
+            raise InputError("embedded base lock differs from the manifest base")
+        if not isinstance(base_lock.get("files"), list) or not base_lock["files"]:
+            raise InputError("embedded base lock must inventory its pinned files")
+        locked_paths = set()
+        for item in base_lock["files"]:
+            if not isinstance(item, dict):
+                raise InputError("invalid pinned base file record")
+            path = canonical_path(item.get("path"))
+            if not path.startswith("base/ai-native-cli-spec/") or path not in files:
+                raise InputError("missing or invalid pinned base file: " + path)
+            if path in locked_paths:
+                raise InputError("duplicate pinned base file: " + path)
+            locked_paths.add(path)
+            if hashlib.sha256(files[path]).hexdigest() != digest(item.get("sha256")):
+                raise IntegrityError("pinned base SHA-256 differs: " + path)
+        if locked_paths != {path for path in files if path.startswith("base/ai-native-cli-spec/")}:
+            raise InputError("embedded base lock does not cover the complete pinned base inventory")
+    from check_spec import public_schemas
+    for schema_id, supported_schema in public_schemas().items():
+        path = "schemas/" + supported_schema["title"] + ".schema.json"
+        embedded_schema = parse_json(files[path])
+        if not isinstance(embedded_schema, dict) or embedded_schema.get("$id") != schema_id:
+            raise InputError("embedded public schema identity differs: " + path)
+    contract = parse_json(files["contract/driver-contract.json"])
+    if not isinstance(contract, dict) or contract.get("spec_version") != manifest["spec_version"]:
+        raise InputError("embedded driver contract differs from the specification version")
+    if contract.get("schema_version") != "2.0":
+        raise InputError("unsupported embedded driver structure; this verifier supports 2.0")
     limitations = ["Hashes and manifest consistency do not authenticate publisher identity or prove the source commit's provenance.", "This check does not run applications, devices, CLI product commands or SkillHub installation."]
     if expected is None:
         limitations.insert(0, "No independent expected digest was supplied; only internal bundle consistency was checked.")
@@ -192,17 +236,17 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         expected = checksum_digest(args.checksum, args.bundle.name) if args.checksum else args.expected_sha256
         checked = verify_bundle(args.bundle, expected, args.max_uncompressed)
-        emit(True, started, data=checked.summary())
-        return 0
+        return emit(True, started, data=checked.summary())
     except IntegrityError as exc:
-        emit(False, started, code="E_INTEGRITY", message=str(exc))
-        return 2
+        return emit(False, started, code="E_INTEGRITY", message=str(exc),
+                    details={"next_action": "do not use this package or copy; obtain it again from the trusted release"})
+    except UsageError as exc:
+        return emit(False, started, code="E_USAGE", message=str(exc), details={"problem": "invalid_value"})
     except (InputError, ValueError, KeyError, TypeError, RecursionError) as exc:
-        emit(False, started, code="E_VALIDATION", message=str(exc))
-        return 2
+        return emit(False, started, code="E_VALIDATION", message=str(exc), details={"problem": "invalid_value"})
     except OSError as exc:
-        emit(False, started, code="E_IO", message=str(exc))
-        return 1
+        return emit(False, started, code="E_IO", message=str(exc),
+                    details={"next_action": "check that the named files exist and are readable"})
 
 
 if __name__ == "__main__":

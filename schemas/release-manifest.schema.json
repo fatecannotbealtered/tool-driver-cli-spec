@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:tool-driver-cli-spec:release-manifest:1.0",
+  "$id": "urn:tool-driver-cli-spec:release-manifest:2.0",
   "title": "release-manifest",
   "type": "object",
   "properties": {
@@ -11,21 +11,37 @@
       ]
     },
     "name": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
     },
     "version": {
-      "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/semver"
     },
     "spec_version": {
       "allOf": [
         {
-          "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+          "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/semver"
         },
         {
-          "pattern": "^1\\."
+          "pattern": "^[0-9]+\\."
         }
       ]
+    },
+    "base": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "const": "ai-native-cli-spec"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^v1\\.[0-9]+\\.[0-9]+$"
+        }
+      },
+      "required": [
+        "spec",
+        "version"
+      ],
+      "additionalProperties": false
     },
     "status": {
       "enum": [
@@ -36,8 +52,7 @@
       ]
     },
     "source_commit": {
-      "type": "string",
-      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+      "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/commit"
     },
     "source_dirty": {
       "type": "boolean"
@@ -69,33 +84,35 @@
     },
     "components": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "properties": {
           "name": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
           },
           "version": {
-            "$ref": "urn:tool-driver-cli-spec:common:1.0#/$defs/semver"
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/semver"
           },
           "path": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))[^\\x00-\\x1f\\x7f]+$"
           },
           "sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+            "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/sha256"
           },
           "role": {
             "enum": [
               "cli",
               "adapter",
+              "service",
               "plugin",
               "skill",
               "documentation",
               "schema",
+              "contract",
+              "base",
               "example",
               "validator",
               "dependency_manifest"
@@ -110,8 +127,7 @@
           "role"
         ],
         "additionalProperties": false
-      },
-      "minItems": 1
+      }
     },
     "compatibility": {
       "type": "object",
@@ -122,12 +138,10 @@
             "type": "object",
             "properties": {
               "identity": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "version_range": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "validation": {
                 "enum": [
@@ -138,8 +152,7 @@
               "evidence_refs": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "minLength": 1
+                  "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
                 }
               }
             },
@@ -158,12 +171,10 @@
             "type": "object",
             "properties": {
               "identity": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "version_range": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "validation": {
                 "enum": [
@@ -174,8 +185,7 @@
               "evidence_refs": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "minLength": 1
+                  "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
                 }
               }
             },
@@ -194,12 +204,10 @@
             "type": "object",
             "properties": {
               "identity": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "version_range": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "validation": {
                 "enum": [
@@ -210,8 +218,7 @@
               "evidence_refs": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "minLength": 1
+                  "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
                 }
               }
             },
@@ -230,12 +237,10 @@
             "type": "object",
             "properties": {
               "identity": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "version_range": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
               },
               "validation": {
                 "enum": [
@@ -246,8 +251,7 @@
               "evidence_refs": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "minLength": 1
+                  "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
                 }
               }
             },
@@ -272,15 +276,13 @@
     "external_requirements": {
       "type": "array",
       "items": {
-        "type": "string",
-        "minLength": 1
+        "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
       }
     },
     "limitations": {
       "type": "array",
       "items": {
-        "type": "string",
-        "minLength": 1
+        "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/text"
       }
     },
     "extensions": {
@@ -292,6 +294,7 @@
     "name",
     "version",
     "spec_version",
+    "base",
     "status",
     "source_commit",
     "source_dirty",

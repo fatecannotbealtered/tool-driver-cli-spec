@@ -1,20 +1,19 @@
-"""Small protocol types; native facts and authorization remain caller supplied."""
+"""Protocol types shared by the SDK and adapters; native facts stay with the adapter."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-
-class Phase(StrEnum):
-    OBSERVE = "observe"
-    PLAN = "plan"
-    APPLY = "apply"
-    SUBMIT = "submit"
-    STATUS = "status"
-    RESULT = "result"
-    VERIFY = "verify"
+# Effects that change the target or the world outside the tool.
+MODIFYING = frozenset({"change", "persist", "deliver", "configure", "physical"})
+# Every effect other than observe goes through --dry-run/--confirm and the task scope (COR-008).
+GATED = frozenset({"session", "artifact", *MODIFYING})
+SCOPED = GATED
+DANGEROUS = frozenset({"deliver", "configure", "physical"})
+# Base §16.2 names plus the driver additions (COR-016).
+OPERATION_STATES = ("planned", "pending", "running", "cancel_requested", "succeeded", "partial", "failed", "cancelled", "unknown")
 
 
 class Execution(StrEnum):
@@ -43,6 +42,15 @@ class Persistence(StrEnum):
     UNKNOWN = "unknown"
 
 
+class Delivery(StrEnum):
+    NOT_APPLICABLE = "not_applicable"
+    NOT_ATTEMPTED = "not_attempted"
+    DELIVERED = "delivered"
+    PARTIAL = "partial"
+    REJECTED = "rejected"
+    UNKNOWN = "unknown"
+
+
 class VerificationStatus(StrEnum):
     NOT_RUN = "not_run"
     PASSED = "passed"
@@ -52,46 +60,61 @@ class VerificationStatus(StrEnum):
 
 
 @dataclass(frozen=True)
-class Invocation:
+class Call:
+    """One validated invocation handed to an adapter. Parameters are data, never code."""
+
+    command: str
     capability_id: str
-    phase: Phase | str
-    request_id: str
-    payload: dict[str, Any]
-    caller_known_request_id: bool = True
-
-    def __post_init__(self):
-        if not isinstance(self.capability_id, str) or not self.capability_id:
-            raise ValueError("a capability ID is required")
-        if not isinstance(self.request_id, str) or not self.request_id:
-            raise ValueError("a request ID is required")
-        if not isinstance(self.payload, dict) or not isinstance(self.caller_known_request_id, bool):
-            raise ValueError("invocation payload and request identity provenance are invalid")
-        object.__setattr__(self, "phase", Phase(self.phase))
+    params: dict[str, Any]
+    effects: tuple[str, ...]
+    dangerous: bool = False
+    dry_run: bool = False
+    operation_id: str | None = None
+    plan_id: str | None = None
+    authorization: dict | None = None
+    idempotency_key: str | None = None
+    item_key: str | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class Outcome:
-    execution: Execution | str
-    change: Change | str
-    persistence: Persistence | str
-    verification: dict[str, Any]
+class DriverError(Exception):
+    """Raised by an adapter (or the SDK) with the facts it actually has.
 
-    def to_dict(self) -> dict:
-        return {"execution": Execution(self.execution).value, "change": Change(self.change).value,
-                "persistence": Persistence(self.persistence).value, "verification": self.verification}
+    dispatch_state says whether anything reached the native side. Raised from run() or plan() it
+    defaults to not_started. Raised from apply() or submit() without an explicit dispatch_state, the
+    outcome is treated as unknown: only an explicit not_started releases the confirm token. A receipt,
+    when present, decides the reported error code through the contract's receipt rules.
+    """
+
+    def __init__(self, code: str, message: str, *, details: dict | None = None, receipt: dict | None = None,
+                 dispatch_state: str | None = None):
+        super().__init__(message)
+        if dispatch_state not in {None, "not_started", "dispatched", "unknown"}:
+            raise ValueError("dispatch_state must be not_started, dispatched or unknown")
+        self.code = code
+        self.message = message
+        self.details = dict(details or {})
+        self.receipt = receipt
+        self.explicit = dispatch_state is not None
+        self.dispatch_state = dispatch_state or "not_started"
+
+    @property
+    def surely_not_started(self) -> bool:
+        """The adapter said, explicitly, that nothing reached the native side."""
+        return self.explicit and self.dispatch_state == "not_started"
 
 
 @runtime_checkable
 class Adapter(Protocol):
-    def execute(self, invocation: Invocation) -> "CommandResult": ...
+    """The native side. Optional hooks: environment(), doctor_checks(), credentials(), revision(target),
+    submit(call, plan), status(record), update(call).
 
+    For a command with the batch profile, plan(call) returns items (one per target, each with key, target,
+    base_snapshot, changes, outputs, can_apply) and apply(call, plan) is called once per item with that
+    item's own single-target plan and call.item_key set."""
 
-Handler = Callable[[Invocation], "CommandResult"]
-Provider = Callable[[Invocation], dict[str, Any]]
+    def run(self, call: Call) -> dict: ...
 
+    def plan(self, call: Call) -> dict: ...
 
-# Imported only for type checking to avoid a runtime messages/models cycle.
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .messages import CommandResult
+    def apply(self, call: Call, plan: dict) -> dict: ...

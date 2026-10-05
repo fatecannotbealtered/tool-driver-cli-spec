@@ -1,18 +1,19 @@
 {
   "plan_id": "plan-01",
   "operation_id": "operation-01",
+  "capability_id": "feature-create",
   "target": {
     "mode": "session",
-    "engine_id": "editor-engine",
+    "engine_id": "demo-cad",
     "instance_id": "instance-01",
-    "object_id": "document-01",
-    "locator": "session://instance-01/document-01"
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
   },
   "base_snapshot": {
     "id": "snapshot-01",
     "source": "live",
     "revision": "memory-01",
-    "observed_at": "2026-10-02T00:00:00Z",
+    "observed_at": "2026-10-04T00:00:00Z",
     "dependencies": [
       {
         "identity": "template-01",
@@ -24,19 +25,22 @@
   "effects": [
     "change"
   ],
-  "preview": {
-    "level": "estimate",
-    "known_changes": [
-      "Create object-02 in the isolated document."
-    ],
-    "unknowns": [
-      "The final native geometry is known only after execution."
-    ],
-    "constraints": [
-      "The target snapshot must remain unchanged."
-    ],
-    "trial_snapshot": null
-  },
+  "level": "estimate",
+  "changes": [
+    {
+      "action": "create",
+      "resource": "feature",
+      "summary": "Add a 10 mm extrusion on sketch-03 named Boss."
+    }
+  ],
+  "outputs": [],
+  "unknowns": [
+    "Regeneration of downstream features is computed only when the change is applied."
+  ],
+  "constraints": [
+    "The part must still be at revision memory-01 when the plan is confirmed."
+  ],
+  "trial_snapshot": null,
   "can_apply": true,
-  "expires_at": "2026-10-02T00:15:00Z"
+  "expires_at": "2026-10-04T00:10:00Z"
 }

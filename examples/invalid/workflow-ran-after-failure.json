@@ -1,24 +1,27 @@
 {
-  "schema_version": "1.0",
-  "spec_version": "1.0.0",
   "operation_id": "workflow-01",
-  "observed_at": "2026-10-03T00:00:10Z",
-  "kind": "dependent_workflow",
+  "observed_at": "2026-10-04T00:01:00Z",
   "failure_policy": "stop",
   "steps": [
     {
       "id": "create",
       "depends_on": [],
-      "operation_id": "operation-create",
+      "phase": "apply",
+      "effects": [
+        "change"
+      ],
+      "operation_id": "operation-s1",
       "status": "completed",
       "receipt": {
-        "operation_id": "operation-create",
+        "operation_id": "operation-s1",
+        "capability_id": "feature-create",
+        "plan_id": "plan-01",
         "target": {
           "mode": "session",
-          "engine_id": "editor-engine",
+          "engine_id": "demo-cad",
           "instance_id": "instance-01",
-          "object_id": "document-01",
-          "locator": "session://instance-01/document-01"
+          "object_id": "part-01",
+          "locator": "session://instance-01/part-01"
         },
         "authorization_scope_id": "scope-isolated-01",
         "effects": [
@@ -28,7 +31,7 @@
           "id": "snapshot-01",
           "source": "live",
           "revision": "memory-01",
-          "observed_at": "2026-10-02T00:00:00Z",
+          "observed_at": "2026-10-04T00:00:00Z",
           "dependencies": [
             {
               "identity": "template-01",
@@ -40,7 +43,7 @@
           "id": "snapshot-02",
           "source": "live",
           "revision": "memory-02",
-          "observed_at": "2026-10-02T00:00:01Z",
+          "observed_at": "2026-10-04T00:00:01Z",
           "dependencies": [
             {
               "identity": "template-01",
@@ -52,6 +55,7 @@
           "execution": "completed",
           "change": "applied",
           "persistence": "unsaved",
+          "delivery": "not_applicable",
           "verification": {
             "status": "passed",
             "scope": "declared_operation_postconditions",
@@ -77,53 +81,77 @@
             ]
           }
         },
+        "failed_stage": null,
         "changed_items": [
           {
-            "id": "object-02",
+            "id": "feature-07",
             "change": "created",
             "evidence_ref": "evidence://synthetic/readback-01"
           }
         ],
         "artifacts": [],
+        "deliveries": [],
         "recovery": {
           "action": "none",
-          "reason": "Declared in-memory operation verified; save was not requested.",
+          "reason": "Declared in-memory change verified; saving was not requested.",
           "supported": true
         }
       },
       "output_refs": [],
       "skip_reason": null,
-      "error": null,
-      "phase": "apply",
-      "effects": [
-        "change"
-      ]
+      "error": null
     },
     {
-      "id": "build",
+      "id": "save",
       "depends_on": [
         "create"
       ],
-      "operation_id": "operation-build",
+      "phase": "apply",
+      "effects": [
+        "persist"
+      ],
+      "operation_id": "operation-s2",
       "status": "failed",
+      "receipt": null,
+      "output_refs": [],
+      "skip_reason": null,
+      "error": {
+        "code": "E_NATIVE_FAILURE",
+        "retryable": false,
+        "message": "Disk full."
+      }
+    },
+    {
+      "id": "export",
+      "depends_on": [
+        "save"
+      ],
+      "phase": "apply",
+      "effects": [
+        "artifact"
+      ],
+      "operation_id": "operation-s3",
+      "status": "completed",
       "receipt": {
-        "operation_id": "operation-build",
+        "operation_id": "operation-s3",
+        "capability_id": "drawing-export",
+        "plan_id": "plan-01",
         "target": {
           "mode": "session",
-          "engine_id": "editor-engine",
+          "engine_id": "demo-cad",
           "instance_id": "instance-01",
-          "object_id": "document-01",
-          "locator": "session://instance-01/document-01"
+          "object_id": "part-01",
+          "locator": "session://instance-01/part-01"
         },
         "authorization_scope_id": "scope-isolated-01",
         "effects": [
-          "change"
+          "artifact"
         ],
         "snapshot_before": {
           "id": "snapshot-01",
           "source": "live",
           "revision": "memory-01",
-          "observed_at": "2026-10-02T00:00:00Z",
+          "observed_at": "2026-10-04T00:00:00Z",
           "dependencies": [
             {
               "identity": "template-01",
@@ -132,10 +160,10 @@
           ]
         },
         "snapshot_after": {
-          "id": "snapshot-02",
+          "id": "snapshot-12",
           "source": "live",
           "revision": "memory-02",
-          "observed_at": "2026-10-02T00:00:01Z",
+          "observed_at": "2026-10-04T00:00:03Z",
           "dependencies": [
             {
               "identity": "template-01",
@@ -144,71 +172,49 @@
           ]
         },
         "outcome": {
-          "execution": "failed",
-          "change": "partial",
-          "persistence": "unsaved",
+          "execution": "completed",
+          "change": "not_applied",
+          "persistence": "unchanged",
+          "delivery": "not_applicable",
           "verification": {
-            "status": "incomplete",
-            "scope": "dependent_workflow",
-            "snapshot_id": "snapshot-02",
-            "coverage": "partial",
-            "checks": [],
-            "not_checked": [
+            "status": "passed",
+            "scope": "declared_operation_postconditions",
+            "snapshot_id": "snapshot-12",
+            "coverage": "complete",
+            "checks": [
               {
-                "id": "build-postcondition",
+                "id": "check-export-reopen",
+                "status": "passed",
                 "required": true,
-                "reason": "Native execution failed after partial application."
+                "evidence_ref": "evidence://synthetic/export-01"
               }
             ],
-            "evidence_refs": []
+            "not_checked": [],
+            "evidence_refs": [
+              "evidence://synthetic/export-01"
+            ]
           }
         },
-        "changed_items": [
+        "failed_stage": null,
+        "changed_items": [],
+        "artifacts": [
           {
-            "id": "object-02",
-            "change": "created",
-            "evidence_ref": "evidence://synthetic/readback-01"
+            "id": "artifact-02",
+            "path": "D:/work/out/part-01.svg",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "source_snapshot_id": "snapshot-02"
           }
         ],
-        "artifacts": [],
+        "deliveries": [],
         "recovery": {
-          "action": "inspect",
-          "reason": "Inspect the partial build before choosing a recovery action.",
+          "action": "none",
+          "reason": "The exported file was reopened and matched.",
           "supported": true
         }
       },
       "output_refs": [],
       "skip_reason": null,
-      "error": {
-        "code": "E_NATIVE_FAILURE",
-        "message": "Native build failed after partial application.",
-        "retryable": false,
-        "details": {
-          "next_action": "inspect operation-build"
-        }
-      },
-      "phase": "apply",
-      "effects": [
-        "change"
-      ]
-    },
-    {
-      "id": "export",
-      "depends_on": [
-        "build"
-      ],
-      "operation_id": null,
-      "status": "completed",
-      "receipt": null,
-      "output_refs": [
-        "artifact://synthetic/export-from-failed-build"
-      ],
-      "skip_reason": null,
-      "error": null,
-      "phase": "observe",
-      "effects": [
-        "observe"
-      ]
+      "error": null
     }
   ],
   "summary": {

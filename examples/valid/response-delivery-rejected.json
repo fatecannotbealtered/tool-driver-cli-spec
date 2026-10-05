@@ -1,0 +1,100 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_PARTIAL",
+    "message": "The drawing was exported, but the release share refused it.",
+    "retryable": false,
+    "details": {
+      "dispatch_state": "dispatched",
+      "operation_id": "operation-01",
+      "receipt": {
+        "operation_id": "operation-01",
+        "capability_id": "drawing-publish",
+        "plan_id": "plan-01",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-01",
+          "locator": "session://instance-01/part-01"
+        },
+        "authorization_scope_id": "scope-isolated-01",
+        "effects": [
+          "artifact",
+          "deliver"
+        ],
+        "snapshot_before": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "snapshot_after": {
+          "id": "snapshot-11",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:02Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "outcome": {
+          "execution": "failed",
+          "change": "not_applied",
+          "persistence": "unchanged",
+          "delivery": "rejected",
+          "verification": {
+            "status": "not_run",
+            "scope": "declared_operation_postconditions",
+            "snapshot_id": null,
+            "coverage": "none",
+            "checks": [],
+            "not_checked": [],
+            "evidence_refs": []
+          }
+        },
+        "failed_stage": "deliver",
+        "changed_items": [],
+        "artifacts": [
+          {
+            "id": "artifact-01",
+            "path": "D:/work/out/part-01.svg",
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "source_snapshot_id": "snapshot-01"
+          }
+        ],
+        "deliveries": [
+          {
+            "destination": "share://release/part-01.svg",
+            "artifact_id": "artifact-01",
+            "status": "rejected",
+            "evidence_ref": "evidence://synthetic/share-error-01",
+            "reason": "The share refused files over 5 MB."
+          }
+        ],
+        "recovery": {
+          "action": "inspect",
+          "reason": "This call exported the artifact; the share refused it.",
+          "supported": true
+        }
+      },
+      "next_action": "Keep the local artifact; ask the user how to deliver it.",
+      "_untrusted": [
+        "receipt"
+      ]
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

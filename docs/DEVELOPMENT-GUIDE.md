@@ -1,94 +1,114 @@
-# 从能力声明建立工具工程
+# 从注册表建立驱动工具
 
-规范版本：`1.0.0`。
+规范版本：`1.0.0`；基线：ai-native-cli-spec `v1.6.3`。
 
-本文供 CLI 和适配器作者使用，假设读者了解 Python、JSON Schema 和目标应用的基本操作。
-开发支持包含声明生成器、公共 SDK 和可实例化种子。公共协议仍采用 `1.0`，规范版本保持 `1.0.0`。
+本文供 CLI 和适配器作者使用，假设读者了解 Python、JSON 和目标应用的基本操作。开发支持包括产品注册表、生成器、Python SDK 和种子工程；它们是本规范的参考实现，不要求每个驱动 CLI 都用 Python。
 
 ## 分工
 
-| 部件 | 负责内容 |
+| 部件 | 负责 |
 |---|---|
-| 产品注册表 | 命令、参数编码、阶段、效果、输入与结果结构、兼容范围及成熟度 |
-| 声明生成器 | 从同一注册表产生运行声明、reference、帮助及 Skill 能力概要，检查派生文件漂移 |
-| 公共 SDK | JSON、输入校验、阶段与请求关联、显式处理器分发及输出边界 |
-| 应用适配器 | 可信授权、目标观测、操作记录、原生执行、实际读回、保存和恢复 |
-| 工程种子 | 可独立运行的目录、入口、未实现适配器、最小 Skill 和测试骨架 |
+| 产品注册表（`registry.json`） | 命令、参数、效果、阶段、输出结构、示例、兼容环境、成熟度和产品错误码；唯一来源 |
+| 生成器（`scripts/generate_product.py`） | 补上内置命令，产出运行时契约、reference、contract-ext 和 Skill 能力摘要，检查派生文件漂移 |
+| SDK（`packages/tool_driver_sdk`） | 基线全局参数、参数解析、`--dry-run`/`--confirm` 闸门、确认令牌、范围解析、操作记录、内置命令、信封与错误详情 |
+| 适配器（产品代码） | 目标与快照、计划、原生调用、读回、回执、原生诊断 |
+| 种子工程（`starter/`） | 可直接运行的工程：规范与基线副本、AGENTS.md、CLI 入口、未实现的适配器、测试、CI、CHANGELOG、Skill |
 
-注册表是受控开发输入，不能从待操作工程、对象备注或原生回复中取得。
-声明和示例都是数据；生成与发现不执行示例，也不根据注册表内容导入任意处理器。
-适配器必须显式注册。框架不能把未知状态改写成未修改，也不能替应用承诺保存、恢复、幂等或授权。
+注册表和声明都是数据：生成和发现不执行示例，不根据注册表内容导入代码。适配器必须显式接入；SDK 不会把未知改写成未修改，也不替应用承诺保存、恢复、幂等或授权。
 
-## 单源维护
+## 注册表与生成
 
-先声明请求和结果 JSON Schema，再把每个 CLI 参数绑定到请求中的实例位置。
-Schema 的 `binding` 定位参数定义，实例位置说明解析后的值写入哪里；两者不能靠名称猜测。
-数组、布尔和完整 JSON 输入使用已声明编码；别名及弃用信息随声明生成，不在解析器或 Skill 中另维护。
-
-每项能力按实际情况记录阶段与效果。未实现后端保持 `draft`，不能因生成器或协议测试通过提升成熟度。
-生成的 reference 沿用公共结构；开发用编码信息放在扩展中，不修改已经发布的核心字段。
-生成器只替换它记录拥有且内容未被用户改动的派生文件，遇到其他同名内容必须停止。
-
-在规范源码或包含开发支持的规范包中，以产品注册表生成派生声明：
+注册表符合 `schemas/product-registry.schema.json`。每条命令就是 reference 里的一条命令：基线字段加 `driver` 块；不要声明内置命令（`reference`、`context`、`doctor`、`changelog`、`operation …`），生成器会补上。
+`changelog` 指向产品的 CHANGELOG.md（Keep a Changelog 格式），生成器把已发布的版本段嵌进契约，最新版本必须等于 `product_version`。
 
 ```powershell
 python scripts/generate_product.py --registry examples/development/product-registry.json --output dist/product-generated
 python scripts/generate_product.py --registry examples/development/product-registry.json --output dist/product-generated --check
 ```
 
-第一条命令创建生成目录，第二条只检查实际文件与当前声明是否一致。
-更新已登记的派生文件时显式使用 `--update`；用户自行改过的文件不会被静默覆盖。
+第一条生成输出目录，第二条只核对；注册表变化后用 `--update` 更新。生成器只替换它的所有权清单登记过、且未被手改的文件，遇到其他同名内容会停止。
+输出包括 `product_contract.json`（SDK 加载）、`reference.json`（审阅与差异比较）、`contract-ext.json`（驱动与产品扩展码，基线 contract-ext 格式）和 `skill-capabilities.md`。生成器在写出之前用公共 Schema 和 `check_spec` 的规则检查 reference，错误会逐条列出。
 
-## 创建种子工程
+## 产品版本与 Agent eval
 
-输出目录必须尚不存在，名称采用小写产品标识。profile 只选择预期驱动模式，不证明后端已连接。
+生成项目以 `registry.json.product_version` 为版本来源。修改后执行 `python sync_version.py` 同步 pyproject、Skill 版本和最小版本，再更新 CHANGELOG、重新生成契约；`check_project.py` 对这些元数据及生成 reference 的版本漂移失败关闭。
 
-```powershell
-python scripts/instantiate_starter.py --name sample-driver --profile file --output dist/sample-driver
-python dist/sample-driver/cli.py reference --index
-python dist/sample-driver/cli.py context
-python dist/sample-driver/cli.py doctor
+产品 Skill 的真实任务运行按 VER-026 记录到 `evidence/agent-eval.json`。`python .agent/driver/scripts/check_agent_eval.py --root . --registry registry.json --report evidence/agent-eval.json` 在 stable/beta 声明下要求真实评测记录；开发模板保持 unpublishable 时明确报告 not_recorded，不把缺记录当已评测。该入口仅读取已保存记录，不调用模型、不执行轨迹里的命令。
+
+## SDK 的调用流程
+
+`tool_driver_sdk.serve(contract, adapter, vendor_root=…)` 处理一次调用；在测试或长期运行的进程里用 `with DriverCLI(…) as cli:`，退出时关闭记录库。
+
+1. 先认命令路径，再按命令声明的参数解析其余部分（基线全局参数为 `--format`、`--compact`、`--fields`、`--quiet`、`--dry-run`、`--confirm`、`--dangerous`、`--request-id`、`--version`、`--help`）。声明过的参数总是取下一个值；以 `--` 开头的值要写成 `--name=<value>`。复数参数只对 string、integer、number 按逗号拆分，路径和 JSON 不拆。错误返回 `E_USAGE` 或 `E_VALIDATION`，带 `problem`、`parameter`、`expected` 和 `next_action`，不复述输入值。
+2. 内置命令由 SDK 完成；`context` 和 `doctor` 调用适配器的可选钩子 `environment()`、`credentials()`、`doctor_checks()`。钩子出错或返回不合规的数据时，context 和 doctor 照常返回，并把该组件标为不可用、`native_backend` 标为 fail。
+3. 只有 `observe` 效果的读命令：调用 `adapter.run(call)`，按声明补 `_untrusted`，按 `query_page` 或产品 JSON Schema 校验结果，再按 `--fields` 投影。
+4. 除 observe 外有效果的命令（包括打开文档、导出文件）都是写命令：
+   - 没有 `--dry-run` 或 `--confirm` 时返回 `E_CONFIRMATION_REQUIRED`；危险命令缺 `--dangerous` 同样如此；
+   - 读取范围文件并核对效果、根目录、输出目录、交付位置和次数限制（`E_FORBIDDEN`）；
+   - `--dry-run`：分配 `operation_id` 与 `plan_id`，调用 `adapter.plan(call)`，组装并校验计划；有交付效果的计划必须在 `outputs` 里写出交付位置；同一目标上有未登记或仍在运行的操作时拒绝；记录计划，签发令牌；
+   - `--confirm`：验证令牌、参数摘要、计划和范围；适配器实现了 `revision(target)` 时先查漂移；然后在一个事务里核对同一目标上没有其他活动操作、幂等键、范围的次数限制，消费令牌并记为已派发，同时写入执行租约；之后调用 `adapter.apply(call, plan)`，执行期间后台线程续租；
+   - 补全并校验回执，按回执推导 `ok` 和错误码，写回操作记录。适配器明确报告 `not_started` 时，计划回到待确认，同一令牌在过期前仍可再用；派发之后的其他异常（包括中断）都报 `E_OUTCOME_UNKNOWN`，并且不采用适配器给的查询命令和下一步。
+5. 长任务命令（`profiles` 含 `operation_status`，适配器同时实现 `submit` 和 `status`）在 confirm 时调用 `adapter.submit(call, plan)`，只接受 `pending` 或 `running`；之后 `operation show` 通过 `adapter.status(record)` 刷新，钩子失败或结果不合规时显示本地记录并在 stderr 警告。
+6. 批量命令（`profiles` 含 `batch`）：`adapter.plan(call)` 返回 `items`，每项有 `key`、`target`、`base_snapshot`、`changes`、`outputs`、`can_apply`；SDK 给每项分配 `operation_id`，一个令牌覆盖整批。confirm 时逐项调用 `adapter.apply(call, item_plan)`（`call.item_key` 为该项），结果按基线批量结构返回；`--continue-on-error=false` 时在第一项失败后停止，其余项报告为跳过。批量命令不接受幂等键。
+7. 基线的 `update` 自更新调用 `adapter.update(call)`，不经过确认门和任务范围；`update --dry-run` 以 `call.dry_run` 传给适配器。
+8. 输出前用固定的规范副本校验信封；不符合时，派发前报 `E_UNKNOWN`，派发后报 `E_OUTCOME_UNKNOWN` 并把记录改为 unknown。
+
+## 适配器约定
+
+```python
+from tool_driver_sdk import DriverError
+
+class Adapter:
+    def run(self, call): ...            # 只读命令，返回 data
+    def plan(self, call): ...           # 返回 target、base_snapshot、changes、outputs、unknowns、constraints、level；批量返回 items
+    def apply(self, call, plan): ...    # 派发、读回，返回回执字段（outcome 五个维度、snapshot_after、changed_items 等）
+    def revision(self, target): ...     # 可选：当前修订，用于派发前的漂移检查
+    def environment(self): ...          # 可选：组件身份与连接状态
+    def doctor_checks(self): ...        # 可选：至少包含 native_backend
+    def submit(self, call, plan): ...   # 可选：长任务，返回 {"status": "pending" | "running", ...}
+    def status(self, record): ...       # 与 submit 一起：返回当前状态，结束时带回执字段
+    def update(self, call): ...         # 可选：基线 §14 自更新
 ```
 
-运行种子需要已安装其 `requirements.txt` 中的依赖。实例化过程本身只复制和检查本地内容。
-`session` 和 `device` 使用同样的骨架，并分别保留相应后端的未实现状态。
-自己的适配器从生成工程中的 `callbacks.py` 接入；不要在模块导入或适配器构造时执行原生修改。
-自己的注册表、回调和项目源码可以编辑，供应部件的离线锁定检查仍保留。
+- `plan` 不得改变目标；需要试执行时只写隔离区，并在 `outputs` 中列出。交付必须在 `outputs` 中写出目的地（`effect: deliver`）。
+- `apply` 报告观测到的结果：没有读回就不报 `passed`，没有核实就不报 `saved` 或 `delivered`；只交付已有文件时，`artifacts` 列出的是交付的文件，不算本次生成的产物。
+- 失败时抛 `DriverError(code, message, details=…, receipt=…, dispatch_state=…)`；`dispatch_state` 如实说明是否已派发，只有确实什么都没发出去时才写 `not_started`。在 `apply` 或 `submit` 里抛出而没写 `dispatch_state` 的错误，SDK 按结果未知处理，令牌不会重新生效。
+- 来自目标或应用的文字放在 `_untrusted` 列出的字段里。
 
-检查实例化后的供应副本与声明：
+## 状态与范围
+
+- 范围文件：`<TOOL>_SCOPE_FILE` 或 `~/.<tool>/scope.json`；CLI 只读，不提供授权命令。没有文件时只读。根目录和输出目录必须是绝对路径；时间必须带 `Z`；重复 JSON 字段无效。交付位置和 `locator_prefix` 不得带用户信息、查询或 `.`、`..` 段，也不能用编码后的分隔符改变路径层次；否则整个范围按无效处理。交付位置按 URL 的完整路径段比较（DRV-009）。
+- 次数限制：`limits.max_operations` 按范围 ID 累计在记录库里，不随记录过期而清零；没有真正派发的批量项会退回额度。
+- 状态目录：`<TOOL>_STATE_DIR` 或 `~/.<tool>/`，保存确认令牌的密钥和 SQLite 操作记录。目录或文件是链接时拒绝使用；记录库不可用时拒绝派发（`E_IO`，LAY-007）；密钥损坏时自动换新，未用的令牌随之失效。
+- 写入按目标串行：目标身份由模式、引擎、实例和规范化后的定位符组成，`file://` 定位符按真实路径比较。
+- 未登记的 unknown 操作阻止同一目标上的写入（`unresolved_operation`），直到 `operation resolve` 登记读回结果；仍在运行的操作同样阻止（`lock_held`），租约过期前不能登记。同步执行的租约默认 30 秒，由执行中的 CLI 续租（`DriverCLI(lease_seconds=…)`）；已提交的长任务默认 600 秒，每次 `status()` 观测到它仍在进行时续期（`status_lease_seconds=…`）。
+- 登记之后才到的结果不覆盖登记，保存在记录里，`operation show` 在 `extensions.late_result` 中给出；派发后不合契约的回执在 `extensions.rejected_receipt` 中给出。
+- 适配器回执必须匹配记录的操作、能力、计划、范围及目标身份。长任务结束或已停止而没有效果读回时，结果仍为 unknown，同一目标保持待核实状态，不能仅凭 failed/cancelled 解除写入阻塞。
+
+## 种子工程
 
 ```powershell
-python dist/sample-driver/check_project.py
+python scripts/instantiate_starter.py --name sample-driver --profile file --output D:/work/sample-driver
 ```
 
-未实现的业务命令返回明确错误。即使发现、诊断和协议测试通过，也不能把这个种子标为原生能力已验收。
+输出目录必须不存在。种子工程包含：`AGENTS.md` 与 `.agent/AGENT.md`（Agent 的工作流）、`.agent/driver/`（本规范的正文、Schema、驱动契约、基线副本和校验脚本）、`.agent/vendor/sdk/`（SDK）、`.agent/driver/starter-lock.json`（副本来源与哈希）、`registry.json`、`<package>/`（入口与未实现的适配器）、生成的契约、`tests/test_contract.py`（命令级测试与 FCC 守卫）、`.github/workflows/ci.yml`、`CHANGELOG.md`、`pyproject.toml`、`skills/<name>/SKILL.md` 与 `test-prompts.json`。
+实例化之后会在临时状态目录里自检 `reference`、`context`、`doctor`；生成的工程自己的测试也能直接运行：
 
-## 调用与发现
+```powershell
+cd D:/work/sample-driver
+python -m pip install -r requirements.txt
+python check_project.py
+python -m unittest discover -s tests -v
+```
 
-先读取轻量能力索引，再按能力取得完整参数和必需 Schema 引用闭包。
-索引明确表示其范围和摘要性质，不能冒充完整 reference；详情仍可离线解析。
-context 和 doctor 由只读提供方报告实际环境，缺少原生连接时说明不可用，不把声明中的兼容版本当作实际运行版本。
+未实现的命令返回 `E_UNSUPPORTED`。初始化成功、协议测试通过都不能代表原生能力已验收；成熟度只在取得真实证据后提高。
 
-修改调用必须在派发前使用调用方已知的请求标识。解析与输入校验失败发生在处理器之前。
-处理器已被调用后失去结果、返回错误阶段、错误请求标识或无效结果时，框架保留原请求标识并要求核实实际状态。
-这个错误不能报告成未开始，更不能让调用方自动重发修改。
+## 测试与进程
 
-## 接入真实应用
+- 命令级测试运行真实的 CLI 边界；在 Windows 上启动子进程时传 `CREATE_NO_WINDOW`，避免弹出控制台窗口。
+- 临时目录在测试里先 `.resolve()`，避免 macOS 的 `/var` 链接和 Windows 短路径造成的路径比较失败。
+- 不要拿墙上时钟作超时测试的触发条件；用可注入的时钟（`DriverCLI(now=…)`）。
 
-种子的未实现适配器只用于确认入口、参数、发现和错误契约，不进行真实设计操作。
-作者接入真实适配器后，需要实现可信范围解析、目标与基线核对、必要的持久记录及原生调用。
-输出中的执行、变化、保存和验证状态来自实际观察；构造回执时应明确提供这些状态。
-恢复能力、取消保障和重连后的身份解析，按底层工具提供的范围声明并取证。
+## 来源
 
-最小 Skill 只保留触发边界、发现入口和操作配方。场景清单涵盖只检查不保存、回复丢失、同名目标及不可信内容。
-场景文字不代表 Agent 已经通过评估；实际评估需记录调用轨迹、判定结果和环境，不能用提示文件存在代替通过。
-
-## 校验与来源
-
-产品修改注册表后重新生成派生文件，并在 CI 执行漂移检查。
-运行真实 CLI 检查参数到请求 JSON 的映射、默认值、别名、退出码和无终端环境下的输出。
-供应部件通过离线哈希检查；自己的适配器、注册表和项目代码仍可以正常迭代。
-
-当前增强代码与最初发布的 `v1.0.0` 包分别记录来源提交和哈希；已发布标签及资产保持原样。
-不能只凭相同的版本字符串认定内容相同。公共 Schema 的发布基线保存在 `development/published-baseline.json`，核心契约不随开发支持改变。
-实例化和生成过程不联网，不发布 npm，不启动原应用或注册插件。
+种子工程和消费项目的副本都按哈希核对；只凭版本字符串不能认定内容相同。实例化与生成过程不联网、不发布、不启动原应用，也不注册插件。

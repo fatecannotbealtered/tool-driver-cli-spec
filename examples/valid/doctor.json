@@ -1,0 +1,29 @@
+{
+  "checks": [
+    {
+      "check": "release_readiness",
+      "status": "warn",
+      "fix": "Record a live smoke run before declaring stable."
+    },
+    {
+      "check": "authorization",
+      "status": "pass",
+      "fix": null,
+      "message": "Scope scope-isolated-01 is valid until 2026-10-05T00:00:00Z."
+    },
+    {
+      "check": "native_backend",
+      "status": "fail",
+      "fix": "Restart Demo CAD so it loads service 0.4.1 (running: 0.4.0).",
+      "details": {
+        "running": "0.4.0",
+        "on_disk": "0.4.1"
+      }
+    },
+    {
+      "check": "state_store",
+      "status": "pass",
+      "fix": null
+    }
+  ]
+}

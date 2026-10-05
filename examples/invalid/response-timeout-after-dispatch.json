@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "schema_version": "1.0",
+  "error": {
+    "code": "E_TIMEOUT",
+    "message": "The application did not answer in time.",
+    "retryable": true,
+    "details": {
+      "dispatch_state": "dispatched",
+      "operation_id": "operation-01",
+      "next_action": "retry"
+    }
+  },
+  "meta": {
+    "duration_ms": 12
+  }
+}

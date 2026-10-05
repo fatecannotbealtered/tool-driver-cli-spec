@@ -1,0 +1,55 @@
+{
+  "evidence_id": "evidence-development-01",
+  "spec_version": "1.0.0",
+  "schema_version": "2.0",
+  "evidence_context": "development",
+  "kind": "real_application",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_fingerprint_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "package_sha256": null,
+  "recorded_at": "2026-10-04T00:00:00Z",
+  "environment": {
+    "platform": "windows",
+    "arch": "amd64",
+    "components": [
+      {
+        "name": "demo-cad-cli",
+        "role": "cli",
+        "version": "0.4.0",
+        "build_id": "git:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "location": "disk",
+        "identity_status": "observed"
+      },
+      {
+        "name": "simulated adapter",
+        "role": "adapter",
+        "version": "0.4.0",
+        "build_id": null,
+        "location": "disk",
+        "identity_status": "unavailable",
+        "reason": "Test double; no build identity."
+      }
+    ]
+  },
+  "input_fingerprint_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "target": null,
+  "snapshot_id": null,
+  "capabilities": [
+    "feature-create"
+  ],
+  "commands": [
+    "demo-cad-cli feature create --part p --sketch s --depth 10 --dry-run"
+  ],
+  "checks": [
+    {
+      "id": "contract-envelope",
+      "status": "passed",
+      "required": true,
+      "evidence_ref": "tests/test_contract.py::test_envelope"
+    }
+  ],
+  "limitations": [
+    "Simulated adapter: protocol behaviour only; no application, persistence or artifact was verified.",
+    "No product package was built."
+  ]
+}

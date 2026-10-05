@@ -14,19 +14,24 @@ from pathlib import Path
 from jsonschema.exceptions import ValidationError
 
 from check_spec import ROOT, main as check_main, semantic_errors, validators
+from bundle_layout import required_payload
+
+HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def git(*args: str) -> str:
-    return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
+    return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True, creationflags=HIDDEN).strip()
 
 
 def git_bytes(*args: str) -> bytes:
-    return subprocess.check_output(["git", "-C", str(ROOT), *args])
+    return subprocess.check_output(["git", "-C", str(ROOT), *args], creationflags=HIDDEN)
 
 
 def committed_inputs(source_commit: str) -> dict[str, bytes]:
-    required = {"README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt"}
-    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md"}, "scripts": {".py"}, "tests": {".py", ".json", ".svg"}, "packages": {".py", ".json", ".md"}, "starter": {".py", ".json", ".md", ".tmpl"}, "development": {".json", ".md"}}
+    required = {"README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt", "requirements-workflow.txt"}
+    suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md", ".py"}, "scripts": {".py"},
+                "tests": {".py", ".json", ".svg"}, "packages": {".py", ".json", ".md"},
+                "starter": {".py", ".json", ".md", ".toml", ".yml", ".txt", ""}, "base": {".md", ".json"}, "contract": {".json"}}
     inputs = {}
     for record in git_bytes("ls-tree", "-r", "-z", "--full-tree", source_commit).split(b"\0"):
         if not record:
@@ -40,7 +45,7 @@ def committed_inputs(source_commit: str) -> dict[str, bytes]:
         if mode not in {"100644", "100755"} or kind != "blob":
             raise ValueError(f"only regular committed files are specification components: {relative}")
         inputs[relative] = git_bytes("cat-file", "blob", object_id)
-    missing = required - inputs.keys()
+    missing = required_payload() - inputs.keys()
     if missing:
         raise ValueError(f"missing committed specification files: {sorted(missing)}")
     return inputs
@@ -64,14 +69,20 @@ def build(output: Path) -> dict:
     status = inputs["STATUS"].decode("utf-8").strip()
     components = []
     for relative, payload in sorted(inputs.items()):
-        role = "schema" if relative.startswith("schemas/") else "example" if relative.startswith(("examples/", "starter/")) else "validator" if relative.startswith(("packages/", "scripts/", "tests/")) else "dependency_manifest" if relative == "requirements-dev.txt" else "documentation"
+        role = ("schema" if relative.startswith("schemas/") else "base" if relative.startswith("base/")
+                else "contract" if relative.startswith("contract/")
+                else "example" if relative.startswith(("examples/", "starter/"))
+                else "validator" if relative.startswith(("packages/", "scripts/", "tests/"))
+                else "dependency_manifest" if relative in {"requirements-dev.txt", "requirements-workflow.txt"} else "documentation")
         components.append({"name": relative, "version": version, "path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "role": role})
+    base_tag = json.loads(inputs["base/base-lock.json"].decode("utf-8"))["tag"]
     manifest = {
         "artifact_kind": "specification", "name": "tool-driver-cli-spec", "version": version,
-        "spec_version": version, "status": status, "source_commit": source_commit, "source_dirty": False,
+        "spec_version": version, "base": {"spec": "ai-native-cli-spec", "version": base_tag},
+        "status": status, "source_commit": source_commit, "source_dirty": False,
         "target": {"os": "any", "arch": "any"}, "components": components,
-        "compatibility": {"application": [], "plugin": [], "protocol": [{"identity": "tool-driver-cli-schema", "version_range": "1.0", "validation": "verified", "evidence_refs": ["scripts/check_spec.py"]}], "skill": []},
-        "external_requirements": ["Python 3.11+ and requirements-dev.txt are needed only to run local specification checks."],
+        "compatibility": {"application": [], "plugin": [], "protocol": [{"identity": "tool-driver-cli-schema", "version_range": "2.0", "validation": "verified", "evidence_refs": ["scripts/check_spec.py"]}], "skill": []},
+        "external_requirements": ["Python 3.11+ and requirements-dev.txt run local specification checks; requirements-workflow.txt provides optional audit, lint and signing tools."],
         "limitations": ["A stable specification does not certify a particular application or device product.", "No GitHub Release or SkillHub upload is performed by this builder."],
     }
     validators()["release-manifest.schema.json"].validate(manifest)
@@ -103,7 +114,7 @@ def build(output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     for path, payload in outputs.items():
         publish_local(path, payload)
-    return {"ok": True, "artifact_kind": "specification", "version": version, "source_commit": source_commit, "sha256": checksum, "components": len(components), "files": [str(p) for p in outputs], "published": False}
+    return {"artifact_kind": "specification", "version": version, "source_commit": source_commit, "sha256": checksum, "components": len(components), "files": [str(p) for p in outputs], "published": False}
 
 
 def main() -> int:
@@ -114,13 +125,17 @@ def main() -> int:
         check_status = check_main()
     if check_status:
         print(check_output.getvalue().strip())
-        return 1
+        return check_status
     try:
-        print(json.dumps(build(args.output.resolve()), ensure_ascii=False))
+        print(json.dumps({"ok": True, "schema_version": "1.0", "data": build(args.output.resolve()), "meta": {"duration_ms": 0}},
+                         ensure_ascii=False))
         return 0
     except (OSError, ValueError, ValidationError, subprocess.CalledProcessError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
-        return 1
+        print(json.dumps({"ok": False, "schema_version": "1.0", "meta": {"duration_ms": 0},
+                          "error": {"code": "E_VALIDATION", "message": str(exc), "retryable": False,
+                                    "details": {"next_action": "Commit the intended changes and fix what the message names, then build again."}}},
+                         ensure_ascii=False))
+        return 2
 
 
 if __name__ == "__main__":

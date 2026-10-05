@@ -12,7 +12,7 @@ import stat
 import time
 from pathlib import Path, PurePosixPath
 
-from validate_contract import InputError, Parser, emit, parse_json, validate_value
+from validate_contract import InputError, Parser, UsageError, emit, parse_json, validate_value
 from verify_spec_bundle import IntegrityError, canonical_path, path_identity, read_regular_file, verify_bundle
 
 
@@ -72,6 +72,9 @@ def check_adoption(lock: dict, root: Path, bundle: Path) -> dict:
     errors = validate_value("adoption-lock", lock)
     if errors:
         raise InputError("invalid adoption lock: " + "; ".join(errors[:10]))
+    if lock["source_kind"] != "bundle":
+        raise InputError(f"this lock pins a {lock['source_kind'].replace('_', ' ')}, not a specification bundle; "
+                         "check it with the project's own check (check_project.py)")
     paths = [canonical_path(item["path"]) for item in lock["files"]]
     identities = [path_identity(path) for path in paths]
     if len(identities) != len(set(identities)):
@@ -80,27 +83,34 @@ def check_adoption(lock: dict, root: Path, bundle: Path) -> dict:
     manifest = checked.manifest
     if manifest["spec_version"] != lock["spec_version"] or manifest["source_commit"] != lock["source_commit"]:
         raise IntegrityError("lock version or source commit differs from the verified bundle")
+    base_lock = checked.files.get("base/base-lock.json")
+    if base_lock is None:
+        raise IntegrityError("the verified bundle carries no base lock")
+    base = parse_json(base_lock)
+    if (base["spec"], base["tag"], base["commit"]) != (lock["base"]["spec"], lock["base"]["tag"], lock["base"]["commit"]):
+        raise IntegrityError("lock base pin differs from the base the verified bundle was built on")
     sources = {component["path"]: component for component in manifest["components"]}
     results = []
     for item in lock["files"]:
         source = canonical_path(item["source_path"])
         component = sources.get(source)
-        if component is None or component["role"] != "schema":
-            raise InputError(f"public Schema source is unknown or not a Schema component: {source}")
+        if component is None or component["role"] not in {"schema", "contract", "base", "documentation"}:
+            raise InputError(f"public source is unknown or not a public contract component: {source}")
         original = checked.files[source]
         source_hash = hashlib.sha256(original).hexdigest()
         if source_hash != item["sha256"]:
-            raise IntegrityError(f"lock Schema hash differs from verified bundle content: {source}")
+            raise IntegrityError(f"lock hash differs from verified bundle content: {source}")
         copied = managed_bytes(root, item["path"], len(original))
         if copied != original:
-            raise IntegrityError(f"managed Schema copy has drifted: {item['path']}")
+            raise IntegrityError(f"managed copy has drifted: {item['path']}")
         results.append({"path": item["path"], "source_path": source, "sha256": source_hash})
     return {
-        "scope": "offline_pinned_public_schema_copies", "passed": True,
+        "scope": "offline_pinned_public_copies", "passed": True,
         "spec_version": lock["spec_version"], "schema_version": lock["schema_version"],
+        "base": {"spec": base["spec"], "tag": base["tag"], "commit": base["commit"]},
         "source_commit": lock["source_commit"], "package_sha256": checked.sha256,
         "checked_files": results, "origin_authenticated": False,
-        "limitations": ["The lock is assumed to come from a controlled source; this check does not authenticate its author or the publisher.", "Only the listed Schema copies at the checked state are covered; no client CLI or application was executed."],
+        "limitations": ["The lock is assumed to come from a controlled source; this check does not authenticate its author or the publisher.", "Only the listed copies at the checked state are covered; no client CLI or application was executed."],
     }
 
 
@@ -113,17 +123,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         lock = parse_json(read_regular_file(args.lock, 1024 * 1024))
-        emit(True, started, data=check_adoption(lock, args.root, args.bundle))
-        return 0
+        return emit(True, started, data=check_adoption(lock, args.root, args.bundle))
     except IntegrityError as exc:
-        emit(False, started, code="E_INTEGRITY", message=str(exc))
-        return 2
+        return emit(False, started, code="E_INTEGRITY", message=str(exc),
+                    details={"next_action": "do not use this package or copy; obtain it again from the trusted release"})
+    except UsageError as exc:
+        return emit(False, started, code="E_USAGE", message=str(exc), details={"problem": "invalid_value"})
     except (InputError, ValueError, KeyError, TypeError, RecursionError) as exc:
-        emit(False, started, code="E_VALIDATION", message=str(exc))
-        return 2
+        return emit(False, started, code="E_VALIDATION", message=str(exc), details={"problem": "invalid_value"})
     except OSError as exc:
-        emit(False, started, code="E_IO", message=str(exc))
-        return 1
+        return emit(False, started, code="E_IO", message=str(exc),
+                    details={"next_action": "check that the named files exist and are readable"})
 
 
 if __name__ == "__main__":

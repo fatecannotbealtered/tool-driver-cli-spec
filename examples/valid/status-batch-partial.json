@@ -1,0 +1,147 @@
+{
+  "operation_id": "operation-batch-01",
+  "capability_id": "feature-create",
+  "request_id": null,
+  "plan_id": "plan-batch-01",
+  "target": null,
+  "status": "partial",
+  "stage": null,
+  "observed_at": "2026-10-04T00:00:10Z",
+  "started_at": "2026-10-04T00:00:00Z",
+  "finished_at": "2026-10-04T00:00:30Z",
+  "wait_timeout_ms": 10000,
+  "execution_deadline": null,
+  "progress": null,
+  "record": {
+    "availability": "available",
+    "retain_until": "2026-10-11T00:00:00Z",
+    "survives_cli_exit": true,
+    "survives_reconnect": true,
+    "survives_instance_restart": false,
+    "limitations": [
+      "Synthetic example; no application was run."
+    ]
+  },
+  "commands": {
+    "lookup": {
+      "argv": [
+        "operation",
+        "show",
+        "--id",
+        "operation-batch-01"
+      ],
+      "read_only": true
+    },
+    "result": null,
+    "cancel": null
+  },
+  "blocked": null,
+  "resolution": null,
+  "stop_observed": false,
+  "stop_evidence_ref": null,
+  "receipt": null,
+  "plan": {
+    "plan_id": "plan-batch-01",
+    "operation_id": "operation-batch-01",
+    "capability_id": "feature-create",
+    "authorization_scope_id": "scope-isolated-01",
+    "effects": [
+      "change"
+    ],
+    "level": "estimate",
+    "changes": [],
+    "outputs": [],
+    "unknowns": [
+      "Regeneration of downstream features is computed only when the change is applied."
+    ],
+    "constraints": [
+      "Every part must still be at its planned revision when the batch is confirmed."
+    ],
+    "trial_snapshot": null,
+    "can_apply": true,
+    "expires_at": "2026-10-04T00:10:00Z",
+    "total": 2,
+    "targets": [
+      "part-a",
+      "part-b"
+    ],
+    "items": [
+      {
+        "key": "part-a",
+        "operation_id": "operation-a",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-a",
+          "locator": "session://instance-01/part-a"
+        },
+        "base_snapshot": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "changes": [
+          {
+            "action": "create",
+            "resource": "feature",
+            "summary": "Add a 10 mm extrusion on sketch-03 of part-a."
+          }
+        ],
+        "outputs": [],
+        "can_apply": true
+      },
+      {
+        "key": "part-b",
+        "operation_id": "operation-b",
+        "target": {
+          "mode": "session",
+          "engine_id": "demo-cad",
+          "instance_id": "instance-01",
+          "object_id": "part-b",
+          "locator": "session://instance-01/part-b"
+        },
+        "base_snapshot": {
+          "id": "snapshot-01",
+          "source": "live",
+          "revision": "memory-01",
+          "observed_at": "2026-10-04T00:00:00Z",
+          "dependencies": [
+            {
+              "identity": "template-01",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "changes": [
+          {
+            "action": "create",
+            "resource": "feature",
+            "summary": "Add a 10 mm extrusion on sketch-03 of part-b."
+          }
+        ],
+        "outputs": [],
+        "can_apply": true
+      }
+    ]
+  },
+  "items": [
+    {
+      "key": "part-a",
+      "operation_id": "operation-a",
+      "status": "succeeded"
+    },
+    {
+      "key": "part-b",
+      "operation_id": "operation-b",
+      "status": "failed"
+    }
+  ]
+}

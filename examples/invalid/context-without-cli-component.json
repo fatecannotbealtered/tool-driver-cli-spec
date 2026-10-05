@@ -1,0 +1,92 @@
+{
+  "version": "0.4.0",
+  "credentials": {
+    "configured": true
+  },
+  "driver_profile": {
+    "spec": "tool-driver-cli-spec",
+    "spec_version": "1.0.0",
+    "schema_version": "2.0",
+    "base": {
+      "spec": "ai-native-cli-spec",
+      "version": "v1.6.3"
+    },
+    "record": {
+      "store": "local SQLite file in the tool state directory",
+      "retain_days": 30,
+      "survives_cli_exit": true,
+      "survives_reconnect": true,
+      "survives_instance_restart": true,
+      "limitations": [
+        "A running apply whose CLI process ends reports unknown once its lease expires."
+      ]
+    }
+  },
+  "authorization": {
+    "status": "granted",
+    "scope_id": "scope-isolated-01",
+    "source": {
+      "kind": "file",
+      "path": "C:/Users/agent/.demo-cad-cli/scope.json"
+    },
+    "effects": [
+      "observe",
+      "session",
+      "artifact",
+      "change",
+      "persist"
+    ],
+    "roots": [
+      "D:/work/copy"
+    ],
+    "outputs": [
+      "D:/work/out"
+    ],
+    "destinations": [],
+    "dangerous": false,
+    "expires_at": "2026-10-05T00:00:00Z",
+    "reason": null
+  },
+  "environment": {
+    "platform": "windows",
+    "arch": "amd64",
+    "components": [
+      {
+        "name": "demo-cad-service",
+        "role": "service",
+        "version": "0.4.0",
+        "build_id": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "location": "running",
+        "identity_status": "observed"
+      },
+      {
+        "name": "demo-cad-service",
+        "role": "service",
+        "version": "0.4.1",
+        "build_id": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "location": "disk",
+        "identity_status": "observed"
+      },
+      {
+        "name": "Demo CAD",
+        "role": "application",
+        "version": "12.0.1",
+        "build_id": null,
+        "location": "running",
+        "identity_status": "observed"
+      }
+    ],
+    "connection": {
+      "status": "connected",
+      "instance_id": "instance-01",
+      "generation": "gen-3",
+      "ownership": "attached"
+    }
+  },
+  "state": {
+    "dir": "C:/Users/agent/.demo-cad-cli",
+    "available": true,
+    "protection": "windows_profile_acl",
+    "record_retention_days": 30
+  }
+}
