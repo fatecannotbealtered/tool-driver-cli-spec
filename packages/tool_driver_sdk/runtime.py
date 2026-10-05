@@ -22,12 +22,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import tokens
+from .verification import PROFILE_PREFIX, guard_receipt
 from .changelog import since as changelog_since
 from .models import GATED, Call, DriverError
 from .scope import ScopeResolver, forbidden
 from .store import (Blocked, BudgetSpent, KeyMismatch, KeyUsed, LeaseHeld, StateStore, StoreError, TokenUsed, effective_status,
                     target_key)
-from .validation import ContractError, ContractValidationError, ContractValidator
+from .validation import ContractError, ContractValidationError, ContractValidator, clone_json
 
 VALUE_FLAGS = frozenset({"--format", "--fields", "--confirm", "--request-id", "--idempotency-key"})
 BOOL_FLAGS = frozenset({"--json", "--compact", "--quiet", "--dry-run", "--dangerous", "--version", "--help"})
@@ -1368,7 +1369,10 @@ class DriverCLI:
     def _complete_receipt(self, fields, record, plan, key) -> dict | None:
         if not isinstance(fields, dict):
             return None
-        receipt = dict(fields)
+        try:
+            receipt = clone_json(fields)
+        except ContractError:
+            return None
         receipt.setdefault("operation_id", record["operation_id"])
         receipt.setdefault("capability_id", record["capability_id"])
         receipt.setdefault("plan_id", plan.get("plan_id"))
@@ -1381,6 +1385,18 @@ class DriverCLI:
         receipt.setdefault("failed_stage", None)
         if key:
             receipt["request_id"] = key
+        outcome = receipt.get("outcome")
+        verification = outcome.get("verification") if isinstance(outcome, dict) else None
+        if isinstance(verification, dict) and isinstance(verification.get("extensions"), dict):
+            extensions = verification["extensions"]
+            candidate = extensions.get("verification_result")
+            marker = candidate.get("profile") if isinstance(candidate, dict) else None
+            if isinstance(marker, str) and marker.startswith(PROFILE_PREFIX):
+                try:
+                    profile = self.validator.validate("verification-result", candidate)
+                    receipt = guard_receipt(receipt, profile)
+                except (ContractError, KeyError, TypeError, ValueError):
+                    return None
         if not self._valid("receipt", receipt):
             return None
         expected = {"operation_id": record["operation_id"], "capability_id": record["capability_id"],

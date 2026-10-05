@@ -1,0 +1,90 @@
+{
+  "profile": "urn:tool-driver-cli-spec:verification-result:2.0",
+  "target": {
+    "mode": "device",
+    "engine_id": "illustrative-engine",
+    "instance_id": "illustrative-device",
+    "object_id": "illustrative-object",
+    "locator": "illustrative://device/object"
+  },
+  "snapshot": {
+    "id": "illustrative-device-after",
+    "source": "device",
+    "revision": "illustrative-state-1",
+    "observed_at": "2026-10-05T00:00:00Z",
+    "dependencies": []
+  },
+  "requirements": [
+    {
+      "id": "readback",
+      "kind": "field",
+      "field_path": "/geometry/width",
+      "expected": {
+        "value": 12,
+        "unit": "mm"
+      },
+      "comparison": {
+        "operator": "within_tolerance",
+        "absolute": 0.02
+      },
+      "allowed_sources": [
+        "device_readback"
+      ],
+      "independence": {
+        "required": true,
+        "writer_sources": [
+          "fixture-text-writer"
+        ],
+        "expectation_sources": [
+          "task-integer-literal"
+        ]
+      }
+    }
+  ],
+  "observations": [
+    {
+      "requirement_id": "readback",
+      "observed": {
+        "value": 12.01,
+        "unit": "mm"
+      },
+      "source": {
+        "kind": "device_readback",
+        "completion": "completed",
+        "target": {
+          "mode": "device",
+          "engine_id": "illustrative-engine",
+          "instance_id": "illustrative-device",
+          "object_id": "illustrative-object",
+          "locator": "illustrative://device/object"
+        },
+        "snapshot": {
+          "id": "illustrative-device-after",
+          "source": "device",
+          "revision": "illustrative-state-1",
+          "observed_at": "2026-10-05T00:00:00Z",
+          "dependencies": []
+        },
+        "method": "Illustrative method only; replace with actually executed readback",
+        "evidence_ref": "illustrative-record-not-native-evidence",
+        "defect_sources": [
+          "stdlib-json-consumer"
+        ],
+        "independence_basis": "Illustrative distinct sources; this JSON does not prove independent execution",
+        "coverage": {
+          "checked_paths": [
+            "/geometry/width"
+          ],
+          "not_checked": []
+        }
+      }
+    }
+  ],
+  "not_checked": [
+    {
+      "field_path": "/appearance",
+      "required": false,
+      "reason": "outside this illustrative width-only scope"
+    }
+  ]
+}

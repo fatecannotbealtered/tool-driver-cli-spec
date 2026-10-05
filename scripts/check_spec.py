@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import time
+import types
 from collections import Counter
 from functools import lru_cache
 from datetime import datetime
@@ -163,6 +164,13 @@ def receipt_errors(value: dict) -> list[str]:
     verification = outcome["verification"]
     before, after = value["snapshot_before"], value["snapshot_after"]
     effects = set(value["effects"])
+    profile = verification.get("extensions", {}).get("verification_result")
+    marker = profile.get("profile") if isinstance(profile, dict) else None
+    if isinstance(marker, str) and marker.startswith(PUBLIC_PREFIX + "verification-result:"):
+        problems = instance_errors("verification-result", profile)
+        errors.extend(problems)
+        if not problems:
+            errors.extend(verification_helpers().receipt_profile_errors(value, profile))
     if outcome["change"] in {"applied", "partial", "rolled_back"} and value["authorization_scope_id"] is None:
         errors.append("known modifications must retain their applicable authorization reference")
     if outcome["change"] == "unknown" and value["authorization_scope_id"] is None and not value.get("authorization_unavailable_reason"):
@@ -951,13 +959,28 @@ def evidence_errors(value: dict) -> list[str]:
     return errors
 
 
+@lru_cache(maxsize=1)
+def verification_helpers():
+    """Use only this pinned checkout/starter's pure helper, never a path from adapter data."""
+    source = ROOT / "packages" / "tool_driver_sdk" / "verification.py"
+    if not source.is_file():
+        source = ROOT.parent / "vendor" / "sdk" / "tool_driver_sdk" / "verification.py"
+    module = types.ModuleType("_pinned_verification_result")
+    exec(compile(source.read_bytes(), str(source), "exec"), module.__dict__)
+    return module
+
+
+def verification_result_errors(value: dict) -> list[str]:
+    return verification_helpers().profile_errors(value)
+
+
 SEMANTIC = {
     "receipt": receipt_errors, "plan": plan_errors, "response": response_errors, "reference": reference_errors,
     "reference-index": reference_index_errors, "reference-command": reference_command_errors,
     "operation-status": operation_status_errors, "workflow": workflow_errors, "batch": batch_errors,
     "query-page": query_page_errors, "context": context_errors, "doctor": doctor_errors, "scope": scope_errors,
     "changelog": changelog_errors, "adoption-lock": adoption_lock_errors, "release-manifest": release_manifest_errors,
-    "evidence": evidence_errors,
+    "evidence": evidence_errors, "verification-result": verification_result_errors,
 }
 
 

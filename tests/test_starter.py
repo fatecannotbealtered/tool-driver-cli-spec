@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -119,6 +120,59 @@ class StarterTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256((self.project / item["path"]).read_bytes()).hexdigest(), item["sha256"])
             self.assertEqual((ROOT / item["source_path"]).read_bytes(), (self.project / item["path"]).read_bytes())
 
+    def test_readme_skeleton_and_personal_metadata_stay_consistent(self):
+        project = self.base / "personal-driver"
+        description = 'Read "actual" state & keep <script> as text \\ path'
+        author = 'Maintainer "A" & <Reviewer>'
+        repo = "https://example.invalid/personal-driver"
+        result = run([str(SCRIPT), "--name", "personal-driver", "--profile", "file", "--output", str(project),
+                      "--description", description, "--repo", repo, "--author", author], self.base)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        response = json.loads(result.stdout)
+        self.assertEqual(response["data"]["metadata"], {"description": description, "repo": repo, "author": author})
+        registry = json.loads((project / "registry.json").read_text(encoding="utf-8"))
+        metadata = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        self.assertEqual((registry["description"], metadata["description"]), (description, description))
+        self.assertEqual(metadata["authors"], [{"name": author}])
+        self.assertEqual(metadata["urls"]["Repository"], repo)
+        for filename in ("README.md", "README_zh.md"):
+            text = (project / filename).read_text(encoding="utf-8")
+            self.assertEqual(re.findall(r"^## (.+)$", text, re.M),
+                             ["Agent Install", "What It Does", "Capabilities", "Agent Workflow", "Machine Contract",
+                              "Configuration", "Project Structure", "Development", "Links"])
+            self.assertIn("&lt;script&gt;", text)
+            self.assertNotIn("<script>", text)
+            self.assertIn("&lt;Reviewer&gt;", text)
+            self.assertIn(repo, text)
+            self.assertIn("E_UNSUPPORTED", text)
+            # Every emitted local link is real; absent governance documents remain explicit statuses.
+            links = re.findall(r"\[[^\]]+\]\(([^)]+)\)", text) + re.findall(r'href="([^"]+)"', text)
+            for link in links:
+                if not link.startswith(("https://", "#")):
+                    self.assertTrue((project / link.split("#")[0]).is_file(), (filename, link))
+        self.assertEqual(run(["check_project.py"], project).returncode, 0)
+        self.assertIsNone(self.response["data"]["metadata"]["author"])
+        self.assertIsNone(self.response["data"]["metadata"]["repo"])
+
+    def test_vendored_sdk_rejects_a_structured_false_pass(self):
+        # A separate isolated interpreter must load the SDK and semantics copied into the new project.
+        code = """import json,sys; from pathlib import Path
+project=Path(sys.argv[1]); root=Path(sys.argv[2])
+sys.path.insert(0,str(project/'.agent/vendor/sdk'))
+import tool_driver_sdk
+assert str(project) in tool_driver_sdk.__file__
+validator=tool_driver_sdk.ContractValidator(project/'.agent/driver')
+receipt=json.loads((root/'examples/invalid/receipt-screenshot-structural-pass.json').read_text(encoding='utf-8'))
+try: validator.validate('receipt',receipt)
+except tool_driver_sdk.ContractValidationError: pass
+else: raise AssertionError('vendored checker accepted screenshot as structured state')
+legacy=json.loads((root/'examples/valid/receipt-file-saved.json').read_text(encoding='utf-8'))
+validator.validate('receipt',legacy)
+print('vendored profile guard and legacy compatibility passed')
+"""
+        result = run(["-I", "-c", code, str(self.project), str(ROOT)], self.base)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
     def test_check_project_detects_drift(self):
         result = run(["check_project.py"], self.project)
         self.assertEqual(result.returncode, 0, result.stdout)
@@ -157,10 +211,13 @@ class StarterTests(unittest.TestCase):
 
     def test_refusals_create_nothing(self):
         cases = [(["--name", "Bad_Name", "--profile", "file"], 2, "E_VALIDATION"),
-                 (["--name", "ok-name", "--profile", "robot"], 2, "E_USAGE")]
-        for arguments, code, error in cases:
+                 (["--name", "ok-name", "--profile", "robot"], 2, "E_USAGE"),
+                 (["--name", "ok-name", "--profile", "file", "--repo", "javascript:alert(1)"], 2, "E_VALIDATION"),
+                 (["--name", "ok-name", "--profile", "file", "--description", "first\nsecond"], 2, "E_VALIDATION"),
+                 (["--name", "ok-name", "--profile", "file", "--author", ""], 2, "E_VALIDATION")]
+        for index, (arguments, code, error) in enumerate(cases):
             with self.subTest(arguments=arguments):
-                output = self.base / ("refused-" + str(code) + arguments[1])
+                output = self.base / ("refused-" + str(index))
                 result = run([str(SCRIPT), *arguments, "--output", str(output)], self.base)
                 response = json.loads(result.stdout)
                 self.assertEqual((result.returncode, response["error"]["code"]), (code, error))

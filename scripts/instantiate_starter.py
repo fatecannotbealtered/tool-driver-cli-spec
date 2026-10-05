@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.dont_write_bytecode = True
 SOURCE = Path(__file__).resolve().parents[1]
@@ -98,18 +100,44 @@ def vendored() -> dict[str, tuple[str, bytes]]:
     return files
 
 
-def instantiate(name: str, output: Path, profile: str) -> dict:
+def metadata_text(value: str | None, label: str, limit: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or len(value) > limit or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise StarterError(f"--{label} must be one nonempty line of at most {limit} characters.")
+    return value.strip()
+
+
+def instantiate(name: str, output: Path, profile: str, *, description: str | None = None,
+                repo: str | None = None, author: str | None = None) -> dict:
     if len(name) > 64 or not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name):
         raise StarterError("--name must be a lowercase kebab-case product name of at most 64 characters.",
                             next_action="Use a name such as sample-driver.")
     if profile not in {"file", "session", "device"}:
         raise StarterError("--profile must be file, session or device.")
+    description = metadata_text(description, "description", 512) or f"A driver CLI for AI agents ({profile} mode)."
+    author = metadata_text(author, "author", 128)
+    repo = metadata_text(repo, "repo", 2048)
+    if repo:
+        try:
+            address = urlsplit(repo)
+            if (address.scheme != "https" or not address.hostname or address.username or address.password
+                    or address.query or address.fragment or any(char.isspace() for char in repo)):
+                raise ValueError
+            address.port
+        except ValueError as exc:
+            raise StarterError("--repo must be an HTTPS repository URL without credentials, query or fragment.") from exc
     output = Path(os.path.abspath(output))
     if os.path.lexists(output):
         raise StarterError("The output already exists; nothing was changed.", "E_CONFLICT", "Choose a new output directory.")
     package = name.replace("-", "_")
     replacements = {"{{NAME}}": name, "{{PACKAGE}}": package, "{{VERSION}}": VERSION, "{{PROFILE}}": profile,
-                    "{{DATE}}": datetime.now(timezone.utc).date().isoformat(), "{{ENV_PREFIX}}": name.upper().replace("-", "_")}
+                    "{{DATE}}": datetime.now(timezone.utc).date().isoformat(), "{{ENV_PREFIX}}": name.upper().replace("-", "_"),
+                    "{{DESCRIPTION_HTML}}": html.escape(description), "{{DESCRIPTION_JSON}}": json.dumps(description, ensure_ascii=False),
+                    "{{AUTHOR_HTML}}": html.escape(author) if author else "Not configured / 待配置",
+                    "{{REPOSITORY_HTML}}": f'<a href="{html.escape(repo, quote=True)}">{html.escape(repo)}</a>' if repo else "Not configured / 待配置",
+                    "{{AUTHORS_TOML}}": "authors = [{name = " + json.dumps(author, ensure_ascii=False) + "}]" if author else "# Configure authors when the maintainer is known.",
+                    "{{REPOSITORY_TOML}}": "[project.urls]\nRepository = " + json.dumps(repo, ensure_ascii=False) if repo else "# Configure [project.urls] when the repository exists."}
     payloads: dict[str, bytes] = {}
     for path in sorted(TEMPLATE.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts:
@@ -118,8 +146,8 @@ def instantiate(name: str, output: Path, profile: str) -> dict:
         content = regular_bytes(path)
         if path.suffix in TEXT_SUFFIXES:
             text = content.decode("utf-8")
-            for key, value in replacements.items():
-                text = text.replace(key, value)
+            # User metadata is not another template; substitute once without recursive expansion.
+            text = re.sub(r"\{\{[A-Z_]+\}\}", lambda match: replacements.get(match.group(), match.group()), text)
             content = text.encode("utf-8")
         payloads[destination_of(relative, name, package)] = content
     copies = vendored()
@@ -162,6 +190,7 @@ def instantiate(name: str, output: Path, profile: str) -> dict:
                            "Report this starter defect; the output directory was kept for inspection.") from exc
     smoke = self_check(output, package, name)
     return {"output": str(output), "name": name, "package": package, "profile": profile, "product_version": VERSION,
+            "metadata": {"description": description, "repo": repo, "author": author},
             "spec_version": lock["spec_version"], "base": lock["base"], "files": len(written) + len(generated["files"]) + 1,
             "source": {"kind": lock["source_kind"], "commit": lock["source_commit"], "dirty": lock["source_dirty"],
                        "origin_authenticated": False, "limitations": lock["limitations"]},
@@ -210,9 +239,13 @@ def main(argv=None) -> int:
     parser.add_argument("--name", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--profile", choices=["file", "session", "device"], required=True)
+    parser.add_argument("--description", help="One-line positioning for both READMEs and product metadata.")
+    parser.add_argument("--repo", help="HTTPS repository URL; omit until a repository exists.")
+    parser.add_argument("--author", help="Maintainer display name; no biography is invented.")
     try:
         args = parser.parse_args(argv)
-        value = {"ok": True, "schema_version": "1.0", "data": instantiate(args.name, args.output, args.profile)}
+        value = {"ok": True, "schema_version": "1.0", "data": instantiate(args.name, args.output, args.profile,
+                                                                       description=args.description, repo=args.repo, author=args.author)}
         code = 0
     except StarterError as exc:
         value = {"ok": False, "schema_version": "1.0",

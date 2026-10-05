@@ -7,6 +7,7 @@ CORE_FILES = {
     'base/base-lock.json', 'contract/driver-contract.json',
     'docs/LAYERING.md', 'docs/CORE-SPEC.md', 'docs/DRIVER-SPEC.md',
     'docs/VERIFICATION-SPEC.md', 'docs/DELIVERY-SPEC.md', 'docs/SKILL-ADDENDUM.md',
+    'docs/VERIFICATION-RESULTS.md',
     'docs/ADOPTION-GUIDE.md', 'docs/DEVELOPMENT-GUIDE.md',
     'docs/ENGINEERING-ACCEPTANCE.md', 'examples/engineering/README.md',
     'docs/SOFTWARE-SPEC-MAPPING.md',

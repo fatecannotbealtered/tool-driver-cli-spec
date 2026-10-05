@@ -5,9 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "{{NAME}}"
 version = "{{VERSION}}"
-description = "{{NAME}}: a driver CLI for AI agents ({{PROFILE}} mode)."
+description = {{DESCRIPTION_JSON}}
+{{AUTHORS_TOML}}
 requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.26", "referencing>=0.37"]
+
+{{REPOSITORY_TOML}}
 
 [project.scripts]
 {{NAME}} = "{{PACKAGE}}.cli:main"

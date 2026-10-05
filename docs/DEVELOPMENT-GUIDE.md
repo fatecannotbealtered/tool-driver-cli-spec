@@ -83,6 +83,8 @@ class Adapter:
 - 失败时抛 `DriverError(code, message, details=…, receipt=…, dispatch_state=…)`；`dispatch_state` 如实说明是否已派发，只有确实什么都没发出去时才写 `not_started`。在 `apply` 或 `submit` 里抛出而没写 `dispatch_state` 的错误，SDK 按结果未知处理，令牌不会重新生效。
 - 来自目标或应用的文字放在 `_untrusted` 列出的字段里。
 
+实际 expected/observed、单位/容差、方法和未覆盖项可复用可选的[验证结果 profile](VERIFICATION-RESULTS.md)。SDK 会重新推导采用该 profile 的回执验证状态；它检查记录的一致性，不能替适配器获取或认证真实读回。
+
 ## 状态与范围
 
 - 范围文件：`<TOOL>_SCOPE_FILE` 或 `~/.<tool>/scope.json`；CLI 只读，不提供授权命令。没有文件时只读。根目录和输出目录必须是绝对路径；时间必须带 `Z`；重复 JSON 字段无效。交付位置和 `locator_prefix` 不得带用户信息、查询或 `.`、`..` 段，也不能用编码后的分隔符改变路径层次；否则整个范围按无效处理。交付位置按 URL 的完整路径段比较（DRV-009）。
@@ -98,6 +100,8 @@ class Adapter:
 ```powershell
 python scripts/instantiate_starter.py --name sample-driver --profile file --output D:/work/sample-driver
 ```
+
+可选 `--description`、`--repo`（HTTPS）和 `--author` 将定位、仓库与维护者同步到英中 README 及产品元数据；未提供的仓库和作者保留待配置状态。README 采用基线 §2 的固定栏目与居中入口，能力、渠道、徽章、许可证及个人介绍只能按真实资料补充。
 
 输出目录必须不存在。种子工程包含：`AGENTS.md` 与 `.agent/AGENT.md`（Agent 的工作流）、`.agent/driver/`（本规范的正文、Schema、驱动契约、基线副本和校验脚本）、`.agent/vendor/sdk/`（SDK）、`.agent/driver/starter-lock.json`（副本来源与哈希）、`registry.json`、`<package>/`（入口与未实现的适配器）、生成的契约、`tests/test_contract.py`（命令级测试与 FCC 守卫）、`.github/workflows/ci.yml`、`CHANGELOG.md`、`pyproject.toml`、`skills/<name>/SKILL.md` 与 `test-prompts.json`。
 实例化之后会在临时状态目录里自检 `reference`、`context`、`doctor`；生成的工程自己的测试也能直接运行：

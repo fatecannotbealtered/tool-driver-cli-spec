@@ -1,0 +1,171 @@
+{
+  "operation_id": "operation-01",
+  "capability_id": "part-save",
+  "plan_id": "plan-01",
+  "target": {
+    "mode": "session",
+    "engine_id": "demo-cad",
+    "instance_id": "instance-01",
+    "object_id": "part-01",
+    "locator": "session://instance-01/part-01"
+  },
+  "authorization_scope_id": "scope-isolated-01",
+  "effects": [
+    "persist"
+  ],
+  "snapshot_before": {
+    "id": "snapshot-01",
+    "source": "live",
+    "revision": "memory-01",
+    "observed_at": "2026-10-04T00:00:00Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "snapshot_after": {
+    "id": "snapshot-03",
+    "source": "disk",
+    "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "observed_at": "2026-10-04T00:00:02Z",
+    "dependencies": [
+      {
+        "identity": "template-01",
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "outcome": {
+    "execution": "completed",
+    "change": "not_applied",
+    "persistence": "saved",
+    "delivery": "not_applicable",
+    "verification": {
+      "status": "passed",
+      "snapshot_id": "snapshot-03",
+      "coverage": "complete",
+      "checks": [
+        {
+          "id": "readback",
+          "status": "passed",
+          "required": true,
+          "evidence_ref": "fixture-disk-readback"
+        }
+      ],
+      "not_checked": [],
+      "evidence_refs": [
+        "fixture-disk-readback"
+      ],
+      "scope": "illustrative scalar readback only",
+      "extensions": {
+        "verification_result": {
+          "profile": "urn:tool-driver-cli-spec:verification-result:2.0",
+          "target": {
+            "mode": "session",
+            "engine_id": "demo-cad",
+            "instance_id": "instance-01",
+            "object_id": "part-01",
+            "locator": "session://instance-01/part-01"
+          },
+          "snapshot": {
+            "id": "snapshot-03",
+            "source": "disk",
+            "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "observed_at": "2026-10-04T00:00:02Z",
+            "dependencies": [
+              {
+                "identity": "template-01",
+                "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          },
+          "requirements": [
+            {
+              "id": "readback",
+              "kind": "field",
+              "field_path": "",
+              "expected": {
+                "value": 12,
+                "unit": null
+              },
+              "comparison": {
+                "operator": "equals"
+              },
+              "allowed_sources": [
+                "screenshot"
+              ],
+              "independence": {
+                "required": true,
+                "writer_sources": [
+                  "fixture-text-writer"
+                ],
+                "expectation_sources": [
+                  "task-integer-literal"
+                ]
+              }
+            }
+          ],
+          "observations": [
+            {
+              "requirement_id": "readback",
+              "observed": {
+                "value": 12,
+                "unit": null
+              },
+              "source": {
+                "kind": "screenshot",
+                "completion": "completed",
+                "target": {
+                  "mode": "session",
+                  "engine_id": "demo-cad",
+                  "instance_id": "instance-01",
+                  "object_id": "part-01",
+                  "locator": "session://instance-01/part-01"
+                },
+                "snapshot": {
+                  "id": "snapshot-03",
+                  "source": "disk",
+                  "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "observed_at": "2026-10-04T00:00:02Z",
+                  "dependencies": [
+                    {
+                      "identity": "template-01",
+                      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  ]
+                },
+                "method": "Deliberate forged screenshot claim, no structured readback",
+                "evidence_ref": "fixture-disk-readback",
+                "defect_sources": [
+                  "stdlib-json-consumer"
+                ],
+                "independence_basis": "writer saves text; task uses an integer literal; a fresh process parses disk JSON",
+                "coverage": {
+                  "checked_paths": [
+                    ""
+                  ],
+                  "not_checked": []
+                }
+              }
+            }
+          ],
+          "not_checked": []
+        }
+      }
+    }
+  },
+  "failed_stage": null,
+  "changed_items": [],
+  "artifacts": [],
+  "deliveries": [],
+  "recovery": {
+    "action": "none",
+    "reason": "Saved and reopened from disk.",
+    "supported": true
+  },
+  "_untrusted": [
+    "outcome.verification.extensions.verification_result"
+  ]
+}

@@ -1212,6 +1212,42 @@
       "schema": "adoption-lock.schema.json",
       "valid": false,
       "purpose": "A pin taken from a bundle records the bundle hash."
+    },
+    {
+      "path": "examples/valid/verification-result-file.json",
+      "schema": "verification-result.schema.json",
+      "valid": true,
+      "purpose": "FORMAT ONLY: file target, snapshot, raw values, units/tolerance and exclusions; not application/device evidence."
+    },
+    {
+      "path": "examples/valid/verification-result-session.json",
+      "schema": "verification-result.schema.json",
+      "valid": true,
+      "purpose": "FORMAT ONLY: session target, snapshot, raw values, units/tolerance and exclusions; not application/device evidence."
+    },
+    {
+      "path": "examples/valid/verification-result-device.json",
+      "schema": "verification-result.schema.json",
+      "valid": true,
+      "purpose": "FORMAT ONLY: device target, snapshot, raw values, units/tolerance and exclusions; not application/device evidence."
+    },
+    {
+      "path": "examples/valid/receipt-structured-readback.json",
+      "schema": "receipt.schema.json",
+      "valid": true,
+      "purpose": "FORMAT ONLY: optional structured profile maps to the unchanged generic receipt; not native evidence."
+    },
+    {
+      "path": "examples/invalid/receipt-screenshot-structural-pass.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Forged generic passed cannot hide a screenshot standing in for a structural observation."
+    },
+    {
+      "path": "examples/invalid/receipt-stale-verification-pass.json",
+      "schema": "receipt.schema.json",
+      "valid": false,
+      "purpose": "Forged generic passed cannot hide a result from an old target revision."
     }
   ]
 }

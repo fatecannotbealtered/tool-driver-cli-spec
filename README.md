@@ -31,6 +31,7 @@ ai-native-cli-spec 的驱动扩展层：让 Agent 驱动真实应用、应用文
 | [核心协议](docs/CORE-SPEC.md) | 信封中驱动对象的位置、回执推导、错误详情、发现、计划与操作身份 |
 | [应用与设备操作](docs/DRIVER-SPEC.md) | 目标身份、任务范围、阶段、漂移、批量与工作流、长任务、设备 |
 | [验证](docs/VERIFICATION-SPEC.md) | 契约、真实操作、产物、Skill 评测和发布验收 |
+| [结构化验证结果](docs/VERIFICATION-RESULTS.md) | 可选 expected/observed profile、来源与快照绑定，以及 SDK 结果推导的边界 |
 | [交付](docs/DELIVERY-SPEC.md) | Release、渠道、安装与升级、Skill 配套、版本与规范包 |
 | [驱动 Skill 增补](docs/SKILL-ADDENDUM.md) | 驱动 Skill 在基线 SKILL-SPEC 之上必须写的内容 |
 | [实施与迁移](docs/ADOPTION-GUIDE.md) | 新建工具、从基线驱动 CLI 和 1.0 迁移、试点 |
