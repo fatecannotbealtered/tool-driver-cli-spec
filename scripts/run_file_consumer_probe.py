@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import hashlib
 import html
 from html.parser import HTMLParser
@@ -82,13 +83,44 @@ def source_commit():
     return commit
 
 
+def windows_product_version(browser):
+    """Read the selected file's fixed product version without starting a shell."""
+    api = ctypes.WinDLL("version.dll", use_last_error=True, winmode=0x800)  # System32 only.
+    dword, pointer = ctypes.c_uint32, ctypes.c_void_p
+    api.GetFileVersionInfoSizeW.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(dword)]
+    api.GetFileVersionInfoSizeW.restype = dword
+    api.GetFileVersionInfoW.argtypes = [ctypes.c_wchar_p, dword, dword, pointer]
+    api.GetFileVersionInfoW.restype = ctypes.c_int32
+    api.VerQueryValueW.argtypes = [pointer, ctypes.c_wchar_p, ctypes.POINTER(pointer), ctypes.POINTER(dword)]
+    api.VerQueryValueW.restype = ctypes.c_int32
+    size = api.GetFileVersionInfoSizeW(str(browser), None)
+    if not 0 < size <= 1024 * 1024:
+        raise ProbeError("E_CONFIG", "Browser product version resource is absent or exceeds the size limit.")
+    buffer = ctypes.create_string_buffer(size)
+    if not api.GetFileVersionInfoW(str(browser), 0, size, buffer):
+        raise ProbeError("E_CONFIG", "Could not read the selected browser product version resource.")
+    value, length = pointer(), dword()
+    if not api.VerQueryValueW(buffer, "\\", ctypes.byref(value), ctypes.byref(length)):
+        raise ProbeError("E_CONFIG", "Browser fixed product version is unavailable.")
+    fixed_info = dword * 13  # VS_FIXEDFILEINFO: signature, structure, file MS/LS, product MS/LS, ...
+    required = ctypes.sizeof(fixed_info)
+    start, address = ctypes.addressof(buffer), value.value or 0
+    if length.value < required or not start <= address <= start + size - required:
+        raise ProbeError("E_CONFIG", "Browser fixed product version points outside its resource.")
+    fields = fixed_info.from_address(address)
+    if fields[0] != 0xFEEF04BD:
+        raise ProbeError("E_CONFIG", "Browser fixed product version has an invalid signature.")
+    high, low = fields[4], fields[5]
+    return ".".join(str(part) for part in (high >> 16, high & 65535, low >> 16, low & 65535))
+
+
 def browser_version(browser):
     if os.name == "nt":
-        literal = str(browser).replace("'", "''")
-        argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-                f"(Get-Item -LiteralPath '{literal}').VersionInfo.ProductVersion"]
-    else:
-        argv = [str(browser), "--version"]
+        return windows_product_version(browser)
+    return command_version([str(browser), "--version"])
+
+
+def command_version(argv):
     with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
         process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=stdout_file,
                                    stderr=stderr_file, creationflags=HIDDEN)

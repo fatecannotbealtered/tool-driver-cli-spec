@@ -302,10 +302,57 @@ class FileConsumerProbeTests(unittest.TestCase):
     def test_version_query_does_not_wait_for_descendant_stdio_closure(self):
         launch_python, child_ready, child_done = self.owned_python_with_inherited_stdio("simulated-version", "version")
         with patch.object(probe.subprocess, "Popen", side_effect=launch_python):
-            version = self.version.temp_original(self.browser)
+            version = probe.command_version([str(self.browser), "--version"])
         self.assertEqual(version, "simulated-version")
         self.assertTrue(child_ready.exists())
         self.assertFalse(child_done.exists(), "Version metadata waits for the parent, not helper stdio.")
+
+    @unittest.skipUnless(probe.os.name == "nt", "Windows native file version API")
+    def test_windows_version_reads_real_python_metadata_without_starting_a_process(self):
+        with patch.object(probe.subprocess, "Popen") as launch:
+            version = self.version.temp_original(Path(sys.executable))
+        launch.assert_not_called()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+\.\d+$")
+        self.assertEqual(tuple(map(int, version.split(".")[:2])), sys.version_info[:2])
+
+    @unittest.skipUnless(probe.os.name == "nt", "Windows native file version API")
+    def test_windows_version_rejects_unversioned_file_without_starting_a_process(self):
+        with patch.object(probe.subprocess, "Popen") as launch:
+            with self.assertRaises(probe.ProbeError) as caught:
+                self.version.temp_original(self.browser)
+        launch.assert_not_called()
+        self.assertEqual(caught.exception.code, "E_CONFIG")
+
+    def test_windows_version_resource_bounds_and_signature_are_checked_before_dereferencing(self):
+        """Synthetic resource API; never real browser or Windows acceptance evidence."""
+        for scenario in ("valid", "missing", "oversized", "unreadable", "missing-root", "outside", "short", "signature"):
+            with self.subTest(scenario=scenario):
+                def size(_path, _handle):
+                    return 0 if scenario == "missing" else 1024 * 1024 + 1 if scenario == "oversized" else 128
+
+                def read(_path, _handle, _size, buffer):
+                    fields = (probe.ctypes.c_uint32 * 13).from_buffer(buffer)
+                    fields[0] = 0 if scenario == "signature" else 0xFEEF04BD
+                    fields[4], fields[5] = (152 << 16) | 7, (123 << 16) | 9
+                    return scenario != "unreadable"
+
+                def query(buffer, block, value, length):
+                    self.assertEqual(block, "\\")
+                    address = probe.ctypes.addressof(buffer) + (256 if scenario == "outside" else 0)
+                    probe.ctypes.cast(value, probe.ctypes.POINTER(probe.ctypes.c_void_p)).contents.value = address
+                    probe.ctypes.cast(length, probe.ctypes.POINTER(probe.ctypes.c_uint32)).contents.value = 4 if scenario == "short" else 52
+                    return scenario != "missing-root"
+
+                with patch.object(probe.ctypes, "WinDLL", create=True) as load:
+                    api = load.return_value
+                    api.GetFileVersionInfoSizeW, api.GetFileVersionInfoW, api.VerQueryValueW = size, read, query
+                    if scenario == "valid":
+                        self.assertEqual(probe.windows_product_version(self.browser), "152.7.123.9")
+                    else:
+                        with self.assertRaises(probe.ProbeError) as caught:
+                            probe.windows_product_version(self.browser)
+                        self.assertEqual(caught.exception.code, "E_CONFIG")
+                    load.assert_called_once_with("version.dll", use_last_error=True, winmode=0x800)
 
     def owned_python_with_inherited_stdio(self, payload, label):
         child_ready, child_done = self.root / (label + "-child-ready"), self.root / (label + "-child-done")
