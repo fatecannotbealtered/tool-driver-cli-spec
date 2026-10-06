@@ -109,6 +109,29 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertEqual((self.output / "timed-out-stderr.log").read_bytes(), browser_stderr)
         self.assertFalse((self.output / "timed-out-observation.json").exists())
 
+    def test_browser_readback_requires_clean_exit_in_a_disposable_tooling_profile(self):
+        self.output.mkdir()
+        svg = self.root / "sample.svg"
+        svg.write_text(probe.SVG, encoding="utf-8")
+        dom = ('<pre id="observation">' + json.dumps(simulated_readback()) + '</pre>').encode()
+        with patch.object(probe.subprocess, "Popen") as launch:
+            process = launch.return_value
+            process.pid, process.returncode = 12345, 0
+            process.communicate.return_value = (dom, b"synthetic consumer; not actual browser evidence")
+            observation = probe.read_browser(self.browser, svg, self.output, "clean", 30)
+            argv = launch.call_args.args[0]
+            self.assertEqual(observation["process"]["argv"], argv)
+            self.assertEqual(observation["process"]["returncode"], 0)
+            self.assertTrue({"--test-type", "--password-store=basic", "--use-mock-keychain"} <= set(argv))
+            profile = Path(next(arg.split("=", 1)[1] for arg in argv if arg.startswith("--user-data-dir=")))
+            self.assertEqual(profile.parent, self.output)
+            self.assertFalse(profile.exists())
+            process.returncode = 1
+            with self.assertRaises(probe.ProbeError) as caught:
+                probe.read_browser(self.browser, svg, self.output, "nonzero", 30)
+        self.assertEqual(caught.exception.code, "E_VERIFY_INCOMPLETE")
+        self.assertFalse((self.output / "nonzero-observation.json").exists())
+
     def test_failed_independent_check_does_not_claim_no_write(self):
         wrong = simulated_readback()
         wrong["bbox"]["x"] = 99

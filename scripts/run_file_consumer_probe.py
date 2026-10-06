@@ -128,7 +128,11 @@ document.getElementById('subject').addEventListener('load', event => {
   } catch(error) { out.textContent = JSON.stringify({error:String(error)}); }
 });</script>''', encoding="utf-8")
     profile = Path(tempfile.mkdtemp(prefix=".headless-", dir=output)).resolve()
+    # Configure only the disposable probe profile. Tooling mode avoids native
+    # quit checks and credential prompts unrelated to consuming generated SVG.
+    # https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
     argv = [str(browser), "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            "--test-type", "--password-store=basic", "--use-mock-keychain", "--disable-breakpad",
             "--disable-background-networking", "--disable-component-update", "--disable-sync",
             "--disable-extensions", "--disable-default-apps", "--disable-domain-reliability",
             "--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication",
@@ -163,7 +167,7 @@ document.getElementById('subject').addEventListener('load', event => {
             raise ProbeError("E_VERIFY_INCOMPLETE", "Browser returned no usable SVG observation.") from error
         if process.returncode or "error" in observation:
             raise ProbeError("E_VERIFY_INCOMPLETE", "Browser failed to consume the generated SVG.")
-        observation["process"] = {"pid": process.pid, "returncode": process.returncode,
+        observation["process"] = {"pid": process.pid, "returncode": process.returncode, "argv": argv,
                                   "profile": profile.name, "observed_at": now()}
         save_json(output / f"{label}-observation.json", observation)
         return observation
@@ -224,6 +228,7 @@ def receipt_for(operation_id, path, before, after, checks, status, change="appli
 def make_evidence(browser, version, browser_sha, code_sha, commit, output, before, after, checks, receipt, consumer_kind, user_agent, identity):
     arch = platform.machine()
     limitations = ["Development probe; no released package was tested.", "Only self-generated SVG file operations were tested; CAD, GUI sessions and physical devices were not tested.",
+                   "Browser runs use a disposable tooling profile with native quit checks and OS credential prompts disabled; real user sessions and keychains were not tested.",
                    "State drift and response loss are local fixture injections, not distributed exactly-once or cancellation evidence.",
                    "A fresh isolated browser profile and networking suppression flags were used; this is not a general network sandbox.",
                     "The source commit is read from Git or a locally checked specification manifest; the code fingerprint identifies the actual probe file.",
