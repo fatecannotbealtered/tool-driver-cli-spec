@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -98,16 +99,26 @@ class FileConsumerProbeTests(unittest.TestCase):
         browser_stderr = b"synthetic consumer diagnostic; no actual browser was launched"
         with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run"):
             process = launch.return_value
-            process.pid = 12345
-            process.communicate.side_effect = [
-                subprocess.TimeoutExpired([str(self.browser)], 30, output=partial_dom, stderr=browser_stderr),
-                (partial_dom, browser_stderr)]
+            process.pid, process.returncode = 12345, -1
+            process.poll.return_value = None
+            process.wait.side_effect = [subprocess.TimeoutExpired([str(self.browser)], 30), -1]
+
+            def emit_partial_output(_argv, **kwargs):
+                kwargs["stdout"].write(partial_dom)
+                kwargs["stderr"].write(browser_stderr)
+                return process
+
+            launch.side_effect = emit_partial_output
             with self.assertRaises(probe.ProbeError) as caught:
                 probe.read_browser(self.browser, svg, self.output, "timed-out", 30)
         self.assertEqual(caught.exception.code, "E_VERIFY_INCOMPLETE")
         self.assertEqual((self.output / "timed-out-dom.html").read_bytes(), partial_dom)
         self.assertEqual((self.output / "timed-out-stderr.log").read_bytes(), browser_stderr)
         self.assertFalse((self.output / "timed-out-observation.json").exists())
+        record = json.loads((self.output / "timed-out-process.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["wait"], "timed_out")
+        self.assertIsNone(record["returncode_before_cleanup"])
+        process.communicate.assert_not_called()
 
     def test_browser_readback_requires_clean_exit_in_a_disposable_tooling_profile(self):
         self.output.mkdir()
@@ -117,7 +128,14 @@ class FileConsumerProbeTests(unittest.TestCase):
         with patch.object(probe.subprocess, "Popen") as launch:
             process = launch.return_value
             process.pid, process.returncode = 12345, 0
-            process.communicate.return_value = (dom, b"synthetic consumer; not actual browser evidence")
+            process.wait.return_value = 0
+
+            def emit_output(_argv, **kwargs):
+                kwargs["stdout"].write(dom)
+                kwargs["stderr"].write(b"synthetic consumer; not actual browser evidence")
+                return process
+
+            launch.side_effect = emit_output
             observation = probe.read_browser(self.browser, svg, self.output, "clean", 30)
             argv = launch.call_args.args[0]
             self.assertEqual(observation["process"]["argv"], argv)
@@ -127,10 +145,54 @@ class FileConsumerProbeTests(unittest.TestCase):
             self.assertEqual(profile.parent, self.output)
             self.assertFalse(profile.exists())
             process.returncode = 1
+            process.wait.return_value = 1
             with self.assertRaises(probe.ProbeError) as caught:
                 probe.read_browser(self.browser, svg, self.output, "nonzero", 30)
+            process.communicate.assert_not_called()
         self.assertEqual(caught.exception.code, "E_VERIFY_INCOMPLETE")
         self.assertFalse((self.output / "nonzero-observation.json").exists())
+        record = json.loads((self.output / "nonzero-process.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["returncode"], 1)
+
+    def test_exited_consumer_does_not_wait_for_descendant_stdio_closure(self):
+        """Real Python process regression, explicitly not real browser evidence."""
+        self.output.mkdir()
+        svg = self.root / "sample.svg"
+        svg.write_text(probe.SVG, encoding="utf-8")
+        child_ready, child_done = self.root / "child-ready", self.root / "child-done"
+        child_code = ("import sys,time; from pathlib import Path; "
+                      "Path(sys.argv[1]).write_text('ready'); time.sleep(2); "
+                      "Path(sys.argv[2]).write_text('done')")
+        dom = '<pre id="observation">' + json.dumps(simulated_readback()) + '</pre>'
+        parent_code = ("import subprocess,sys,time; from pathlib import Path; "
+                       "subprocess.Popen([sys.executable,'-B','-c',sys.argv[1],sys.argv[2],sys.argv[3]], "
+                       "stdout=sys.stdout,stderr=sys.stderr, "
+                       "creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0)); "
+                       "print(sys.argv[4],flush=True); "
+                       "deadline=time.monotonic()+2\n"
+                       "while not Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(0.01)\n")
+        real_popen = subprocess.Popen
+
+        def launch_python(_argv, **kwargs):
+            return real_popen([sys.executable, "-B", "-c", parent_code, child_code,
+                               str(child_ready), str(child_done), dom], **kwargs)
+
+        def await_owned_child():
+            deadline = time.monotonic() + 5
+            while not child_done.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(child_done.exists(), "The bounded owned Python helper must finish.")
+            time.sleep(0.1)
+
+        self.addCleanup(await_owned_child)
+        with patch.object(probe.subprocess, "Popen", side_effect=launch_python):
+            observation = probe.read_browser(self.browser, svg, self.output, "inherited-stdio", 1)
+        self.assertTrue(child_ready.exists())
+        self.assertFalse(child_done.exists(), "The helper still holds stdio after the parent exits.")
+        self.assertEqual(observation["process"]["returncode"], 0)
+        self.assertEqual(observation["process"]["wait"], "completed")
+        self.assertEqual(observation["process"]["capture"], "files")
+        self.assertEqual(observation["user_agent"], "simulated-consumer")
 
     def test_failed_independent_check_does_not_claim_no_write(self):
         wrong = simulated_readback()

@@ -139,36 +139,45 @@ document.getElementById('subject').addEventListener('load', event => {
             "--host-resolver-rules=MAP * ~NOTFOUND", "--proxy-server=http://127.0.0.1:9",
             "--allow-file-access-from-files", "--dump-dom", "--virtual-time-budget=2000",
             f"--timeout={int(timeout * 1000)}", f"--user-data-dir={profile}", wrapper.as_uri()]
-    process = None
+    dom_path = output / f"{label}-dom.html"
+    stderr_path = output / f"{label}-stderr.log"
     try:
-        process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, creationflags=HIDDEN)
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired as error:
-            if os.name == "nt":
-                subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                               capture_output=True, timeout=10, creationflags=HIDDEN)
-            else:
-                process.kill()
-            stdout, stderr = process.communicate(timeout=5)
-            # Retain the actual partial output even when the consumer never completed.
-            # A readable DOM does not turn a timed-out process into verified success.
-            (output / f"{label}-dom.html").write_bytes(stdout)
-            (output / f"{label}-stderr.log").write_bytes(stderr)
-            raise ProbeError("E_VERIFY_INCOMPLETE", "Browser wait timed out; the SVG may already be written.") from error
-        (output / f"{label}-dom.html").write_bytes(stdout)
-        (output / f"{label}-stderr.log").write_bytes(stderr)
+        # A browser helper can inherit stdio after the main process exits. Capture
+        # directly to files so verification waits for the actual main process,
+        # rather than an unrelated helper closing its copy of a pipe.
+        with dom_path.open("wb") as stdout_file, stderr_path.open("wb") as stderr_file:
+            process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=stdout_file,
+                                       stderr=stderr_file, creationflags=HIDDEN)
+            try:
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as error:
+                before_cleanup = process.poll()
+                if os.name == "nt":
+                    subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                                   capture_output=True, timeout=10, creationflags=HIDDEN)
+                else:
+                    process.kill()
+                process.wait(timeout=5)
+                save_json(output / f"{label}-process.json", {
+                    "pid": process.pid, "returncode": process.returncode, "argv": argv,
+                    "profile": profile.name, "observed_at": now(), "wait": "timed_out",
+                    "returncode_before_cleanup": before_cleanup, "capture": "files"})
+                # Keep actual partial output without claiming the timed-out process
+                # completed, even when its DOM contains readable observations.
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Browser wait timed out; the SVG may already be written.") from error
+        process_record = {"pid": process.pid, "returncode": returncode, "argv": argv,
+                          "profile": profile.name, "observed_at": now(),
+                          "wait": "completed", "capture": "files"}
+        save_json(output / f"{label}-process.json", process_record)
         parser = ObservationParser()
-        parser.feed(stdout.decode("utf-8", errors="replace"))
+        parser.feed(dom_path.read_text(encoding="utf-8", errors="replace"))
         try:
             observation = json.loads("".join(parser.parts))
         except (ValueError, TypeError) as error:
             raise ProbeError("E_VERIFY_INCOMPLETE", "Browser returned no usable SVG observation.") from error
-        if process.returncode or "error" in observation:
+        if returncode or "error" in observation:
             raise ProbeError("E_VERIFY_INCOMPLETE", "Browser failed to consume the generated SVG.")
-        observation["process"] = {"pid": process.pid, "returncode": process.returncode, "argv": argv,
-                                  "profile": profile.name, "observed_at": now()}
+        observation["process"] = process_record
         save_json(output / f"{label}-observation.json", observation)
         return observation
     finally:
