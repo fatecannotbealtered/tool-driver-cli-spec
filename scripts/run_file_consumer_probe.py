@@ -7,6 +7,7 @@ Only generated local SVG/HTML is loaded, with a fresh profile on every launch.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import html
 from html.parser import HTMLParser
@@ -14,7 +15,9 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -120,6 +123,112 @@ class ObservationParser(HTMLParser):
             self.parts.append(data)
 
 
+def close_owned_browser(profile, timeout):
+    """Send only Browser.close to this new profile's loopback DevTools endpoint."""
+    endpoint = profile / "DevToolsActivePort"
+    if endpoint.is_symlink() or endpoint.stat().st_size > 1024:
+        raise ProbeError("E_VERIFY_INCOMPLETE", "Invalid owned browser endpoint.")
+    lines = endpoint.read_text(encoding="ascii").splitlines()
+    if (len(lines) != 2 or not lines[0].isdigit() or not 1024 <= int(lines[0]) <= 65535
+            or not re.fullmatch(r"/devtools/browser/[0-9a-fA-F-]{36}", lines[1])):
+        raise ProbeError("E_VERIFY_INCOMPLETE", "Invalid owned browser endpoint.")
+    port, target = int(lines[0]), lines[1]
+    deadline = time.monotonic() + timeout
+
+    def remaining():
+        value = deadline - time.monotonic()
+        if value <= 0:
+            raise ProbeError("E_VERIFY_INCOMPLETE", "Browser graceful close timed out.")
+        return value
+
+    with socket.create_connection(("127.0.0.1", port), timeout=remaining()) as channel:
+        def receive(count):
+            data = bytearray()
+            while len(data) < count:
+                channel.settimeout(remaining())
+                part = channel.recv(count - len(data))
+                if not part:
+                    raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close response was incomplete.")
+                data.extend(part)
+            return bytes(data)
+
+        nonce = base64.b64encode(os.urandom(16)).decode("ascii")
+        request = (f"GET {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                   "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                   f"Sec-WebSocket-Key: {nonce}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+        channel.sendall(request.encode("ascii"))
+        header = bytearray()
+        while not header.endswith(b"\r\n\r\n"):
+            if len(header) >= 16384:
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close handshake exceeded its bound.")
+            header.extend(receive(1))
+        fields = header.decode("ascii").split("\r\n")
+        expected = base64.b64encode(hashlib.sha1(
+            (nonce + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+        headers = {key.strip().lower(): value.strip() for line in fields[1:] if ":" in line
+                   for key, value in [line.split(":", 1)]}
+        if (not fields[0].startswith("HTTP/1.1 101 ") or headers.get("sec-websocket-accept") != expected
+                or headers.get("upgrade", "").lower() != "websocket"
+                or "upgrade" not in {v.strip().lower() for v in headers.get("connection", "").split(",")}):
+            raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close handshake was not verified.")
+
+        def send_frame(opcode, payload):
+            mask = os.urandom(4)
+            channel.settimeout(remaining())
+            channel.sendall(bytes([0x80 | opcode, 0x80 | len(payload)]) + mask
+                            + bytes(value ^ mask[i % 4] for i, value in enumerate(payload)))
+
+        send_frame(1, b'{"id":1,"method":"Browser.close"}')
+        for _ in range(8):
+            flags, length = receive(2)
+            if flags & 0x70 or not flags & 0x80 or length & 0x80:
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Unsupported browser close response frame.")
+            opcode, length = flags & 15, length & 127
+            if length == 126:
+                length = int.from_bytes(receive(2), "big")
+            if length == 127 or length > 8192:
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close response exceeded its bound.")
+            payload = receive(length)
+            if opcode == 9 and length <= 125:
+                send_frame(10, payload)
+                continue
+            if opcode != 1:
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close response was incomplete.")
+            response = json.loads(payload)
+            if not isinstance(response, dict):
+                raise ProbeError("E_VERIFY_INCOMPLETE", "Invalid browser close response.")
+            if response.get("id") == 1:
+                if "error" in response or response.get("result") != {}:
+                    raise ProbeError("E_VERIFY_INCOMPLETE", "Browser refused graceful close.")
+                return {"method": "Browser.close", "response_received": True,
+                        "transport": "owned_profile_loopback", "observed_at": now()}
+        raise ProbeError("E_VERIFY_INCOMPLETE", "Browser close response was not observed.")
+
+
+def wait_browser_exit(process, dom_path, profile, timeout):
+    deadline = time.monotonic() + timeout
+    close_record = None
+    if sys.platform == "darwin":
+        # On macOS closing a window can leave the application event loop alive.
+        # Once dump-dom returns its observation, request normal application quit.
+        while process.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(process.args, timeout)
+            parser = ObservationParser()
+            parser.feed(dom_path.read_text(encoding="utf-8", errors="replace"))
+            try:
+                observation = json.loads("".join(parser.parts))
+            except (ValueError, TypeError):
+                observation = None
+            if isinstance(observation, dict) and (profile / "DevToolsActivePort").is_file():
+                close_record = close_owned_browser(profile, min(5, remaining))
+                save_json(dom_path.with_name(dom_path.name.removesuffix("-dom.html") + "-graceful-close.json"), close_record)
+                break
+            time.sleep(min(0.05, remaining))
+    return process.wait(timeout=max(0.001, deadline - time.monotonic())), close_record
+
+
 def read_browser(browser, svg_path, output, label, timeout):
     wrapper = output / f"{label}.html"
     wrapper.write_text('''<!doctype html><meta charset="utf-8"><object id="subject" type="image/svg+xml" data="''' + html.escape(svg_path.name, quote=True) + '''"></object><pre id="observation">pending</pre><script>
@@ -147,8 +256,11 @@ document.getElementById('subject').addEventListener('load', event => {
             "--host-resolver-rules=MAP * ~NOTFOUND", "--proxy-server=http://127.0.0.1:9",
             "--allow-file-access-from-files", "--dump-dom", "--virtual-time-budget=2000",
             f"--timeout={int(timeout * 1000)}", f"--user-data-dir={profile}", wrapper.as_uri()]
+    if sys.platform == "darwin":
+        argv[1:1] = ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"]
     dom_path = output / f"{label}-dom.html"
     stderr_path = output / f"{label}-stderr.log"
+    process = None
     try:
         # A browser helper can inherit stdio after the main process exits. Capture
         # directly to files so verification waits for the actual main process,
@@ -157,8 +269,8 @@ document.getElementById('subject').addEventListener('load', event => {
             process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=stdout_file,
                                        stderr=stderr_file, creationflags=HIDDEN)
             try:
-                returncode = process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired as error:
+                returncode, close_record = wait_browser_exit(process, dom_path, profile, timeout)
+            except (subprocess.TimeoutExpired, OSError, ProbeError) as error:
                 before_cleanup = process.poll()
                 diagnostic = {}
                 if sys.platform == "darwin" and before_cleanup is None:
@@ -180,14 +292,17 @@ document.getElementById('subject').addEventListener('load', event => {
                 process.wait(timeout=5)
                 save_json(output / f"{label}-process.json", {
                     "pid": process.pid, "returncode": process.returncode, "argv": argv,
-                    "profile": profile.name, "observed_at": now(), "wait": "timed_out",
+                    "profile": profile.name, "observed_at": now(),
+                    "wait": "timed_out" if isinstance(error, subprocess.TimeoutExpired) else "failed",
                     "returncode_before_cleanup": before_cleanup, "capture": "files", **diagnostic})
                 # Keep actual partial output without claiming the timed-out process
                 # completed, even when its DOM contains readable observations.
-                raise ProbeError("E_VERIFY_INCOMPLETE", "Browser wait timed out; the SVG may already be written.") from error
+                message = ("Browser wait timed out; the SVG may already be written."
+                           if isinstance(error, subprocess.TimeoutExpired) else str(error))
+                raise ProbeError("E_VERIFY_INCOMPLETE", message) from error
         process_record = {"pid": process.pid, "returncode": returncode, "argv": argv,
                           "profile": profile.name, "observed_at": now(),
-                          "wait": "completed", "capture": "files"}
+                          "wait": "completed", "capture": "files", "graceful_close": close_record}
         save_json(output / f"{label}-process.json", process_record)
         parser = ObservationParser()
         parser.feed(dom_path.read_text(encoding="utf-8", errors="replace"))
@@ -201,6 +316,9 @@ document.getElementById('subject').addEventListener('load', event => {
         save_json(output / f"{label}-observation.json", observation)
         return observation
     finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
         # Only this newly created profile can be removed, never an existing user profile.
         if profile.is_relative_to(output.resolve()):
             shutil.rmtree(profile, ignore_errors=True)

@@ -4,8 +4,10 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import socket
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -97,11 +99,12 @@ class FileConsumerProbeTests(unittest.TestCase):
         svg.write_text(probe.SVG, encoding="utf-8")
         partial_dom = b'<pre id="observation">{"x":"12"}</pre>'
         browser_stderr = b"synthetic consumer diagnostic; no actual browser was launched"
-        with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run") as run:
+        with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run") as run, patch.object(
+                probe.sys, "platform", "linux"):
             run.return_value.returncode = 0
             process = launch.return_value
             process.pid, process.returncode = 12345, -1
-            process.poll.return_value = None
+            process.poll.side_effect = [None, -1]
             process.wait.side_effect = [subprocess.TimeoutExpired([str(self.browser)], 30), -1]
 
             def emit_partial_output(_argv, **kwargs):
@@ -154,6 +157,131 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertFalse((self.output / "nonzero-observation.json").exists())
         record = json.loads((self.output / "nonzero-process.json").read_text(encoding="utf-8"))
         self.assertEqual(record["returncode"], 1)
+
+    def test_macos_graceful_close_still_requires_a_real_zero_exit(self):
+        self.output.mkdir()
+        svg = self.root / "sample.svg"
+        svg.write_text(probe.SVG, encoding="utf-8")
+        dom = ('<pre id="observation">' + json.dumps(simulated_readback()) + '</pre>').encode()
+        close = {"method": "Browser.close", "response_received": True, "transport": "owned_profile_loopback"}
+        with patch.object(probe.sys, "platform", "darwin"), patch.object(
+                probe.subprocess, "Popen") as launch, patch.object(probe, "close_owned_browser", return_value=close) as closer:
+            process = launch.return_value
+            process.pid, process.returncode = 12345, None
+            process.poll.side_effect = lambda: process.returncode
+
+            def emit_output(_argv, **kwargs):
+                kwargs["stdout"].write(dom)
+                kwargs["stdout"].flush()
+                profile = Path(next(arg.split("=", 1)[1] for arg in _argv if arg.startswith("--user-data-dir=")))
+                (profile / "DevToolsActivePort").write_text("12345\n/devtools/browser/" + "a" * 36)
+                return process
+
+            def exited_zero(**_kwargs):
+                process.returncode = 0
+                return 0
+
+            launch.side_effect, process.wait.side_effect = emit_output, exited_zero
+            observed = probe.read_browser(self.browser, svg, self.output, "mac-clean", 30)
+            self.assertEqual(observed["process"]["graceful_close"], close)
+            self.assertEqual(observed["process"]["returncode"], 0)
+            self.assertEqual(closer.call_count, 1)
+            self.assertIn("--remote-debugging-address=127.0.0.1", launch.call_args.args[0])
+            self.assertIn("--remote-debugging-port=0", launch.call_args.args[0])
+            process.returncode = None
+
+            def exited_nonzero(**_kwargs):
+                process.returncode = 1
+                return 1
+
+            process.wait.side_effect = exited_nonzero
+            with self.assertRaises(probe.ProbeError) as caught:
+                probe.read_browser(self.browser, svg, self.output, "mac-nonzero", 30)
+        self.assertEqual(caught.exception.code, "E_VERIFY_INCOMPLETE")
+        self.assertFalse((self.output / "mac-nonzero-observation.json").exists())
+
+    def test_graceful_close_refuses_invalid_owned_endpoints_before_connecting(self):
+        profile = self.root / "owned-profile"
+        profile.mkdir()
+        for content in ("80\n/devtools/browser/" + "a" * 36,
+                        "12345\nws://external.example/browser",
+                        "12345\n/devtools/browser/" + "a" * 36 + "\nextra"):
+            with self.subTest(content=content), patch.object(probe.socket, "create_connection") as connect:
+                (profile / "DevToolsActivePort").write_text(content, encoding="ascii")
+                with self.assertRaises(probe.ProbeError):
+                    probe.close_owned_browser(profile, 1)
+                connect.assert_not_called()
+
+    def test_graceful_close_protocol_verifies_handshake_masked_request_and_response(self):
+        """Owned synthetic loopback server, never actual browser evidence."""
+        for scenario in ("success", "bad-handshake", "refused-close"):
+            with self.subTest(scenario=scenario):
+                profile = self.root / scenario
+                profile.mkdir()
+                listener = socket.socket()
+                listener.bind(("127.0.0.1", 0))
+                listener.listen(1)
+                listener.settimeout(5)
+                port = listener.getsockname()[1]
+                (profile / "DevToolsActivePort").write_text(str(port) + "\n/devtools/browser/" + "a" * 36)
+                failures, requests = [], []
+
+                def serve():
+                    try:
+                        with listener, listener.accept()[0] as channel:
+                            channel.settimeout(5)
+
+                            def receive(count):
+                                data = b""
+                                while len(data) < count:
+                                    part = channel.recv(count - len(data))
+                                    if not part:
+                                        raise AssertionError("Incomplete synthetic client request")
+                                    data += part
+                                return data
+
+                            header = b""
+                            while not header.endswith(b"\r\n\r\n") and len(header) < 16384:
+                                header += receive(1)
+                            fields = dict(line.split(": ", 1) for line in header.decode("ascii").split("\r\n")[1:] if ": " in line)
+                            nonce = fields["Sec-WebSocket-Key"]
+                            accept = probe.base64.b64encode(probe.hashlib.sha1(
+                                (nonce + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+                            if scenario == "bad-handshake":
+                                accept = "incorrect"
+                            channel.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                                             "Connection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n").encode())
+                            if scenario == "bad-handshake":
+                                return
+                            flags, length = receive(2)
+                            self.assertEqual(flags, 0x81)
+                            self.assertTrue(length & 0x80)
+                            mask = receive(4)
+                            payload = receive(length & 127)
+                            requests.append(json.loads(bytes(value ^ mask[i % 4] for i, value in enumerate(payload))))
+                            response = ({"id": 1, "result": {}} if scenario == "success"
+                                        else {"id": 1, "error": {"message": "synthetic refusal"}})
+                            payload = json.dumps(response).encode()
+                            channel.sendall(bytes([0x81, len(payload)]) + payload)
+                    except Exception as error:
+                        failures.append(error)
+
+                thread = threading.Thread(target=serve, daemon=True)
+                thread.start()
+                try:
+                    if scenario == "success":
+                        result = probe.close_owned_browser(profile, 3)
+                        self.assertEqual(result["method"], "Browser.close")
+                        self.assertTrue(result["response_received"])
+                    else:
+                        with self.assertRaises(probe.ProbeError):
+                            probe.close_owned_browser(profile, 3)
+                finally:
+                    thread.join(timeout=5)
+                    listener.close()
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(failures, [])
+                self.assertEqual(requests, [] if scenario == "bad-handshake" else [{"id": 1, "method": "Browser.close"}])
 
     def test_exited_consumer_does_not_wait_for_descendant_stdio_closure(self):
         """Real Python process regression, explicitly not real browser evidence."""
