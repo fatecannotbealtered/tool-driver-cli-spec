@@ -295,7 +295,7 @@ class SDKTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix="sdk-contract-")
-        base = Path(cls.temporary.name)
+        base = Path(cls.temporary.name).resolve()
         (base / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
         cls.contract = build_contract(REGISTRY, registry_dir=base)
 

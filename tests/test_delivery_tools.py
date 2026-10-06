@@ -31,7 +31,7 @@ SCHEMA_BYTES = (json.dumps({"$schema": "https://json-schema.org/draft/2020-12/sc
 class DeliveryCLITests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="spec-delivery-tests-")
-        self.base = Path(self.temporary.name)
+        self.base = Path(self.temporary.name).resolve()
         self.project = self.base / "consumer"
         self.project.mkdir()
         self.bundle = self.base / "specification.zip"

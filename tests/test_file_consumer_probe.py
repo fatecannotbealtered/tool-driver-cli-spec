@@ -146,6 +146,20 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertEqual(record["writes"], 1)
         self.assertEqual(probe.digest(self.output / "sample.svg"), state(result)["receipt"]["snapshot_after"]["revision"][7:])
 
+    def test_macos_browser_bundle_name_supports_simulated_consumer_contract(self):
+        self.browser = self.root / "Google Chrome.app" / "Contents" / "MacOS" / "Google Chrome"
+        self.browser.parent.mkdir(parents=True)
+        self.browser.write_bytes(b"simulated-executable-never-launched")
+        with patch.object(probe, "read_browser", side_effect=simulated_readback) as reader:
+            result = self.run_simulated()
+        self.assertTrue(result["ok"])
+        self.assertEqual(reader.call_count, 3)
+        evidence = state(result)["evidence"]
+        self.assertEqual(evidence["kind"], "simulated_adapter")
+        self.assertEqual(evidence["extensions"]["browser_executable"], str(self.browser))
+        self.assertEqual(evidence["extensions"]["initial_browser_metadata"]["sha256"], probe.digest(self.browser))
+        self.assertTrue(evidence["extensions"]["browser_identity"]["stable"])
+
     def test_missing_machine_metadata_preserves_valid_evidence_and_records_unknown(self):
         with patch.object(probe.platform, "machine", return_value=""), patch.object(
                 probe, "read_browser", side_effect=simulated_readback):

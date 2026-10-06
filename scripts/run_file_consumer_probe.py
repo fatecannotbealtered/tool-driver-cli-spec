@@ -260,7 +260,7 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
     user_agent, identity, version, browser_sha, code_sha, commit = None, None, None, None, None, None
     try:
         browser, output = Path(browser).resolve(), Path(output).resolve()
-        if not browser.is_file() or browser.name.lower() not in {"chrome.exe", "msedge.exe", "chrome", "chromium", "chromium-browser", "msedge"}:
+        if not browser.is_file() or browser.name.lower() not in {"chrome.exe", "msedge.exe", "chrome", "chromium", "chromium-browser", "msedge", "google chrome"}:
             raise ProbeError("E_CONFIG", "Provide an existing supported browser executable explicitly.")
         if output.exists() or not 0 < timeout <= 45 or consumer_kind not in {"artifact_consumer", "simulated_adapter"}:
             raise ProbeError("E_VALIDATION", "Output must be a new directory and timeout must be within 45 seconds.")
