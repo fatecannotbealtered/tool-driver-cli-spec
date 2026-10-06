@@ -88,6 +88,10 @@ jobs:
                           log = root / (check["id"] + "." + stream + ".log")
                           if log.is_file():
                               print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
+              for log in sorted((root / "consumer").glob("*-stderr.log")):
+                  print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
+              for log in sorted((root / "consumer").glob("*-dom.html")):
+                  print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
       - name: Retain exact package acceptance artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

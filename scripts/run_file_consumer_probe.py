@@ -147,7 +147,11 @@ document.getElementById('subject').addEventListener('load', event => {
                                capture_output=True, timeout=10, creationflags=HIDDEN)
             else:
                 process.kill()
-            process.communicate(timeout=5)
+            stdout, stderr = process.communicate(timeout=5)
+            # Retain the actual partial output even when the consumer never completed.
+            # A readable DOM does not turn a timed-out process into verified success.
+            (output / f"{label}-dom.html").write_bytes(stdout)
+            (output / f"{label}-stderr.log").write_bytes(stderr)
             raise ProbeError("E_VERIFY_INCOMPLETE", "Browser wait timed out; the SVG may already be written.") from error
         (output / f"{label}-dom.html").write_bytes(stdout)
         (output / f"{label}-stderr.log").write_bytes(stderr)

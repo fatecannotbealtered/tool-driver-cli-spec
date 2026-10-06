@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -88,6 +89,25 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertEqual(outcome["verification"]["status"], "incomplete")
         self.assertFalse(result["error"]["retryable"])
         self.assertEqual(state(result)["evidence"]["kind"], "simulated_adapter")
+
+    def test_browser_timeout_retains_partial_output_without_claiming_observation(self):
+        self.output.mkdir()
+        svg = self.root / "sample.svg"
+        svg.write_text(probe.SVG, encoding="utf-8")
+        partial_dom = b'<pre id="observation">{"x":"12"}</pre>'
+        browser_stderr = b"synthetic consumer diagnostic; no actual browser was launched"
+        with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run"):
+            process = launch.return_value
+            process.pid = 12345
+            process.communicate.side_effect = [
+                subprocess.TimeoutExpired([str(self.browser)], 30, output=partial_dom, stderr=browser_stderr),
+                (partial_dom, browser_stderr)]
+            with self.assertRaises(probe.ProbeError) as caught:
+                probe.read_browser(self.browser, svg, self.output, "timed-out", 30)
+        self.assertEqual(caught.exception.code, "E_VERIFY_INCOMPLETE")
+        self.assertEqual((self.output / "timed-out-dom.html").read_bytes(), partial_dom)
+        self.assertEqual((self.output / "timed-out-stderr.log").read_bytes(), browser_stderr)
+        self.assertFalse((self.output / "timed-out-observation.json").exists())
 
     def test_failed_independent_check_does_not_claim_no_write(self):
         wrong = simulated_readback()
