@@ -86,10 +86,18 @@ def browser_version(browser):
                 f"(Get-Item -LiteralPath '{literal}').VersionInfo.ProductVersion"]
     else:
         argv = [str(browser), "--version"]
-    result = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
-                            errors="replace", timeout=10, creationflags=HIDDEN)
-    version = result.stdout.strip()
-    if result.returncode or not version:
+    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+        process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=stdout_file,
+                                   stderr=stderr_file, creationflags=HIDDEN)
+        try:
+            returncode = process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+            raise
+        stdout_file.seek(0)
+        version = stdout_file.read().decode("utf-8", errors="replace").strip()
+    if returncode or not version:
         raise ProbeError("E_CONFIG", "Could not observe the selected browser version.")
     return version
 
@@ -152,6 +160,18 @@ document.getElementById('subject').addEventListener('load', event => {
                 returncode = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired as error:
                 before_cleanup = process.poll()
+                diagnostic = {}
+                if sys.platform == "darwin" and before_cleanup is None:
+                    # Sample only this owned browser before cleanup; diagnostics
+                    # never relax the requirement for a normal process exit.
+                    try:
+                        sample = subprocess.run([
+                            "/usr/bin/sample", str(process.pid), "1", "1", "-file",
+                            str(output / f"{label}-process-sample.txt")],
+                            capture_output=True, timeout=5, creationflags=HIDDEN)
+                        diagnostic["sample_exit_code"] = sample.returncode
+                    except (OSError, subprocess.TimeoutExpired) as sampling_error:
+                        diagnostic["sample_error"] = str(sampling_error)
                 if os.name == "nt":
                     subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
                                    capture_output=True, timeout=10, creationflags=HIDDEN)
@@ -161,7 +181,7 @@ document.getElementById('subject').addEventListener('load', event => {
                 save_json(output / f"{label}-process.json", {
                     "pid": process.pid, "returncode": process.returncode, "argv": argv,
                     "profile": profile.name, "observed_at": now(), "wait": "timed_out",
-                    "returncode_before_cleanup": before_cleanup, "capture": "files"})
+                    "returncode_before_cleanup": before_cleanup, "capture": "files", **diagnostic})
                 # Keep actual partial output without claiming the timed-out process
                 # completed, even when its DOM contains readable observations.
                 raise ProbeError("E_VERIFY_INCOMPLETE", "Browser wait timed out; the SVG may already be written.") from error
@@ -278,7 +298,7 @@ def run_probe(browser, output, timeout=30, *, consumer_kind="artifact_consumer")
     user_agent, identity, version, browser_sha, code_sha, commit = None, None, None, None, None, None
     try:
         browser, output = Path(browser).resolve(), Path(output).resolve()
-        if not browser.is_file() or browser.name.lower() not in {"chrome.exe", "msedge.exe", "chrome", "chromium", "chromium-browser", "msedge", "google chrome"}:
+        if not browser.is_file() or browser.name.lower() not in {"chrome.exe", "msedge.exe", "chrome", "chromium", "chromium-browser", "msedge", "google chrome", "google chrome for testing"}:
             raise ProbeError("E_CONFIG", "Provide an existing supported browser executable explicitly.")
         if output.exists() or not 0 < timeout <= 45 or consumer_kind not in {"artifact_consumer", "simulated_adapter"}:
             raise ProbeError("E_VALIDATION", "Output must be a new directory and timeout must be within 45 seconds.")

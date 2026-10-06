@@ -97,7 +97,8 @@ class FileConsumerProbeTests(unittest.TestCase):
         svg.write_text(probe.SVG, encoding="utf-8")
         partial_dom = b'<pre id="observation">{"x":"12"}</pre>'
         browser_stderr = b"synthetic consumer diagnostic; no actual browser was launched"
-        with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run"):
+        with patch.object(probe.subprocess, "Popen") as launch, patch.object(probe.subprocess, "run") as run:
+            run.return_value.returncode = 0
             process = launch.return_value
             process.pid, process.returncode = 12345, -1
             process.poll.return_value = None
@@ -159,11 +160,30 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.output.mkdir()
         svg = self.root / "sample.svg"
         svg.write_text(probe.SVG, encoding="utf-8")
-        child_ready, child_done = self.root / "child-ready", self.root / "child-done"
+        dom = '<pre id="observation">' + json.dumps(simulated_readback()) + '</pre>'
+        launch_python, child_ready, child_done = self.owned_python_with_inherited_stdio(dom, "readback")
+        with patch.object(probe.subprocess, "Popen", side_effect=launch_python):
+            observation = probe.read_browser(self.browser, svg, self.output, "inherited-stdio", 1)
+        self.assertTrue(child_ready.exists())
+        self.assertFalse(child_done.exists(), "The helper still holds stdio after the parent exits.")
+        self.assertEqual(observation["process"]["returncode"], 0)
+        self.assertEqual(observation["process"]["wait"], "completed")
+        self.assertEqual(observation["process"]["capture"], "files")
+        self.assertEqual(observation["user_agent"], "simulated-consumer")
+
+    def test_version_query_does_not_wait_for_descendant_stdio_closure(self):
+        launch_python, child_ready, child_done = self.owned_python_with_inherited_stdio("simulated-version", "version")
+        with patch.object(probe.subprocess, "Popen", side_effect=launch_python):
+            version = self.version.temp_original(self.browser)
+        self.assertEqual(version, "simulated-version")
+        self.assertTrue(child_ready.exists())
+        self.assertFalse(child_done.exists(), "Version metadata waits for the parent, not helper stdio.")
+
+    def owned_python_with_inherited_stdio(self, payload, label):
+        child_ready, child_done = self.root / (label + "-child-ready"), self.root / (label + "-child-done")
         child_code = ("import sys,time; from pathlib import Path; "
                       "Path(sys.argv[1]).write_text('ready'); time.sleep(2); "
                       "Path(sys.argv[2]).write_text('done')")
-        dom = '<pre id="observation">' + json.dumps(simulated_readback()) + '</pre>'
         parent_code = ("import subprocess,sys,time; from pathlib import Path; "
                        "subprocess.Popen([sys.executable,'-B','-c',sys.argv[1],sys.argv[2],sys.argv[3]], "
                        "stdout=sys.stdout,stderr=sys.stderr, "
@@ -175,7 +195,7 @@ class FileConsumerProbeTests(unittest.TestCase):
 
         def launch_python(_argv, **kwargs):
             return real_popen([sys.executable, "-B", "-c", parent_code, child_code,
-                               str(child_ready), str(child_done), dom], **kwargs)
+                               str(child_ready), str(child_done), payload], **kwargs)
 
         def await_owned_child():
             deadline = time.monotonic() + 5
@@ -185,14 +205,7 @@ class FileConsumerProbeTests(unittest.TestCase):
             time.sleep(0.1)
 
         self.addCleanup(await_owned_child)
-        with patch.object(probe.subprocess, "Popen", side_effect=launch_python):
-            observation = probe.read_browser(self.browser, svg, self.output, "inherited-stdio", 1)
-        self.assertTrue(child_ready.exists())
-        self.assertFalse(child_done.exists(), "The helper still holds stdio after the parent exits.")
-        self.assertEqual(observation["process"]["returncode"], 0)
-        self.assertEqual(observation["process"]["wait"], "completed")
-        self.assertEqual(observation["process"]["capture"], "files")
-        self.assertEqual(observation["user_agent"], "simulated-consumer")
+        return launch_python, child_ready, child_done
 
     def test_failed_independent_check_does_not_claim_no_write(self):
         wrong = simulated_readback()
@@ -264,6 +277,16 @@ class FileConsumerProbeTests(unittest.TestCase):
         self.assertEqual(evidence["extensions"]["browser_executable"], str(self.browser))
         self.assertEqual(evidence["extensions"]["initial_browser_metadata"]["sha256"], probe.digest(self.browser))
         self.assertTrue(evidence["extensions"]["browser_identity"]["stable"])
+
+    def test_macos_testing_browser_bundle_supports_simulated_consumer_contract(self):
+        self.browser = self.root / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+        self.browser.parent.mkdir(parents=True)
+        self.browser.write_bytes(b"simulated-executable-never-launched")
+        with patch.object(probe, "read_browser", side_effect=simulated_readback):
+            result = self.run_simulated()
+        self.assertTrue(result["ok"])
+        self.assertEqual(state(result)["evidence"]["kind"], "simulated_adapter")
+        self.assertEqual(state(result)["evidence"]["extensions"]["browser_executable"], str(self.browser))
 
     def test_missing_machine_metadata_preserves_valid_evidence_and_records_unknown(self):
         with patch.object(probe.platform, "machine", return_value=""), patch.object(

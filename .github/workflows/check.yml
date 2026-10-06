@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           spec_version=$(cat VERSION)
-          browser='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+          browser='/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
           test -x "$browser" || { echo 'No preinstalled supported browser; independent consumption cannot be skipped.' >&2; exit 1; }
           digest=$(cut -d ' ' -f1 "dist/tool-driver-cli-spec-${spec_version}.sha256")
           python scripts/check_graduation.py --audit --browser "$browser" --output dist/acceptance \
@@ -92,6 +92,10 @@ jobs:
                   print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
               for log in sorted((root / "consumer").glob("*-dom.html")):
                   print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
+              for log in sorted((root / "consumer").glob("*-process.json")):
+                  print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[-6000:])
+              for log in sorted((root / "consumer").glob("*-process-sample.txt")):
+                  print(log.name + "\n" + log.read_text(encoding="utf-8", errors="replace")[:16000])
       - name: Retain exact package acceptance artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
