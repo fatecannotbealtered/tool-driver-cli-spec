@@ -26,7 +26,7 @@ class LicenseTests(unittest.TestCase):
 
     def test_candidate_archive_preserves_licenses_and_manifest_hashes(self):
         with tempfile.TemporaryDirectory(prefix='license-package-') as temp:
-            project = Path(temp) / 'product'
+            project = Path(temp).resolve() / 'product'
             instantiate('license-driver', project, 'file')
             self.assertFalse((project / 'LICENSE').exists(), 'Product license is still a maintainer choice')
             spec = importlib.util.spec_from_file_location('candidate_license_test', project / 'scripts/build-package.py')

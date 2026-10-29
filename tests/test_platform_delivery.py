@@ -50,7 +50,7 @@ class GeneratorRefusalTests(unittest.TestCase):
         manifest = {"owner": generate_product.OWNER, "format_version": "2.0",
                     "registry_sha256": "fixture", "files": {"reference.json": generate_product.fingerprint(payload)}}
         with tempfile.TemporaryDirectory(prefix="link-refusal-") as temp:
-            output = Path(temp) / "generated"
+            output = Path(temp).resolve() / "generated"
             with patch.object(generate_product, "build_artifacts", return_value=artifacts), \
                  patch.object(generate_product, "_manifest", return_value=manifest), \
                  patch.object(generate_product.os, "link", side_effect=PermissionError("hard link denied")):
