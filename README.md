@@ -79,7 +79,7 @@ python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/App
 
 ## 发布与分发
 
-驱动 CLI 产品在 GitHub Release 形成版本化产物，通过 SkillHub 分发；必须有验证过的 Agent 安装和升级路径。SkillHub 原生多文件包支持仍由产品实际验收，不把平台注册当作能力完成。
+驱动 CLI 产品在 GitHub Release 形成版本化产物，SkillHub 可选；必须有验证过的 Agent 安装路径，升级路径按实际结果声明。SkillHub 原生多文件包支持仍由产品实际验收，不把平台注册当作能力完成。
 本仓库的规范包包含文档、基线副本、驱动契约、Schema、示例、校验入口、SDK 与种子工程，只通过 GitHub Release 交付，不作为 CLI 产品登记。
 
 ## 本地校验

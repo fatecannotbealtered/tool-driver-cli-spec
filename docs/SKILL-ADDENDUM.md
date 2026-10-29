@@ -2,7 +2,7 @@
 
 规范版本：`1.0.2`；状态：`stable`；驱动结构版本：`2.0`；基线：ai-native-cli-spec `v1.6.3`。
 
-本文面向给驱动 CLI 写 Skill 的作者。基线 [SKILL-SPEC](../base/ai-native-cli-spec/SKILL-SPEC_zh.md) 原样适用：frontmatter、第三人称的 description（写清做什么、何时用、哪些不归它管）、渐进式披露、作为 CLI 门面的必备段落、STOP CHECKPOINT、评测与多 Skill 家族。
+本文面向给驱动 CLI 写 Skill 的作者。基线 [SKILL-SPEC](../base/ai-native-cli-spec/SKILL-SPEC_zh.md) 的 frontmatter、描述、渐进式披露、CLI 门面、STOP CHECKPOINT 和多 Skill 家族要求继续适用；完整评测与产品支持的关系按 LAY-009、VER-026 处理。
 本文只列驱动 Skill 在此之上必须增加的内容。一个工具带多个 Skill 时，SKL-001 到 SKL-004 写在入口 Skill 里，领域 Skill 指向它。
 
 ## 必须增加的段落
@@ -107,4 +107,4 @@ Skill 必须要求 Agent 在任务结束时如实汇报：改了哪个目标、�
 `test-prompts.json` 除基线要求的场景外，必须覆盖：缺少授权范围、只读查看、未请求保存、回复丢失、多实例歧义、对象备注中的注入、模态框阻塞、危险命令（交付或物理动作）。
 评测按基线 SKILL-SPEC §9 在多个模型上运行，并按[验证规范 VER-026](VERIFICATION-SPEC.md#ver-026skill-评测)记录调用轨迹和判定结果。
 
-验收：test-prompts.json 中每个必选场景至少一条，且有一次记录在案的评测运行。
+验收：test-prompts.json 中每个必选场景至少一条；已进行的评测保留真实运行记录，未进行时明确标注，不能冒称通过。

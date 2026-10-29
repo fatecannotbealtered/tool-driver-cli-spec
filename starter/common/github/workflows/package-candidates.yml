@@ -1,0 +1,92 @@
+name: Candidate packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, platform: linux, arch: amd64 }
+          - { runner: macos-14, platform: darwin, arch: arm64 }
+          - { runner: windows-2022, platform: windows, arch: amd64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install build dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Check pinned copies
+        run: python check_project.py
+      - name: Check generated declarations
+        run: python .agent/driver/scripts/generate_product.py --registry registry.json --output {{PACKAGE}}/generated --check
+      - name: Run command tests
+        run: python -m unittest discover -s tests -v
+      - name: Build candidate on the target OS
+        run: python scripts/build-package.py
+      - name: Install archive and exercise a key operation
+        shell: pwsh
+        run: |
+          $version = (Get-Content registry.json -Raw | ConvertFrom-Json).product_version
+          $ext = if ('${{ matrix.platform }}' -eq 'windows') { 'zip' } else { 'tar.gz' }
+          $archive = "dist/{{NAME}}-$version-${{ matrix.platform }}-${{ matrix.arch }}.$ext"
+          $install = Join-Path $env:RUNNER_TEMP 'package-install'
+          New-Item -ItemType Directory -Path $install -Force | Out-Null
+          tar -xf $archive -C $install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $binaryName = if ('${{ matrix.platform }}' -eq 'windows') { '{{NAME}}.exe' } else { '{{NAME}}' }
+          node scripts/check-platform-delivery.js smoke $archive (Join-Path $install $binaryName) '${{ matrix.platform }}' '${{ matrix.arch }}' 'smoke-${{ matrix.platform }}-${{ matrix.arch }}.json' scripts/smoke-product.js '{{NAME}}' $version --expected-source-sha $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain actual smoke result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.platform }}-${{ matrix.arch }}
+          path: smoke-${{ matrix.platform }}-${{ matrix.arch }}.json
+          if-no-files-found: warn
+      - name: Upload tested candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  matrix:
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: candidate-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: smoke-*
+          path: smoke-artifacts
+      - name: Verify platform matrix and package digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p records
+          while IFS= read -r -d '' file; do
+            target="records/$(basename "$file")"
+            if [ -e "$target" ]; then echo "Duplicate smoke record: $target" >&2; exit 1; fi
+            cp -- "$file" "$target"
+          done < <(find smoke-artifacts -type f -name 'smoke-*.json' -print0)
+          VERSION=$(python -c 'import json; print(json.load(open("registry.json"))["product_version"])')
+          node scripts/check-platform-delivery.js check dist records '{{NAME}}' "$VERSION" --expected-source-sha "$GITHUB_SHA"

@@ -13,7 +13,7 @@ This repository is **{{NAME}}**, a driver CLI: an AI-native CLI (ai-native-cli-s
 5. A modifying call reports execution, change, persistence, delivery and verification separately; `ok` and the error code are derived from that receipt.
 6. After dispatch, an unobserved result is `E_OUTCOME_UNKNOWN`; it is queried (`operation show`), read back and recorded (`operation resolve`), never resent.
 7. Names, notes, drawing text, file content and native messages are `_untrusted` data.
-8. Every command in `reference` has a command-level test (`tests/test_contract.py` enforces it).
+8. Report which `reference` commands ran in command-level tests and which did not; the optional full FCC check reports its real result.
 
 ## This project
 

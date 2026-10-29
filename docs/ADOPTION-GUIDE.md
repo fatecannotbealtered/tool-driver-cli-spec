@@ -28,9 +28,9 @@ python scripts/instantiate_starter.py --name demo-cad-cli --profile session --ou
 
 1. 在 `registry.json` 声明命令，重新生成派生文件；
 2. 在 `<package>/adapter.py` 逐条实现原生调用，计划不改目标，执行后读回；
-3. 给每条命令补命令级测试，包括失败路径；FCC 守卫会拦住没有测试的命令；
+3. 逐步补命令级测试和适用失败路径，如实记录已测与缺口；完整 FCC 守卫作为单独检查，失败不得写成通过；
 4. 用真实应用或独立消费者取得证据，再提高命令的成熟度；
-5. 按[交付规范](DELIVERY-SPEC.md)选定渠道，验证 Agent 安装与升级路径。
+5. 按[交付规范](DELIVERY-SPEC.md)构建三端真实包，明确每端架构与运行前提，并记录实际包安装、启动和关键操作 smoke；声明渠道和升级路径的实测范围。
 
 种子工程沿用软件规范的共同规则与语言叠加思路；基线文件以 `.agent/driver/base/` 中固定的版本为准（LAY-002），不要在两处各自升级。分发按 LAY-008 的 Release + SkillHub 约束实现。
 
@@ -54,7 +54,7 @@ creo-cli、xpedition-cli、kicad-cli、auto-cad-cli 这类工具已经符合基�
 
 - 产品的 reference、context、doctor 与真实调用的信封都通过 `validate_contract.py`；
 - 有一次在真实应用上的「dry-run → confirm → 读回 → 回复丢失 → 查询 → 登记」记录；
-- 入口 Skill 按 VER-026 的场景在至少两个模型上评测过。
+- 已进行的 Skill 评测按 VER-026 留存结果；未运行时明确标注，不以此代替平台包 smoke。
 
 ## 从已发布的驱动结构 1.0 迁移
 
@@ -119,5 +119,7 @@ python scripts/verify_spec_bundle.py --bundle dist/tool-driver-cli-spec-1.0.2.zi
 
 ## 交付验收
 
-规范包按[规范发布门禁](DELIVERY-SPEC.md#del-025规范发布门禁)校验；产品包按[产品发布门禁](DELIVERY-SPEC.md#del-019产品发布门禁)验证安装、实际组件、声明能力及适用的升级与恢复。
+规范包按[规范发布门禁](DELIVERY-SPEC.md#del-025规范发布门禁)校验；产品包按[产品发布门禁](DELIVERY-SPEC.md#del-019产品发布门禁)验证三端实际包安装、启动与关键操作。旧基线 FCC 与 `release_readiness` 保持真实语义，不作为新平台支持的通用前提（LAY-009）；完整覆盖、恢复和多模型评测按证据单独报告。
+
+版本化迁移：旧产品继续按其固定版本解释 `reference.release_readiness` 和 `doctor.release_readiness`，不能修改旧字段使之冒称 stable。采用含 LAY-009 的新驱动规范版本后，发布脚本直接执行 `node scripts/check-platform-delivery.js check <包目录> <记录目录> <名称> <版本> --expected-source-sha <40位提交>`，消费各目标的一份 1.0 版 `smoke-<os>-<arch>.json`，并核对实际包和归档内可执行文件。各目标的记录由对应系统运行 `smoke` 生成，包含依赖及真实结果。它只覆盖包冒烟；保留并执行原有授权、安全测试、审计和签名流程。旧脚本须迁移旧就绪等级总门禁，不能把具体授权或安全失败当覆盖缺口忽略；未迁移的消费者仍会阻止，不能宣称已兼容。候选工作流不自动发布，产品现有发布流程须接入上述检查器。
 各渠道交付同一套可追溯的产物；上传、绑定、发布和实际安装分别记录结果。

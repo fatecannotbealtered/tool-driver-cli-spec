@@ -43,7 +43,7 @@ python scripts/generate_product.py --registry examples/development/product-regis
 
 生成项目以 `registry.json.product_version` 为版本来源。修改后执行 `python sync_version.py` 同步 pyproject、Skill 版本和最小版本，再更新 CHANGELOG、重新生成契约；`check_project.py` 对这些元数据及生成 reference 的版本漂移失败关闭。
 
-产品 Skill 的真实任务运行按 VER-026 记录到 `evidence/agent-eval.json`。`python .agent/driver/scripts/check_agent_eval.py --root . --registry registry.json --report evidence/agent-eval.json` 在 stable/beta 声明下要求真实评测记录；开发模板保持 unpublishable 时明确报告 not_recorded，不把缺记录当已评测。该入口仅读取已保存记录，不调用模型、不执行轨迹里的命令。
+产品 Skill 的真实任务运行按 VER-026 记录到 `evidence/agent-eval.json`。`python .agent/driver/scripts/check_agent_eval.py --root . --registry registry.json --report evidence/agent-eval.json` 检查已有记录，并按旧 stable/beta 就绪语义校验；没有记录时明确报告 not_recorded，不把缺记录当已评测，也不把完整多模型评测作为产品平台首发前提。该入口仅读取已保存记录，不调用模型、不执行轨迹里的命令。
 
 ## SDK 的调用流程
 

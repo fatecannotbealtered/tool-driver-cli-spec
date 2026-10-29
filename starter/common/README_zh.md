@@ -99,7 +99,11 @@ python .agent/driver/scripts/generate_product.py --registry registry.json --outp
 python -m unittest discover -s tests -v
 ```
 
-可发布就绪还需要 `evidence/agent-eval.json` 中的真实多模型 Agent 任务评测，CI 检查绑定与覆盖。模板没有此类证据，仍为 unpublishable。实际引入 lint/build 后才补相应命令；协议检查不能证明原生任务完成。
+运行真实多模型 Agent 评测时，把记录放在 `evidence/agent-eval.json`；CI 在文件存在时检查，否则报告未运行。按固定 1.6.3 基线的旧 FCC 规则，`release_readiness` 仍为 `unpublishable`。平台支持另行判断：构建 Windows、macOS 和 Linux 真实包，在每个支持的系统/架构上验证安装、启动和代表性关键操作。此种子的适配器尚未实现，因此还没有受支持的产品包。
+
+手动工作流 `package-candidates.yml` 构建 Windows/amd64、macOS/arm64 和 Linux/amd64 候选归档并打包 Python 依赖，不会发布。先补全 `release-environment.json`、实现适配器，并将 `scripts/smoke-product.js` 替换为在获授权目标上运行的真实关键操作测试；占位脚本会故意失败。新增支持架构时分别构建和测试，保留已有支持。列出外部应用、服务、许可、系统库、最低 OS 和 CPU，并区分直接二进制与 Node.js 壳的依赖。原应用受宿主系统限制时，说明并验证远端客户端/宿主协议与架构。产品正式发布仍须执行原有的授权、依赖审计、签名和渠道检查（DEL-005/019）。
+
+候选工作流按目标生成一份 1.0 版 `smoke-<os>-<arch>.json`，包含运行依赖、真实结果和旧 `release_readiness`。实现 `scripts/smoke-product.js`：`prepare` 提供获授权的关键操作参数与依赖，检查器直接执行已安装的二进制，再由 `validate` 检查实际输出。工作流运行 `node scripts/check-platform-delivery.js check <包目录> <记录目录> <名称> <版本> --expected-source-sha <40位提交>`，核对每份归档、记录和包内可执行文件。检查器使用 `tar`，在 Linux/macOS 读取 ZIP 时还使用 `unzip`；它们是检查工具，不是二进制运行依赖。该检查只覆盖包冒烟，不改变旧 doctor 结果。产品采用新规范版本后，现有发布流程须接入此检查器，替换旧就绪等级作为平台发布的总门禁；具体授权和安全检查、审计及已有签名与验签仍须执行，失败仍应阻断。候选工作流本身不自动发布。
 
 ## Links
 
