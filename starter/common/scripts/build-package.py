@@ -61,11 +61,24 @@ def main() -> None:
         binary_name = NAME + (".exe" if system == "windows" else "")
         shutil.copy2(temp_path / "out" / binary_name, stage / binary_name)
         shutil.copytree(ROOT / "skills", stage / "skills")
+        # Keep licensing material readable outside the frozen executable.
+        shutil.copytree(ROOT / "LICENSES", stage / "LICENSES")
+        shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", stage / "THIRD_PARTY_NOTICES.md")
+        for source, name in ((ROOT / ".agent/driver/LICENSE", "driver-spec-LICENSE"),
+                             (ROOT / ".agent/driver/THIRD_PARTY_NOTICES.md", "driver-spec-NOTICES.md"),
+                             (ROOT / ".agent/vendor/sdk/tool_driver_sdk/LICENSE", "driver-sdk-LICENSE")):
+            shutil.copy2(source, stage / "LICENSES" / name)
+        if (ROOT / "LICENSE").is_file():
+            shutil.copy2(ROOT / "LICENSE", stage / "LICENSE")
         components = [{"name": NAME, "version": version, "path": binary_name, "sha256": sha(stage / binary_name), "role": "cli"}]
         for item in sorted((stage / "skills").rglob("*")):
             if item.is_file():
                 components.append({"name": item.name, "version": version, "path": item.relative_to(stage).as_posix(),
                                    "sha256": sha(item), "role": "skill"})
+        for item in sorted(stage.rglob("*")):
+            if item.is_file() and item.name != binary_name and "skills" not in item.relative_to(stage).parts:
+                components.append({"name": item.name, "version": version, "path": item.relative_to(stage).as_posix(),
+                                   "sha256": sha(item), "role": "documentation"})
         manifest = {"artifact_kind": "cli_product", "name": NAME, "version": version, "spec_version": lock["spec_version"],
                     "base": {"spec": lock["base"]["spec"], "version": lock["base"]["tag"]}, "status": "draft",
                     "source_commit": commit, "source_dirty": False,

@@ -124,3 +124,5 @@ Add language-specific lint/build commands only when they exist. Protocol checks 
 | License | Not selected; add `LICENSE` before public distribution |
 
 Before publication, replace pending entries with real local documents and verified links. Keep both READMEs aligned.
+
+The supplied starter and SDK retain Apache-2.0 notices in `THIRD_PARTY_NOTICES.md` and `LICENSES/`; the pinned baseline remains MIT. This does not select a license for your product additions.

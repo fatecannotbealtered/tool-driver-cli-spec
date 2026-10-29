@@ -88,7 +88,7 @@ def vendored() -> dict[str, tuple[str, bytes]]:
     def add(source: Path, destination: str):
         files[destination] = (source.relative_to(SOURCE).as_posix(), regular_bytes(source))
 
-    for name in ("VERSION", "STATUS"):
+    for name in ("VERSION", "STATUS", "LICENSE", "THIRD_PARTY_NOTICES.md"):
         add(SOURCE / name, f".agent/driver/{name}")
     for folder, pattern in (("base", "**/*"), ("contract", "*.json"), ("docs", "*.md"), ("schemas", "*.schema.json")):
         for path in sorted((SOURCE / folder).glob(pattern)):
@@ -98,6 +98,7 @@ def vendored() -> dict[str, tuple[str, bytes]]:
         add(SOURCE / "scripts" / name, f".agent/driver/scripts/{name}")
     for path in sorted((SOURCE / "packages" / "tool_driver_sdk").glob("*.py")):
         add(path, f".agent/vendor/sdk/tool_driver_sdk/{path.name}")
+    add(SOURCE / "packages/tool_driver_sdk/LICENSE", ".agent/vendor/sdk/tool_driver_sdk/LICENSE")
     return files
 
 

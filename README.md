@@ -100,3 +100,9 @@ python scripts/build_spec_bundle.py
 
 身份映射、领域判定器、来源证明方式和分发平台的原生包支持，需要在声明的环境中继续验证。
 具体实现可以增加领域规则，但必须说明适用条件、检查范围和未覆盖项，不得扩大既有授权。
+
+## 许可证
+
+本仓库自有规范、SDK、脚本和种子模板采用 [Apache-2.0](LICENSE)，Copyright 2026 Sean Guo。
+固定的 ai-native-cli-spec v1.6.3 基线继续采用 MIT，原文与哈希不变；许可全文及第三方范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+生成产品的新增代码由产品维护者另行选择许可证；不得因此删除所包含 SDK、模板、规范及第三方依赖的许可声明。

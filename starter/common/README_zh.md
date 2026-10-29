@@ -121,3 +121,5 @@ python -m unittest discover -s tests -v
 | 许可证 | 尚未选择；公开分发前补 `LICENSE` |
 
 公开分发前，将待配置项换为真实本地文档与已验证链接。保持两份 README 一致。
+
+随附模板和 SDK 的 Apache-2.0 许可说明保存在 `THIRD_PARTY_NOTICES.md` 与 `LICENSES/`；固定基线仍为 MIT。这不替产品新增代码选择许可证。
