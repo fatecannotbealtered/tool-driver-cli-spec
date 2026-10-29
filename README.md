@@ -57,7 +57,7 @@ python examples/engineering/svg_title_driver.py reference --index
 python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/Application/chrome.exe" --output D:/work/spec-acceptance-new
 ```
 
-版本 1.0.2 沿用 1.0.1 的驱动结构 2.0 和运行时信封，无需再次迁移公共协议，与已有 Release 1.0.0 的结构 1.0 不兼容；迁移见[实施与迁移指南](docs/ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)。采用方必须同时固定规范版本、结构、来源与哈希。发布使用新标签 `v1.0.2`，旧标签和资产保持原样。
+版本 1.0.2 沿用 1.0.1 的驱动结构 2.0 和运行时信封，无需再次迁移公共协议，与已有 Release 1.0.0 的结构 1.0 不兼容；迁移见[实施与迁移指南](docs/ADOPTION-GUIDE.md#从已发布的驱动结构-10-迁移)。采用方必须同时固定规范版本、结构、来源与哈希。`v1.0.0`、`v1.0.1`、`v1.0.2` 的标签、源码和 Release 记录保留；这些 Release 的上传附件已于 2026-10-29 清理。采用方请固定源码提交，按下述本地校验步骤构建规范包。
 
 ## 实施顺序
 
@@ -80,7 +80,7 @@ python scripts/check_graduation.py --browser "C:/Program Files/Google/Chrome/App
 ## 发布与分发
 
 驱动 CLI 产品在 GitHub Release 形成版本化产物，SkillHub 可选；必须有验证过的 Agent 安装路径，升级路径按实际结果声明。SkillHub 原生多文件包支持仍由产品实际验收，不把平台注册当作能力完成。
-本仓库的规范包包含文档、基线副本、驱动契约、Schema、示例、校验入口、SDK 与种子工程，只通过 GitHub Release 交付，不作为 CLI 产品登记。
+本仓库的规范包包含文档、基线副本、驱动契约、Schema、示例、校验入口、SDK 与种子工程，不作为 CLI 产品登记。旧 Release 附件清理后，可从固定提交的干净 Git 检出运行 `python scripts/build_spec_bundle.py`，生成 ZIP、manifest 和该 ZIP 的 SHA-256 文件。本地重建不恢复原发布者签名或原验收附件。
 
 ## 本地校验
 
