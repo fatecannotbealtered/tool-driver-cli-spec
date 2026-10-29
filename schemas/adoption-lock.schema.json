@@ -84,7 +84,7 @@
           },
           "source_path": {
             "type": "string",
-            "pattern": "^(?:schemas/[A-Za-z0-9][A-Za-z0-9._-]*\\.schema\\.json|contract/[A-Za-z0-9][A-Za-z0-9._-]*\\.json|base/[A-Za-z0-9][A-Za-z0-9._/-]*|docs/[A-Za-z0-9][A-Za-z0-9._-]*\\.md|scripts/[A-Za-z0-9][A-Za-z0-9._-]*\\.py|packages/[A-Za-z0-9][A-Za-z0-9._/-]*\\.py|VERSION|STATUS)$"
+            "pattern": "^(?:schemas/[A-Za-z0-9][A-Za-z0-9._-]*\\.schema\\.json|contract/[A-Za-z0-9][A-Za-z0-9._-]*\\.json|base/[A-Za-z0-9][A-Za-z0-9._/-]*|docs/[A-Za-z0-9][A-Za-z0-9._-]*\\.md|scripts/[A-Za-z0-9][A-Za-z0-9._-]*\\.py|packages/[A-Za-z0-9][A-Za-z0-9._/-]*\\.py|packages/tool_driver_sdk/LICENSE|LICENSE|THIRD_PARTY_NOTICES\\.md|VERSION|STATUS)$"
           },
           "sha256": {
             "$ref": "urn:tool-driver-cli-spec:common:2.0#/$defs/sha256"

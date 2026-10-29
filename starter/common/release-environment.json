@@ -1,0 +1,5 @@
+{
+  "compatibility": {"application": [], "plugin": [], "protocol": [], "skill": []},
+  "external_requirements": ["Not surveyed: specify target application, license, system libraries, minimum OS and CPU before support is advertised."],
+  "limitations": ["The starter adapter is unimplemented; this candidate does not support a native or remote product operation."]
+}

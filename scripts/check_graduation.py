@@ -22,7 +22,7 @@ HIDDEN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
 def identity():
     files = {}
-    suffixes = {'.py', '.md', '.json', '.toml', '.yml', '.txt', '.svg', ''}
+    suffixes = {'.py', '.js', '.md', '.json', '.toml', '.yml', '.txt', '.svg', ''}
     for folder in ('base', 'contract', 'docs', 'schemas', 'scripts', 'packages', 'starter', 'examples', 'tests'):
         for path in sorted((ROOT / folder).rglob('*')):
             if path.is_file() and path.suffix in suffixes and '__pycache__' not in path.parts:

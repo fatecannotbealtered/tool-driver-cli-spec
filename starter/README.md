@@ -20,3 +20,5 @@ python scripts/instantiate_starter.py --name sample-native-cli --profile file --
 初始化成功、协议测试通过和真实原生能力的验证分别验收；未实现的适配器只返回 `E_UNSUPPORTED`，不生成假的工程、设备测量或保存回执。使用方法见[工具工程指南](../docs/DEVELOPMENT-GUIDE.md)。
 
 新工程携带开发用 `registry.json.design`，初始能力与应用调查明确为未知/未实现。先按[命令设计指南](../docs/COMMAND-DESIGN.md)调查应用、版本、许可与接口，再替换 `target inspect/apply` 占位，闭合任务、参数、入口、读回、测试及覆盖分母；CI 使用 `check_product_design.py --require-design`。设计记录通过、声明命令 FCC 与真实应用能力完成分别取证。
+
+候选包工作流使用三端实际 runner 调用 PyInstaller、解包并运行安装/启动/关键操作检查；默认关键操作脚本失败，直到产品实现它。它只产候选，不代替签名与正式发布。完整 FCC 可作为独立检查运行，未执行时标为跳过；未提供的 Agent 评测标为未运行。

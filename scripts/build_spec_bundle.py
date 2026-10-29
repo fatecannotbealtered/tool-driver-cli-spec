@@ -28,10 +28,10 @@ def git_bytes(*args: str) -> bytes:
 
 
 def committed_inputs(source_commit: str) -> dict[str, bytes]:
-    required = {"README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt", "requirements-workflow.txt"}
+    required = {"LICENSE", "THIRD_PARTY_NOTICES.md", "packages/tool_driver_sdk/LICENSE", "README.md", "AGENTS.md", "VERSION", "STATUS", "CHANGELOG.md", "requirements-dev.txt", "requirements-workflow.txt"}
     suffixes = {"docs": {".md"}, "schemas": {".json"}, "examples": {".json", ".md", ".py"}, "scripts": {".py"},
                 "tests": {".py", ".json", ".svg"}, "packages": {".py", ".json", ".md"},
-                "starter": {".py", ".json", ".md", ".toml", ".yml", ".txt", ""}, "base": {".md", ".json"}, "contract": {".json"}}
+                "starter": {".py", ".js", ".json", ".md", ".toml", ".yml", ".txt", ""}, "base": {".md", ".json"}, "contract": {".json"}}
     inputs = {}
     for record in git_bytes("ls-tree", "-r", "-z", "--full-tree", source_commit).split(b"\0"):
         if not record:

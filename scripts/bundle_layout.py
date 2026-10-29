@@ -3,7 +3,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE_FILES = {
-    'README.md', 'AGENTS.md', 'VERSION', 'STATUS', 'CHANGELOG.md', 'requirements-dev.txt',
+    'README.md', 'AGENTS.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md',
+    'packages/tool_driver_sdk/LICENSE', 'VERSION', 'STATUS', 'CHANGELOG.md', 'requirements-dev.txt',
     'base/base-lock.json', 'contract/driver-contract.json',
     'docs/LAYERING.md', 'docs/CORE-SPEC.md', 'docs/DRIVER-SPEC.md',
     'docs/VERIFICATION-SPEC.md', 'docs/DELIVERY-SPEC.md', 'docs/SKILL-ADDENDUM.md',

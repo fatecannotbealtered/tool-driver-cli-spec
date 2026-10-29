@@ -26,7 +26,7 @@ Keep capability/task/command/readback/test references closed. A supported task n
 1. Declare it in `registry.json`: path, type, params (with `unit` for quantities), output schema, examples (`--dry-run` / `--confirm` pair for writes, `--dangerous` for dangerous ones) and the `driver` block (effects, phases, modes, maturity, environments, limits, recovery, profiles, error codes).
 2. Regenerate with `--update`; fix whatever the generator reports.
 3. Implement it in the adapter: `run(call)` for reads; `plan(call)` and `apply(call, plan)` for writes. `plan` must not change the target. `apply` re-checks the baseline (or implement `revision(target)`), dispatches, reads the result back and returns the receipt fields honestly. Raise `DriverError` with the real `dispatch_state` when something fails.
-4. Add command-level tests to `tests/test_contract.py`: success, missing or invalid parameters, missing scope, confirmation, conflict, native failure and unknown outcome as they apply. The FCC guard fails when a reference command has no test.
+4. Add command-level tests to `tests/test_contract.py`, including the applicable authorization and confirmation checks. Record untested commands and failures; the optional full FCC check fails when a reference command has no test.
 5. Update `CHANGELOG.md` (`Unreleased`) and the Skill (`skills/{{NAME}}/SKILL.md`) if agents need to know.
 6. Keep `maturity` at `draft` until a real application or file consumer confirms the behaviour; record that evidence before raising it.
 
@@ -43,4 +43,4 @@ Read the clause the behaviour belongs to first. Changing a parameter, default, u
 - [ ] receipts report what was observed; nothing is assumed saved, delivered or verified
 - [ ] CHANGELOG and the Skill describe the change
 - [ ] registry version, pyproject, Skill/min_version and generated reference match (`sync_version.py`, then regenerate)
-- [ ] publishable readiness has recorded actual multi-model task evaluation; fixtures are not eval evidence
+- [ ] evaluation results are recorded honestly; fixtures are not eval evidence; platform support is backed by installed-package smoke

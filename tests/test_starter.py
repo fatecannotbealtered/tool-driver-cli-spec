@@ -97,7 +97,7 @@ class StarterTests(unittest.TestCase):
             with self.subTest(path=relative):
                 self.assertTrue((self.project / relative).is_file())
         for path in self.project.rglob("*"):
-            if path.is_file() and path.suffix in {".md", ".py", ".json", ".toml", ".yml"} and ".agent" not in path.parts:
+            if path.is_file() and path.suffix in {".md", ".py", ".js", ".json", ".toml", ".yml"} and ".agent" not in path.parts:
                 text = path.read_text(encoding="utf-8")
                 leftovers = [match for match in re.findall(r"\{\{[A-Z_]+\}\}", text)]
                 self.assertEqual(leftovers, [], path)
