@@ -1,0 +1,76 @@
+# tool-driver-cli-spec
+
+A specification for driver tools: command-line tools that let AI Agents operate professional desktop applications and devices.
+
+[![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
+![Spec](https://img.shields.io/badge/spec-1.0.0--rc.1-blue)
+![Status](https://img.shields.io/badge/status-in%20development-orange)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
+
+English | [中文](README_zh.md)
+
+## What It Is
+
+A person sets the scope, the Agent does the work, and the tool makes every step correct and honestly reported.
+
+The specification decides everything a new driver tool would otherwise decide on its own: project skeleton, documents, built-in commands, self-update, the driver model, the write flow, the adapter boundary and the conformance tests. A tool author writes only the domain commands and the adapter. Every tool then behaves the same, so an Agent that knows one knows them all.
+
+| Requirement | Meaning |
+|---|---|
+| See clearly | The Agent always knows which instances and documents are open, what is unsaved, and whether the application is busy or blocked by a dialog. |
+| Change precisely | Every change lands on a named instance, document and object, with explicit units, and is read back afterwards. |
+| Report truthfully | Changed, saved and verified are reported separately; unknown is reported as unknown. |
+| Stay safe and lean | A person grants what may change; confirmation grows with risk; output is small and calls are few. |
+
+## The Five Specifications
+
+| Specification | Prefix | Covers | Files |
+|---|---|---|---|
+| DRIVER-CLI-SPEC | `DCLI` | Output and errors, commands, driver model, writes, self-update, adapter and runtime, host protocol | [English](spec/DRIVER-CLI-SPEC.md) · [中文](spec/DRIVER-CLI-SPEC_zh.md) |
+| DRIVER-SEC-SPEC | `DSEC` | Risk tiers, authorization scope, untrusted content, state directory, secrets and network, host components, physical effects, supply chain | [English](spec/DRIVER-SEC-SPEC.md) · [中文](spec/DRIVER-SEC-SPEC_zh.md) |
+| DRIVER-SKILL-SPEC | `DSKL` | Agent Skills, several Skills per tool, evaluation, the knowledge base | [English](spec/DRIVER-SKILL-SPEC.md) · [中文](spec/DRIVER-SKILL-SPEC_zh.md) |
+| DRIVER-VERIFY-SPEC | `DVER` | Conformance tests, fake host, behavior matrix, maturity and evidence, live acceptance | [English](spec/DRIVER-VERIFY-SPEC.md) · [中文](spec/DRIVER-VERIFY-SPEC_zh.md) |
+| DRIVER-REPO-SPEC | `DREPO` | Project layout, documents, badges and labels, pinning, versions and CI, npm distribution, capability survey | [English](spec/DRIVER-REPO-SPEC.md) · [中文](spec/DRIVER-REPO-SPEC_zh.md) |
+
+## Machine Contract
+
+Every value a tool or a test can read as data lives in [`contract/driver-contract.json`](contract/driver-contract.json): error codes and exit codes, flags, effects and tiers, receipt rules, states, standard commands, units, the host protocol and the knowledge formats. [`contract/schemas/`](contract/schemas/) holds the JSON Schemas and [`contract/examples/`](contract/examples/) holds examples that must pass or fail them. The tables in the specifications are checked against the contract, so the two never drift apart.
+
+## Status
+
+Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot adopt the specification until the driver runtime exists.
+
+| Phase | Content | State |
+|---|---|---|
+| 1 | Design | Done |
+| 2 | Specifications, contract, schemas, checks | In review |
+| 3 | Fake host and the two conformance suites | Planned |
+| 4 | Python driver runtime and project template | Planned |
+| 5 | Skill and knowledge templates, development Skill, onboarding guide | Planned |
+| 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
+
+## Repository Layout
+
+```text
+tool-driver-cli-spec/
+├── spec/        the five specifications, English and Chinese
+├── contract/    driver-contract.json, schemas/, examples/
+├── scripts/     check_spec.py, build_spec_bundle.py
+├── docs/        OPEN-QUESTIONS.md
+└── tests/       unit tests for the scripts
+```
+
+Later phases add `conformance/`, `sdk/`, `template/` and `skills/`.
+
+## Checks
+
+```bash
+python -m pip install --require-hashes --no-deps -r requirements-dev.txt
+python scripts/check_spec.py
+python -m unittest discover -s tests -v
+python scripts/build_spec_bundle.py
+```
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
