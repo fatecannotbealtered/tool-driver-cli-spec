@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/objects.schema.json",
   "title": "Standard objects",
-  "description": "Sessions, documents, long jobs, devices and host components (DCLI-203, DCLI-210, DCLI-220, DCLI-230, DCLI-240). A value is one object or a list page of one kind.",
+  "description": "Sessions, documents, long jobs, devices and host components (DCLI-203, DCLI-210, DCLI-220, DCLI-230, DCLI-240). A value is one object or a list page of one kind. Application-specific fields go only inside `extra`.",
   "anyOf": [
     {"$ref": "#/$defs/session"},
     {"$ref": "#/$defs/document"},
@@ -13,6 +13,7 @@
   ],
   "$defs": {
     "id": {"type": "string", "minLength": 1},
+    "extra": {"description": "Application-specific fields.", "type": "object"},
     "session": {
       "type": "object",
       "required": ["id", "application", "pid", "owned", "generation", "state", "documents", "plugin_loaded"],
@@ -28,33 +29,75 @@
         "pid": {"type": "integer", "minimum": 0},
         "owned": {"type": "boolean"},
         "generation": {"type": "integer", "minimum": 0},
-        "state": {"enum": ["starting", "ready", "busy", "blocked", "lost", "closed"]},
-        "documents": {"type": "array", "items": {"type": "string"}},
-        "plugin_loaded": {"type": ["string", "null"]}
-      }
+        "state": {"enum": ["starting", "ready", "busy", "unresponsive", "blocked", "lost", "closed"]},
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "dirty"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "path": {"type": ["string", "null"]},
+              "dirty": {"type": "boolean"}
+            }
+          }
+        },
+        "plugin_loaded": {"type": ["string", "null"]},
+        "blocker": {
+          "description": "What blocks the session. The title comes from the application and is untrusted.",
+          "type": "object",
+          "required": ["action", "title"],
+          "additionalProperties": false,
+          "properties": {
+            "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+            "title": {"type": "string"}
+          }
+        },
+        "since_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "extra": {"$ref": "#/$defs/extra"}
+      },
+      "allOf": [
+        {"if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}}, "then": {"required": ["blocker"]}, "else": {"not": {"required": ["blocker"]}}},
+        {"if": {"required": ["state"], "properties": {"state": {"const": "unresponsive"}}}, "then": {"required": ["since_at"]}}
+      ]
     },
     "document": {
+      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`.",
       "type": "object",
-      "required": ["id", "path", "revision", "dirty", "readonly", "state"],
-      "additionalProperties": false,
+      "required": ["id", "path", "revision", "dirty", "readonly"],
       "properties": {
         "id": {"$ref": "#/$defs/id"},
         "path": {"type": ["string", "null"]},
         "session": {"type": ["string", "null"]},
-        "revision": {"type": "integer", "minimum": 0},
+        "revision": {"type": "string", "minLength": 1},
         "dirty": {"type": "boolean"},
         "readonly": {"type": "boolean"},
-        "state": {"enum": ["clean", "dirty", "readonly", "conflict", "missing"]}
+        "disk": {"enum": ["in_sync", "changed", "missing"]}
+      },
+      "allOf": [
+        {"$ref": "#/$defs/document_optional"},
+        {
+          "if": {"properties": {"path": {"type": "string"}}},
+          "then": {"required": ["disk"]},
+          "else": {"not": {"required": ["disk"]}}
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "document_optional": {
+      "properties": {
+        "extra": {"$ref": "#/$defs/extra"}
       }
     },
     "job": {
       "type": "object",
-      "required": ["id", "operation_id", "status", "cancel_requested", "started_at"],
+      "required": ["id", "operation_id", "state", "cancel_requested", "started_at"],
       "additionalProperties": false,
       "properties": {
         "id": {"$ref": "#/$defs/id"},
         "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
-        "status": {"enum": ["planned", "running", "succeeded", "failed", "partial", "unknown", "cancelled"]},
+        "state": {"enum": ["planned", "running", "blocked", "completed", "failed", "partial", "unknown", "cancelled"]},
         "cancel_requested": {"type": "boolean"},
         "progress": {
           "type": "object",
@@ -66,8 +109,28 @@
             "unit": {"type": "string"}
           }
         },
-        "started_at": {"$ref": "error.schema.json#/$defs/utc"}
-      }
+        "started_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "finished_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "receipt": {"$ref": "receipt.schema.json#/$defs/receipt"},
+        "result": true,
+        "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+        "poll_after_ms": {"type": "integer", "minimum": 0}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["state"], "properties": {"state": {"enum": ["completed", "failed", "partial", "cancelled"]}}},
+          "then": {"required": ["finished_at", "receipt"]}
+        },
+        {
+          "if": {"required": ["state"], "properties": {"state": {"enum": ["planned", "running", "blocked"]}}},
+          "then": {"not": {"anyOf": [{"required": ["finished_at"]}, {"required": ["receipt"]}]}}
+        },
+        {
+          "if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}},
+          "then": {"required": ["action"]},
+          "else": {"not": {"required": ["action"]}}
+        }
+      ]
     },
     "device": {
       "type": "object",
@@ -78,7 +141,8 @@
         "model": {"type": "string"},
         "firmware": {"type": "string"},
         "state": {"enum": ["ready", "busy", "fault", "emergency_stop", "offline"]},
-        "simulated": {"type": "boolean"}
+        "simulated": {"type": "boolean"},
+        "extra": {"$ref": "#/$defs/extra"}
       }
     },
     "plugin": {
@@ -102,21 +166,24 @@
       }
     },
     "page": {
+      "description": "A list page. `complete` is false when the adapter cannot see every instance (session list).",
       "allOf": [
         {"$ref": "envelope.schema.json#/$defs/list_page"},
         {
           "properties": {
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {"items": {"$ref": "#/$defs/session"}},
                 {"items": {"$ref": "#/$defs/document"}},
                 {"items": {"$ref": "#/$defs/job"}},
                 {"items": {"$ref": "#/$defs/device"}}
               ]
-            }
+            },
+            "complete": {"type": "boolean"}
           }
         }
-      ]
+      ],
+      "unevaluatedProperties": false
     }
   }
 }

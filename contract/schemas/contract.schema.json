@@ -9,11 +9,11 @@
     "banned_verbs", "global_flags", "shared_flags", "target_flags", "duration_suffixes", "target_keys", "reserved_names",
     "modes", "effects", "tiers", "risk_tiers", "always_dangerous", "preview", "confirm_token", "confirm_review",
     "direct_review_steps", "conflict_values", "operation", "receipt", "derivation", "batch", "jobs", "human_required_actions",
-    "objects", "session_states", "session_read_deadline", "document_states", "device_states", "builtin_commands",
+    "objects", "session_states", "session_read_deadline", "disk_states", "device_states", "builtin_commands",
     "context_keys", "scope_statuses", "doctor", "changelog_groups", "standard_commands", "adapter_capabilities", "units",
     "timing_fields", "scope_file", "state_dir", "update", "host_protocol", "knowledge", "skill", "conformance",
     "behavior_matrix_rows", "maturity_levels", "evidence_kinds", "evidence_ref_format", "badges", "compatibility_labels", "check_labels",
-    "platforms", "project", "schemas"
+    "platforms", "project", "schemas", "bare_numbers", "registration_fields"
   ],
   "properties": {
     "name": {"const": "tool-driver-cli-spec"},
@@ -95,7 +95,25 @@
         }
       }
     },
-    "schemas": {"type": "array", "items": {"type": "string", "pattern": "^[a-z-]+\\.schema\\.json$"}}
+    "schemas": {"type": "array", "items": {"type": "string", "pattern": "^[a-z-]+\\.schema\\.json$"}},
+    "disk_states": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["state", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "pattern": "^[a-z_]+$"},
+          "error": {"type": ["string", "null"], "pattern": "^E_[A-Z_]+$"},
+          "conflict": {"type": "string", "pattern": "^[a-z_]+$"}
+        },
+        "if": {"properties": {"error": {"const": "E_CONFLICT"}}},
+        "then": {"required": ["conflict"]}
+      }
+    },
+    "bare_numbers": {"const": "rejected"},
+    "registration_fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z_]+$"}}
   },
   "$defs": {
     "flag_list": {

@@ -1,0 +1,22 @@
+{
+  "operation_id": "op_c81kz0",
+  "items": [
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+      "operation_id": "op_c81kz0r1",
+      "ok": true
+    },
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
+      "operation_id": "op_c81kz0r2",
+      "ok": true
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "succeeded": 2,
+    "failed": 0,
+    "unknown": 0,
+    "skipped": 0
+  }
+}

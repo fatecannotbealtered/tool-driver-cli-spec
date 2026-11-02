@@ -9,7 +9,11 @@
   "generation": 3,
   "state": "ready",
   "documents": [
-    "doc_1"
+    {
+      "id": "doc_1",
+      "path": "D:/proj/board.kicad_pcb",
+      "dirty": true
+    }
   ],
   "plugin_loaded": "1.0.0"
 }

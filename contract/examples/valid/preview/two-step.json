@@ -12,17 +12,34 @@
       "persist"
     ],
     "tier": "two_step",
+    "summary": {
+      "total": 2,
+      "by_origin": {
+        "tool": 1,
+        "external": 1
+      },
+      "by_kind": {
+        "footprint": 2
+      }
+    },
     "changes": [
       {
-        "field": "/footprints/R1/x_mm",
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+        "field": "x_mm",
         "before": 10.0,
         "after": 12.5,
         "origin": "tool"
       },
       {
-        "field": "/footprints/C3/angle_deg",
-        "before": 0,
-        "after": 90,
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/C3",
+        "before": {
+          "angle_deg": 0,
+          "locked": false
+        },
+        "after": {
+          "angle_deg": 90,
+          "locked": true
+        },
         "origin": "external"
       }
     ],
@@ -32,15 +49,15 @@
     },
     "document": {
       "id": "doc_1",
-      "revision": 7,
+      "revision": "rev-8",
       "dirty": true
     },
     "inputs": {
+      "session": "kicad-1234",
       "doc": "doc_1"
     },
     "can_apply": true
   },
-  "confirm_token": "tok_abc",
-  "expires_at": "2026-11-02T08:40:00Z",
-  "operation_id": "op_9xk2m4qa"
+  "confirm_token": "tok_3f9a7c1e2b8d4a60",
+  "expires_at": "2026-11-02T08:40:00Z"
 }

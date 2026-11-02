@@ -25,13 +25,13 @@ This specification covers what keeps that arrangement safe:
 - the risk tiers of commands and tools;
 - the authorization scope file, through which a person decides what the Agent may change;
 - untrusted content that comes from documents, the application, devices and team knowledge;
-- the state directory, where the tool keeps its key, records and locks;
+- the state directory, where the tool keeps its operation records, confirm tokens and locks;
 - secrets and outbound network connections;
 - installing and running host components;
 - physical effects on devices;
 - the supply chain from source code to the installed package.
 
-It applies to every driver tool in every mode: file, session and device. The write flow itself (dry run, confirm token, confirm-time review, read-back, receipt) is defined in DCLI-050 to DCLI-067. This specification adds the security rules around it.
+It applies to every driver tool in every mode: file, session and device. The write flow itself (preview, confirm token, confirm-time review, read-back, receipt) is defined in DCLI-050 to DCLI-067. This specification adds the security rules around it.
 
 ## Terms
 
@@ -43,14 +43,15 @@ It applies to every driver tool in every mode: file, session and device. The wri
 | host component | The part of a tool that is installed into the driven application and loaded by it, such as a plugin, an add-in or a script service. |
 | effect | What a command changes. Every command declares its effects (DCLI-051). |
 | confirmation tier | How a write is confirmed: direct, two-step or dangerous (DCLI-052). |
+| halt command | A command that only stops work that is running: the verb `stop` and `job cancel` (DSEC-018). |
 | risk tier | How far the changes of a command or a tool can reach: `T0`, `T1` or `T2` (DSEC-001). |
 | authorization scope, scope file | The grant a person writes in a JSON file: which effects, on which targets, until when. |
 | target key | The one way to write down an object, such as `file:///D:/proj/board.kicad_pcb#/footprints/R1` (DCLI-028). |
 | dry run | A call with `--dry-run`. It returns a preview and changes nothing. |
-| confirm token | The signed, single-use value a dry run returns. The confirming call passes it back (DCLI-055). |
-| operation record | The runtime's record of one write: command, target, scope ID, preview, receipt and state (DCLI-059). |
+| confirm token | The random, single-use value the runtime returns with the preview of a write that needs confirmation. The confirming call passes it back (DCLI-055, DSEC-033). |
+| operation record | The runtime's record of one write: command, target, scope ID, preview, confirm token, receipt and state (DCLI-059). |
 | untrusted content | Text that comes from documents, the application, devices or team knowledge, not from the tool or the person (DSEC-020). |
-| state directory | The per-user directory where the runtime keeps its key, records, locks and caches (DSEC-030). |
+| state directory | The per-user directory where the runtime keeps operation records, locks, caches and registrations (DSEC-030). |
 | secret | A password, an access token or a license key. |
 | simulated device | A device that software imitates instead of real hardware. |
 | provenance | A signed statement that an npm package was built by the tool's own release workflow. |
@@ -62,14 +63,15 @@ It applies to every driver tool in every mode: file, session and device. The wri
 
 | Topic | The driver runtime provides | The tool author does |
 |---|---|---|
-| Risk tiers | Derives each command's confirmation tier and risk tier from its effects, and the tool's tier from its commands | Declares every effect of every domain command; shows the tool's tier in the README and SECURITY.md |
-| Authorization scope | Finds, reads and validates the scope file; checks every write against it; reports its status in `context` | Explains in SECURITY.md how a person writes a scope for this tool; never writes or ships a scope file |
-| Untrusted content | Lists native error messages, dialog text and team knowledge in `meta.untrusted` | Declares which result fields of domain commands hold untrusted content |
-| State directory | Creates it with owner-only access; keeps the key, operation records, locks, cache and registrations in it | Points every test at a temporary state directory |
+| Risk tiers | Derives each command's confirmation tier and risk tier from its effects, and the tool's tier from its commands | Declares every effect of every domain command, and marks irreversible and halt commands when it registers them (DCLI-029); shows the tool's tier in the README and SECURITY.md |
+| Authorization scope | Finds, reads and validates the scope file; checks every write against it; tells the person what a refused write lacks; reports its status in `context` | Explains in SECURITY.md how a person writes a scope for this tool; never writes or ships a scope file |
+| Untrusted content | Lists native error messages, dialog text, team knowledge and its own text that embeds them in `meta.untrusted` | Declares which result fields of domain commands hold untrusted content |
+| State directory | Creates it with owner-only access; keeps operation records with their confirm tokens, locks, the adapter state store, cache and registrations in it | Points every test at a temporary state directory |
 | Secrets and network | Masks declared secrets; honors proxies and verifies TLS for `update` and `doctor` | Declares which parameters are secrets; connects only to the application or device it drives, with proxies honored and TLS verified |
 | Host components | `plugin get`, `plugin install` and `plugin remove`; hash and protocol checks; refusing writes on a version mismatch | Builds the host component and its manifest; uses the host libraries for the local connection |
-| Physical effects | Puts physical commands in the dangerous tier; checks the scope; turns device states into errors | Makes the adapter read the real device state, including emergency stop, faults and readiness; marks simulated devices |
+| Physical effects | Puts physical commands in the dangerous tier; lets halt commands through at once; checks the scope; turns device states into errors | Makes the adapter read the real device state, including emergency stop, faults and readiness; marks simulated devices |
 | Supply chain | `update` checks provenance; Skills are installed and synced from the installed package | Keeps lock files; publishes only from a tag-triggered release workflow with provenance; ships packages without install scripts |
+| SECURITY.md | Fixed text for the sections that describe runtime behavior the same in every tool: Write Confirmation, State Directory, Untrusted Content, Supply Chain and Self-update (DREPO-013) | Writes the sections that depend on the tool, such as Risk Tier, Authorization, Credentials, Host Component and Physical Effects |
 
 ## Risk Tiers
 
@@ -81,7 +83,7 @@ Every command has a risk tier. The tier says how far the command's changes can r
 | Tier | Meaning | Effects at this tier |
 |---|---|---|
 | `T0` | Reads only and changes nothing | `observe` |
-| `T1` | Changes the application's running state, objects inside the application, or local files | `session`, `change`, `artifact`, `persist` |
+| `T1` | Changes the application's running state, objects inside the application, or local files | `lifecycle`, `change`, `artifact`, `persist` |
 | `T2` | Changes settings or host components, reaches external people or systems, or acts on the physical world | `configure`, `deliver`, `physical` |
 
 Each effect has a minimum risk tier, given in the Risk tier column of DCLI-051. A command's risk tier is the highest of these minimums among the effects it declares. The runtime MUST derive the tier from the declared effects. The tool declares effects, not tiers.
@@ -91,17 +93,17 @@ Check: 🤖 Runtime unit tests.
 
 ### DSEC-002 Tool risk tier
 
-A tool's risk tier is the highest risk tier among all its commands, as listed by `reference`. Built-in commands are declared `observe` (DCLI-030), so `update` and the tool's own state do not raise it. `knowledge create` and `knowledge delete` only change the tool's own registration: they keep their two-step confirmation (DSKL-123) but do not count toward the tool's tier. The tool MUST show its tier in the risk badge of the README (DREPO-020), in the README info card (DREPO-021) and in the Risk Tier section of SECURITY.md (DREPO-013). All three MUST equal the tier derived from `reference`.
+A tool's risk tier is the highest risk tier among all its commands, as listed by `reference`. Built-in commands are declared `observe` (DCLI-030), so `update` and the tool's own state do not raise it. `knowledge create` and `knowledge delete` only change the tool's own registration: they keep their two-step confirmation (DSKL-123), need no scope (DSEC-017) and do not count toward the tool's tier. The tool MUST show its tier in the risk badge of the README (DREPO-020), in the README info card (DREPO-021) and in the Risk Tier section of SECURITY.md (DREPO-013). All three MUST equal the tier derived from `reference`.
 
 Why: The tier tells a person how much care the tool needs before they grant it a scope; a badge that claims less than the commands can do misleads them.
 Check: 🤖 `check_project` compares the risk badge with the tier derived from `reference`.
 
 ### DSEC-003 No downgrades
 
-The confirmation tier and the risk tier of a command follow from its declared effects by the rules of DCLI-051 and DCLI-052. The runtime computes both. A tool MUST declare every effect a command has, and MUST NOT lower either tier, by a setting, by its own code or by changing the runtime. No clause allows a tool to lower a tier. Where another clause lets a tool depart from a default, `reference` shows the departure (DCLI-031). Only the person's scope file can change confirmation, and only to make it stricter (DSEC-013).
+The confirmation tier and the risk tier of a command follow from its declared effects by the rules of DCLI-051 and DCLI-052. The runtime computes both. A tool MUST declare every effect a command has. When the application cannot take a command's change back, the tool MUST register the command with `irreversible: true` (DCLI-029), and the runtime puts it in the dangerous tier. A tool MUST NOT lower either tier, by a setting, by its own code or by changing the runtime. No clause allows a tool to lower a tier. Where another clause lets a tool depart from a default, `reference` shows the departure (DCLI-031). Only the person's scope file can change confirmation, and only to make it stricter (DSEC-013).
 
-Why: If each tool could relax its own confirmation, the person's assurance would depend on every author's judgment instead of on one rule.
-Check: 🤖 Conformance tests G01 and G09 run every two-step and dangerous sample; `check_project` confirms the runtime copy is unchanged (DREPO-034).
+Why: If each tool could relax its own confirmation, or keep quiet that a change cannot be taken back, the person's assurance would depend on every author's judgment instead of on one rule.
+Check: 🤖 Conformance tests G01 and G09 run every two-step and dangerous sample; `check_project` confirms the runtime copy is unchanged (DREPO-034); 👀 review of the commands registered as irreversible against the capability survey (DREPO-060).
 
 ## Authorization Scope
 
@@ -114,9 +116,11 @@ Check: 🤖 Runtime unit tests.
 
 ### DSEC-011 Written only by a person
 
-Only a person writes the scope file. The runtime MUST only read it; no command creates, changes or deletes it. An Agent MUST NOT create or modify a scope file, and MUST NOT point `<PREFIX>_SCOPE_FILE` at a file it wrote. When a write is refused for lack of scope, the Agent asks the person to widen the scope.
+Only a person writes the scope file. The runtime MUST only read it; no command creates, changes or deletes it. An Agent MUST NOT create, change or delete a scope file, and MUST NOT point `<PREFIX>_SCOPE_FILE` at a file it wrote. This holds even when the user asks for it in chat: the person edits the file themselves. When a write is refused for lack of scope, the Agent passes on to the person what is missing (DSEC-015).
 
-Why: The scope is the person's decision; an Agent that could write it would grant itself permission.
+The scope guards against two things: mistakes by the Agent, such as the wrong file or more objects than were asked for, and instructions injected through untrusted content (DSEC-022). It does not stop an Agent that ignores its Skills: the scope file is an ordinary file in the user's account, and the runtime cannot tell who wrote it. Keeping such an Agent away from the file is a matter for the permissions the person gives the Agent itself.
+
+Why: The scope is the person's decision. An Agent that could write it would grant itself permission, and a request in chat may itself come from injected text or a misunderstanding.
 Check: 🤖 Evaluation scenario `out_of_scope_change` (DSKL-040); 👀 review of the runtime and the Skills.
 
 ### DSEC-012 Scope fields
@@ -126,21 +130,21 @@ The scope file is one JSON object with these fields:
 <!-- contract:scope_fields -->
 | Field | Required | Value | Meaning |
 |---|---|---|---|
-| `scope_id` | yes | string | Names this grant. Confirm tokens and operation records carry it (DCLI-055, DCLI-059). |
+| `scope_id` | yes | string | Names this grant. Operation records carry it, and confirm tokens are bound to it (DCLI-055, DCLI-059). |
 | `effects` | yes | non-empty list of effect names other than `observe` | The effects that writes may have (DCLI-051). |
 | `dangerous` | yes | `true` or `false` | Whether operations of the dangerous tier are allowed (DCLI-052). |
 | `targets` | yes | non-empty list of target-key prefixes | The objects that writes may touch (DCLI-028). |
 | `expires_at` | yes | UTC time ending in `Z` | When the grant ends. |
-| `confirm` | no | `always` | Makes every write two-step (DSEC-013). |
+| `confirm` | no | `always` | Makes every write except halt commands two-step, and the person approves each preview (DSEC-013). |
 
 Reads need no scope, so `observe` is not allowed in `effects`. `contract/schemas/scope.schema.json` holds these rules as a schema. The runtime MUST treat a file that breaks them as invalid (DSEC-016): for example a missing required field, an unknown field, `observe` or an unknown name in `effects`, an empty list, or a value of the wrong type.
 
-Example: a person lets the Agent rework the board files under `D:/proj/board/`, saving included, until 9 November 2026 at 18:00 UTC, and wants every write confirmed in two steps.
+Example: a person lets the Agent rework the board files under `D:/proj/board/`, saving included, until 9 November 2026 at 18:00 UTC, and wants to approve every write before it runs.
 
 ```json
 {
   "scope_id": "board-rework",
-  "effects": ["session", "change", "persist"],
+  "effects": ["lifecycle", "change", "persist"],
   "dangerous": false,
   "targets": ["file:///D:/proj/board/"],
   "expires_at": "2026-11-09T18:00:00Z",
@@ -153,10 +157,10 @@ Check: 🤖 Runtime unit tests; `check_spec` validates the example scope files i
 
 ### DSEC-013 Stricter only
 
-The runtime MUST use the scope file only to make rules stricter. With `"confirm": "always"`, every write is two-step: a command of the direct tier run without flags changes nothing and returns `E_CONFIRMATION_REQUIRED` with a preview and a confirm token, as a two-step command does (DCLI-053). Dangerous commands stay dangerous. No field can lower a confirmation tier, allow a write that the tier rules refuse, or skip the confirm-time review, the read-back or the operation record.
+The runtime MUST use the scope file only to make rules stricter. With `"confirm": "always"`, every write except a halt command (DSEC-018) is two-step: a command of the direct tier changes nothing and returns `E_CONFIRMATION_REQUIRED` with a preview and a confirm token, as a two-step command does (DCLI-053). Dangerous commands stay dangerous. The Agent MUST show each such preview to the person and confirm only after the person approves it (`confirm_always`, DSKL-008). No field can lower a confirmation tier, allow a write that the tier rules refuse, or skip the confirm-time review, the read-back or the operation record.
 
-Why: A person who wants to see every step before it happens can ask for it, but nothing in a file can make the tool less careful than the rules.
-Check: 🤖 Driver conformance test D17.
+Why: A person who wants to approve every step before it happens can ask for it, but nothing in a file can make the tool less careful than the rules. Stopping work stays immediate, because a delay to stop is itself a risk.
+Check: 🤖 Driver conformance test D17; runtime unit tests for halt commands under `confirm: always`; 👀 review of the entry Skill for `confirm_always` (DSKL-008).
 
 ### DSEC-014 Matching targets and effects
 
@@ -166,7 +170,7 @@ A scope covers a write only when all of these hold:
 2. When the operation is in the dangerous tier, `dangerous` is `true`.
 3. The target key of every object the write touches matches one of the prefixes in `targets`, by the normalization and prefix rules of DCLI-028.
 
-A command that touches no object with a target key, such as `session open` or the commands in DSEC-017, is covered when items 1 and 2 hold.
+A command with no target object, such as `session open`, `doc create`, `plugin install` or `plugin remove`, is covered when items 1 and 2 hold. A halt command is covered when item 3 holds (DSEC-018). `operation resolve` is covered when items 1 and 3 hold for the operation it resolves (DSEC-017).
 
 In a batch, every object MUST be covered; one object that is not covered blocks the whole batch (DCLI-064). The runtime MUST NOT widen a prefix, guess a target or match by object name.
 
@@ -175,9 +179,14 @@ Check: 🤖 Runtime unit tests; driver conformance test D14.
 
 ### DSEC-015 Refusing writes
 
-The runtime checks the scope before every write: at the dry run, at the confirm (DCLI-056, step 3) and before a direct-tier write runs. When the scope file is missing, invalid or expired, or does not cover the write, the runtime MUST refuse with `E_FORBIDDEN` and dispatch nothing. `details.scope` states the scope status (DSEC-016) and what is missing: an effect, the dangerous permission or a target key. `details.next_action` tells the Agent to ask the person for a wider scope. At the confirm, a scope file that changed since the dry run but still grants the write gives `E_CONFLICT` with `scope_changed` instead (DCLI-056). Reads MUST NOT be refused for lack of scope.
+The runtime checks the scope before every write that needs one (DSEC-017): when it builds the preview, at the confirm (DCLI-056, step 3) and before a direct-tier write runs. When the scope file is missing, invalid or expired, or does not cover the write, the runtime MUST refuse with `E_FORBIDDEN` and dispatch nothing. `details.scope` MUST hold two keys:
 
-Why: Without a valid grant the tool cannot know that the person agreed, so it changes nothing; reads stay open so the Agent can still look and report.
+- `missing`: `{effects, targets, dangerous}`, what the write needs and the scope does not grant: the effects not listed, the target keys not covered, and `dangerous: true` when the dangerous permission is missing. When no valid scope is in force, it lists everything the write needs, and `error.message` names the scope status (DSEC-016).
+- `snippet`: a fragment of a scope file that would grant the write, ready for the person to paste into the file.
+
+`details.next_action` tells the Agent to pass `snippet` to the person. The snippet is a suggestion for the person only; the Agent MUST NOT write it into any file (DSEC-011). At the confirm, a scope file that changed since the preview but still grants the write gives `E_CONFLICT` with `scope_changed` instead (DCLI-056). Reads MUST NOT be refused for lack of scope.
+
+Why: Without a valid grant the tool cannot know that the person agreed, so it changes nothing. The snippet lets the person grant exactly what is missing without working it out, and reads stay open so the Agent can still look and report.
 Check: 🤖 General conformance tests G07 and G10; driver conformance test D16 for a direct-tier write.
 
 ### DSEC-016 Scope status
@@ -192,21 +201,36 @@ The runtime MUST report the scope status in the `authorization` key of `context`
 | `invalid` | The file cannot be read, is not JSON, or breaks DSEC-012 | Refused with `E_FORBIDDEN` |
 | `expired` | The time in `expires_at` has passed | Refused with `E_FORBIDDEN` |
 
+Commands that need no scope (DSEC-017) run whatever the status.
+
 Why: The Agent learns in one read call whether it may write at all, instead of finding out from a refused write.
 Check: 🤖 General conformance test R05 runs `context` on an empty state; runtime unit tests cover each status.
 
 ### DSEC-017 Scope for records and settings
 
-Some commands change the tool's own records or settings rather than a document. A scope MUST still cover them:
+Some commands change the tool's own records or settings rather than a document. These rules apply to them:
 
-- `operation resolve` needs a scope whose `effects` include every effect of the operation it resolves (DCLI-035).
-- `plugin install` and `plugin remove` need `configure` (DSEC-050).
-- `knowledge create` and `knowledge delete` need `configure` (DSKL-123).
+- `operation resolve` MUST be covered by a scope whose `effects` include every effect of the operation it resolves and whose `targets` cover that operation's targets (DCLI-035). The scope in force when resolving counts, not the one in force at the write. When no valid scope covers them, the runtime refuses with `E_FORBIDDEN`, and `details.scope` says what is missing (DSEC-015).
+- `plugin install` and `plugin remove` MUST be covered by a scope that allows `configure` (DSEC-050).
+- `knowledge create` and `knowledge delete` need no scope. They change only the tool's own list of team knowledge links, not the application, its files or a device. They stay two-step and do not count toward the tool's risk tier (DSEC-002, DSKL-123).
 
-These commands touch no object that has a target key, so `targets` does not apply to them. Commands that only read or keep the tool's own state, such as `update`, need no scope (DCLI-030).
+Commands that only read or keep the tool's own state, such as `update`, need no scope either (DCLI-030).
 
-Why: Resolving an operation unlocks its target and records an outcome, and installing components or registering knowledge changes the environment; each is a decision the person's scope must allow.
+Why: Resolving an operation unlocks its target and records an outcome for it, and installing components changes the environment; each is a decision the person's scope must allow. Registering a link changes nothing outside the tool, and its two-step confirmation is enough.
 Check: 🤖 Runtime unit tests.
+
+### DSEC-018 Halt commands
+
+Halt commands only stop work that is running: the commands with the verb `stop` (DCLI-022) and `job cancel` (DCLI-221). A tool MUST register `halt: true` (DCLI-029) only on such commands, and a halt command MUST declare only the `lifecycle` effect. For halt commands:
+
+- they are always direct, and `confirm: always` does not make them two-step (DSEC-013);
+- a scope covers them when its `targets` cover the command's target; `effects` and `dangerous` do not apply (DSEC-014);
+- they run while the target is `busy`, `blocked` or `unresponsive`, and while a device is in `fault` or `emergency_stop`; only a target that is `offline` or `lost` refuses them.
+
+A halt command still checks the scope's targets, keeps an operation record and returns a receipt (DCLI-050).
+
+Why: A person or an Agent that needs to stop a machine or a runaway job must be able to do it at once; a confirmation or a missing permission at that moment is itself the danger.
+Check: 🤖 Driver conformance test D25; runtime unit tests; 👀 review of the commands registered with `halt: true`.
 
 ## Untrusted Content
 
@@ -227,7 +251,7 @@ Check: 👀 Review of each command's output fields against this list.
 
 ### DSEC-021 Marking untrusted content
 
-Every envelope that carries untrusted content MUST list the JSON path of each untrusted value in `meta.untrusted`; when there is none, the key is omitted (DCLI-004). The runtime marks the values it produces itself: native error messages, dialog titles and text in the `details` of `E_HUMAN_REQUIRED` (DCLI-066), and team knowledge fields. For domain commands, the tool declares which result fields hold untrusted content when it registers the command, and the runtime lists them.
+Every envelope that carries untrusted content MUST list the JSON path of each untrusted value in `meta.untrusted`; when there is none, the key is omitted (DCLI-004). The runtime marks the values it produces itself: native error messages; dialog titles and text, in the `details` of `E_HUMAN_REQUIRED` (DCLI-066) and in the `blocker` of a blocked session; team knowledge fields; and any text of its own that embeds untrusted values, such as the preview's `action` and target `label`, and generated commands such as `resume` and `lookup`. For domain commands, the tool declares which result fields hold untrusted content when it registers the command (DCLI-029), and the runtime lists them.
 
 Why: An Agent can keep data apart from instructions only when the output says, field by field, which text came from outside.
 Check: 🤖 Driver conformance test D19 for team knowledge; 👀 review of the untrusted fields declared for domain commands.
@@ -255,16 +279,16 @@ The state directory holds these entries:
 <!-- contract:state_dir_entries -->
 | Entry | Holds | Written by |
 |---|---|---|
-| `keys/` | The local key that signs confirm tokens (DSEC-033) | The runtime |
-| `operations/` | Operation records, kept 30 days (DCLI-059) | The runtime |
+| `operations/` | Operation records, kept 30 days, with the confirm tokens of planned operations (DCLI-059, DSEC-033) | The runtime |
 | `locks/` | Target locks (DCLI-060) | The runtime |
 | `cache/` | The result of the last update check (DCLI-079) | The runtime |
-| `hosts/` | Discovery files of running host components (DCLI-271) | Host components |
+| `hosts/` | Discovery files of running host components (DCLI-271); `plugin install` points host components here (DSEC-050) | Host components |
+| `adapter/` | The adapter state store: what an adapter must remember between calls, such as the instances it started and, when there is no host component, the changes since the last save | The runtime, for the adapter |
 | `trash/` | Native programs moved aside by `update`, removed on the next run (DCLI-072) | The runtime |
 | `scope.json` | The scope file at its default location (DSEC-010) | A person only |
 | `knowledge-links.json` | Team knowledge registrations (DSKL-122) | `knowledge create` and `knowledge delete` only |
 
-Only the writer named in the table MAY write an entry. Apart from the discovery files that host components write in `hosts/`, tool code MUST NOT write into the state directory directly; it goes through the runtime.
+Only the writer named in the table MAY write an entry. Apart from the discovery files that host components write in `hosts/`, tool code MUST NOT write into the state directory directly; it goes through the runtime, and an adapter keeps its own state through the store the runtime provides in `adapter/`.
 
 Why: A fixed layout tells the person what the tool keeps on disk and lets checks find every file that matters for safety.
 Check: 🤖 Runtime unit tests; 👀 review of tool code for direct writes to the state directory.
@@ -273,15 +297,15 @@ Check: 🤖 Runtime unit tests; 👀 review of tool code for direct writes to th
 
 Only the current user may read or write the state directory. On macOS and Linux its mode MUST be `0700`. On Windows its ACL MUST grant access to the current user only. The runtime sets this when it creates the directory. `context` MUST report the protection actually in place (DCLI-032): `posix_0700`, `windows_acl` or `none`, never the protection intended.
 
-Why: The directory holds the token key, the default scope file and the record of every change; another user who could write there could forge tokens or widen the scope.
+Why: The directory holds the default scope file, the record of every change with its confirm token, and the locks; another user who could write there could plant a token, release a lock or widen the scope.
 Check: 🤖 Runtime unit tests.
 
-### DSEC-033 Token key
+### DSEC-033 Confirm tokens
 
-The runtime signs confirm tokens with a local key kept in `keys/` (DCLI-055). The key MUST NOT leave the state directory or appear in any output, log or record. When there is no key, the runtime creates one; tokens signed with an older key then fail as `token_invalid`. A key that cannot be read, is damaged or cannot be created is unusable. While the key is unusable, every write is refused with `E_IO` and nothing is dispatched; reads keep working (DCLI-059).
+A confirm token MUST be a random value of at least 128 bits from a cryptographically secure random source. It is not signed, and the runtime keeps no signing key. When a write needs confirmation, the runtime stores the token in the record of the planned operation (DCLI-059), together with the values the token binds (DCLI-055) and its expiry. At the confirm, the runtime MUST accept a token only when it finds it in a planned operation record, before its expiry and not yet spent (DCLI-056, step 1). A token is spent when dispatch starts, and MUST NOT be accepted after that; a confirm refused before dispatch leaves it usable until it expires (DCLI-055). When the operation records cannot be written, the runtime can neither store nor spend a token: every write MUST then be refused with `E_IO` and nothing dispatched, while reads keep working (DCLI-059).
 
-Why: A forged or replayed token would skip the dry run. Without a usable key the runtime cannot tell a real token from a forged one, so refusing writes is the only safe answer.
-Check: 🤖 Conformance test G08.
+Why: A random value that must match a stored record cannot be guessed or forged, and spending it in the record makes it single use. With nothing to sign, there is no key to protect, leak or lose.
+Check: 🤖 General conformance tests G04, G05 and G08.
 
 ### DSEC-034 Tests use a temporary state directory
 
@@ -294,7 +318,7 @@ Check: 👀 Review of the test setup.
 
 ### DSEC-040 Secrets
 
-Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is echoed, as in the `inputs` of a preview (DCLI-054), a secret MUST be shown as `***`. The tool declares which parameters are secrets when it registers its commands; the runtime masks them.
+Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is echoed, as in the `inputs` of a preview (DCLI-054), a secret MUST be shown as `***`. The tool declares which parameters are secrets with `secret: true` when it registers its commands (DCLI-029); the runtime masks them.
 
 Why: Output, records and logs are read by Agents and kept on disk; a secret there leaks to every later reader.
 Check: 🤖 Runtime unit tests; 👀 review of the parameters declared as secrets.
@@ -329,9 +353,9 @@ Check: 👀 Review of the network code in the runtime and the adapter.
 
 ### DSEC-050 Installing host components
 
-A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
+A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
 
-Why: A host component runs inside the person's application with the application's full rights; putting it there changes the environment, which the person must allow and see.
+Why: A host component runs inside the person's application with the application's full rights; putting it there changes the environment, which the person must allow and see. A host that wrote its discovery file elsewhere would be invisible to the CLI.
 Check: 🤖 Runtime unit tests; 👀 review that `update` and the npm packages install no host component.
 
 ### DSEC-051 Checking before install
@@ -365,7 +389,7 @@ Check: 🤖 Driver conformance test D12.
 
 ### DSEC-054 Local connections only
 
-A host component MUST use only the local transport of DCLI-270: a named pipe on Windows or a Unix socket on macOS and Linux, open to the current user only. It MUST NOT open a network port. Every connection starts with the handshake of DCLI-273, so a different protocol major version ends it before any change is sent. Host components SHOULD use the host libraries for all of this (DCLI-281).
+A host component MUST accept connections only through the local transport of DCLI-270. Every connection MUST start with the handshake of DCLI-273, so a different protocol major version ends it before any change is sent. Host components SHOULD use the host libraries, which do both (DCLI-281).
 
 Why: A host component can change anything in the application; a port reachable from the network or by another user would let others drive it.
 Check: 🤖 Driver conformance test D20 for the handshake; 👀 review of the host component's transport.
@@ -374,21 +398,21 @@ Check: 🤖 Driver conformance test D20 for the handshake; 👀 review of the ho
 
 ### DSEC-060 Physical effects are dangerous
 
-Every command with the `physical` effect is in the dangerous tier, whatever else it declares. It MUST be run with `--dry-run` and then `--confirm`, with `--dangerous` on both calls (DCLI-052, DCLI-053). The scope MUST list `physical` in `effects`, set `dangerous` to `true` and cover the device target, such as `device:cnc-01/axis-x` (DSEC-014). When any of these is missing, the runtime refuses and nothing moves.
+Every command with the `physical` effect is in the dangerous tier, whatever else it declares. It MUST run only on a confirming call that carries its confirm token and `--dangerous` (DCLI-052, DCLI-053). The scope MUST list `physical` in `effects`, set `dangerous` to `true` and cover the device target, such as `device:cnc-01/axis-x` (DSEC-014). When any of these is missing, the runtime refuses and nothing moves. A halt command that stops a device declares `lifecycle`, not `physical`, and runs at once (DSEC-018).
 
 Why: A machine that moves or a circuit that is powered can hurt people or break equipment, and the action cannot be undone.
 Check: 🤖 Driver conformance test D14.
 
 ### DSEC-061 Check the device first
 
-Right before it dispatches a physical action, the runtime MUST read the device state from the device through the adapter, never from a cache. When the device is in `emergency_stop` or `fault`, or reports that it is not ready for the action, the command MUST return `E_HUMAN_REQUIRED` with `action` `confirm_on_device` and the `resume` command (DCLI-066), and dispatch nothing. It MUST NOT wait for the device to recover. The states `busy` and `offline` give the errors of DCLI-230.
+Right before it dispatches a physical action, the runtime MUST read the device state from the device through the adapter, never from a cache. When the device is in `emergency_stop` or `fault`, or reports that it is not ready for the action, the command MUST return `E_HUMAN_REQUIRED` with `action` `confirm_on_device` and the `resume` command (DCLI-066), and dispatch nothing. It MUST NOT wait for the device to recover. In `emergency_stop` and `fault`, every other command that acts on the device returns the same error, except halt commands (DSEC-018). The states `busy` and `offline` give the errors of DCLI-230.
 
 Why: A machine that stopped did so for a reason a person must see; the Agent cannot see the machine.
 Check: 🤖 Driver conformance test D23; runtime unit tests.
 
 ### DSEC-062 Simulated results
 
-When a device is simulated, every result from it MUST say so: the device object has `simulated: true` (DCLI-230), and so does the result of every command run on it. The tool, its Skills and the Agent's report MUST NOT present a simulated result as a real one. Results from a simulated device count only as simulated evidence (DVER-021).
+When a device is simulated, every result from it MUST say so: the device object has `simulated: true` (DCLI-230), and so do the receipt and the result of every command run on it. The tool, its Skills and the Agent's report MUST NOT present a simulated result as a real one (DSKL-010). Results from a simulated device count only as simulated evidence (DVER-021).
 
 Why: A run on a simulator says nothing about the real machine; reporting it as real would hide the risk.
 Check: 🤖 Driver conformance test D15.
@@ -404,7 +428,7 @@ Check: 👀 Review of the repository and the CI build steps.
 
 ### DSEC-071 Releases from CI with provenance
 
-Every npm package of the tool, the main package and every platform package, MUST carry provenance showing that the tool's own release workflow built it. Publishing therefore runs only in the tag-triggered release workflow, never on a personal machine (DREPO-043). After it installs, `update` checks the provenance and reports `verified` or `not_checked` honestly (DCLI-074).
+Every npm package of the tool, the main package and every platform package, MUST carry provenance showing that the tool's own release workflow built it, so packages are published only as DREPO-043 sets out. After it installs, `update` checks the provenance and reports `verified` or `not_checked` honestly (DCLI-074).
 
 Why: Provenance lets anyone check that an installed package was built from the tagged source, not by whoever held a publish token.
 Check: 👀 Review of the release workflow; `update` reports `provenance_status` after every install (DCLI-074).
@@ -436,13 +460,14 @@ Check: 👀 Review of the Skill install and sync code in the runtime.
 - [ ] DSEC-015 Refusing writes
 - [ ] DSEC-016 Scope status
 - [ ] DSEC-017 Scope for records and settings
+- [ ] DSEC-018 Halt commands
 - [ ] DSEC-020 What is untrusted
 - [ ] DSEC-021 Marking untrusted content
 - [ ] DSEC-022 Never instructions
 - [ ] DSEC-030 State directory location
 - [ ] DSEC-031 State directory contents
 - [ ] DSEC-032 Access protection
-- [ ] DSEC-033 Token key
+- [ ] DSEC-033 Confirm tokens
 - [ ] DSEC-034 Tests use a temporary state directory
 - [ ] DSEC-040 Secrets
 - [ ] DSEC-041 Outbound connections

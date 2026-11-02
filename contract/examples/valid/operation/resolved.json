@@ -16,7 +16,8 @@
   "dispatched_at": "2026-11-02T08:30:00Z",
   "resolution": {
     "outcome": "applied",
-    "evidence": "footprint get --ref R1 shows x_mm 12.5",
+    "resolved_by": "agent",
+    "evidence": "KiCad could not be reached; the user checked in KiCad that R1 is at (12.5 mm, 30 mm).",
     "resolved_at": "2026-11-02T08:40:00Z"
   }
 }

@@ -1,12 +1,13 @@
 {
   "id": "7",
   "operation_id": "op_j7",
-  "status": "running",
+  "state": "running",
   "cancel_requested": false,
   "progress": {
     "done": 120,
     "total": 400,
     "unit": "nets"
   },
-  "started_at": "2026-11-02T08:30:00Z"
+  "started_at": "2026-11-02T08:30:00Z",
+  "poll_after_ms": 5000
 }

@@ -1,68 +1,19 @@
 {
+  "operation_id": "op_b4t9q2",
   "items": [
     {
-      "target": {
-        "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
-        "kind": "footprint"
-      },
-      "operation_id": "op_a1",
-      "ok": true,
-      "receipt": {
-        "operation_id": "op_7mq2xk4v",
-        "command": "footprint move",
-        "target": {
-          "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
-          "kind": "footprint"
-        },
-        "effects": [
-          "change"
-        ],
-        "tier": "direct",
-        "outcome": {
-          "execution": "completed",
-          "change": "applied",
-          "delivery": "not_applicable",
-          "persistence": "unchanged",
-          "verification": "passed"
-        },
-        "observed": {
-          "x_mm": 12.5,
-          "y_mm": 30.0
-        },
-        "mismatched": [],
-        "session": {
-          "id": "kicad-1234",
-          "generation": 3
-        },
-        "document": {
-          "id": "doc_1",
-          "revision": 8,
-          "dirty": true
-        }
-      }
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+      "operation_id": "op_b4t9q2r1",
+      "ok": true
     },
     {
-      "target": {
-        "key": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
-        "kind": "footprint"
-      },
-      "operation_id": "op_a2",
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
+      "operation_id": "op_b4t9q2r2",
       "ok": false,
-      "error": {
-        "code": "E_VALIDATION",
-        "message": "R2 would leave the board outline.",
-        "retryable": false,
-        "details": {
-          "dispatch_state": "not_started",
-          "next_action": "Choose a position inside the board outline."
-        }
-      }
+      "code": "E_VALIDATION"
     },
     {
-      "target": {
-        "key": "file:///D:/proj/board.kicad_pcb#/footprints/R3",
-        "kind": "footprint"
-      },
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R3",
       "ok": false,
       "skipped": true
     }

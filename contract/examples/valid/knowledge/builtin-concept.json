@@ -1,0 +1,15 @@
+{
+  "id": "board-coordinates",
+  "title": "Board coordinates and the origin",
+  "kind": "concept",
+  "applies_to": [
+    "footprint move",
+    "footprint get"
+  ],
+  "tags": [
+    "coordinates"
+  ],
+  "lang": "en",
+  "based_on": "KiCad 10.0 documentation, Coordinates",
+  "updated_on": "2026-11-01"
+}

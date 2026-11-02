@@ -3,6 +3,6 @@
   "method": "document_changed",
   "params": {
     "document": "doc_1",
-    "revision": 8
+    "revision": "rev-8"
   }
 }

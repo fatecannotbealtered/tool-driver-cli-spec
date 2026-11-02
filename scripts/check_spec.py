@@ -84,14 +84,14 @@ MARKERS = {
     "human_required_actions": lambda c: list(c["human_required_actions"]),
     "update_failures": lambda c: [f["case"] for f in c["update"]["failures"]],
     "units": lambda c: [u["quantity"] for u in c["units"]],
+    "registration_fields": lambda c: list(c["registration_fields"]),
     "standard_commands": lambda c: [s["path"] for s in c["standard_commands"]],
     "modes": lambda c: [m["mode"] for m in c["modes"]],
     "session_states": lambda c: [s["state"] for s in c["session_states"]],
-    "document_states": lambda c: [s["state"] for s in c["document_states"]],
+    "disk_states": lambda c: [s["state"] for s in c["disk_states"]],
     "device_states": lambda c: [s["state"] for s in c["device_states"]],
     "adapter_capabilities": lambda c: [a["name"] for a in c["adapter_capabilities"]],
     "host_methods": lambda c: list(c["host_protocol"]["methods"]),
-    "host_events": lambda c: list(c["host_protocol"]["events"]),
     "host_error_codes": lambda c: list(c["host_protocol"]["allowed_error_codes"]),
     "risk_tiers": lambda c: list(c["risk_tiers"]),
     "scope_fields": lambda c: list(c["scope_file"]["fields"]),
@@ -192,7 +192,7 @@ def extra_row_checks(name: str, contract: dict, key: str, cells: list[str], lang
         entry = next(u for u in contract["units"] if u["quantity"] == key)
         if entry["unit"] not in row:
             problems.append(f"{key}: row must name the unit {entry['unit']}")
-    elif name in ("session_states", "document_states", "device_states"):
+    elif name in ("session_states", "disk_states", "device_states"):
         entry = next(s for s in contract[name] if s["state"] == key)
         if entry.get("error") and not _cell_has(row, entry["error"]):
             problems.append(f"{key}: row must name {entry['error']}")
@@ -498,6 +498,42 @@ def check_cross_refs(specs: list[SpecFile], all_ids: set[str], checked_prefixes:
                     report.add(f"{rel(spec.path)}:{i}", f"reference to missing clause {ref}")
 
 
+TEST_RANGE = re.compile(r"\b[GRD]\d{2} (to|至) [GRD]\d{2}\b")
+
+
+def check_test_columns(specs: list[SpecFile], report: Report) -> None:
+    """The last column of the G/R/D tables lists exactly the clauses whose check line cites that test.
+
+    A check line that names a range of tests (such as "D01 to D25") cites a whole suite and is not counted.
+    """
+    for lang in LANG:
+        cited: dict[str, set[str]] = {}
+        listed: dict[str, set[str]] = {}
+        for spec in (s for s in specs if s.lang == lang):
+            for clause in spec.clauses:
+                check = [ln for ln in clause.body if ln.startswith(LANG[lang]["check"])]
+                if not check or TEST_RANGE.search(check[0]):
+                    continue
+                for test in set(TEST_REF.findall(check[0])):
+                    cited.setdefault(test, set()).add(clause.id)
+            for table in spec.tables:
+                if table.marker in ("conformance_general", "conformance_driver"):
+                    for cells in table.rows:
+                        key = FIRST_KEY.match(cells[0])
+                        if key:
+                            listed[key.group(1)] = {f"{a}-{b}" for a, b in CLAUSE_REF.findall(cells[-1])}
+        if not listed:
+            continue
+        for test in sorted(set(cited) | set(listed)):
+            if cited.get(test, set()) != listed.get(test, set()):
+                report.add(
+                    f"spec/DRIVER-VERIFY-SPEC{LANG[lang]['suffix']}.md",
+                    f"test {test}: the last column must list exactly the clauses citing it; "
+                    f"missing {sorted(cited.get(test, set()) - listed.get(test, set()))}, "
+                    f"extra {sorted(listed.get(test, set()) - cited.get(test, set()))}",
+                )
+
+
 def check_markers_once(specs: list[SpecFile], lang: str, report: Report) -> None:
     counts: dict[str, int] = {}
     for spec in specs:
@@ -616,13 +652,13 @@ SCHEMA_ENUMS = [
     ("batch.schema.json", "/properties/items/items/properties", lambda c: c["batch"]["item_keys"]),
     ("objects.schema.json", "/$defs/session/required", lambda c: c["objects"]["session"]),
     ("objects.schema.json", "/$defs/document/properties", lambda c: c["objects"]["document"]),
-    ("objects.schema.json", "/$defs/job/properties", lambda c: c["objects"]["job"]),
+    ("objects.schema.json", "/$defs/job/required", lambda c: [k for k in c["objects"]["job"] if k not in ("progress", "finished_at")]),
     ("objects.schema.json", "/$defs/device/required", lambda c: c["objects"]["device"]),
     ("objects.schema.json", "/$defs/plugin/required", lambda c: c["objects"]["plugin"]),
     ("objects.schema.json", "/$defs/session/properties/state/enum", lambda c: [s["state"] for s in c["session_states"]]),
-    ("objects.schema.json", "/$defs/document/properties/state/enum", lambda c: [s["state"] for s in c["document_states"]]),
+    ("objects.schema.json", "/$defs/document/properties/disk/enum", lambda c: [s["state"] for s in c["disk_states"]]),
     ("objects.schema.json", "/$defs/device/properties/state/enum", lambda c: [s["state"] for s in c["device_states"]]),
-    ("objects.schema.json", "/$defs/job/properties/status/enum", lambda c: c["jobs"]["statuses"]),
+    ("objects.schema.json", "/$defs/job/properties/state/enum", lambda c: c["jobs"]["states"]),
     ("scope.schema.json", "/properties", lambda c: c["scope_file"]["fields"]),
     ("scope.schema.json", "/properties/effects/items/enum", lambda c: [e["effect"] for e in c["effects"] if e["effect"] != "observe"]),
     ("scope.schema.json", "/properties/confirm/const", lambda c: c["scope_file"]["confirm_values"]),
@@ -648,11 +684,15 @@ SCHEMA_ENUMS = [
     ("knowledge.schema.json", "/$defs/get_team/properties/reader/const", lambda c: [p["reader"] for p in c["knowledge"]["providers"]]),
     ("host-protocol.schema.json", "/$defs/method/enum", lambda c: c["host_protocol"]["methods"]),
     ("host-protocol.schema.json", "/$defs/discovery_file/required", lambda c: c["host_protocol"]["discovery_keys"]),
-    ("host-protocol.schema.json", "/$defs/event/properties/method/enum", lambda c: c["host_protocol"]["events"]),
     ("host-protocol.schema.json", "/$defs/error_response/properties/error/properties/data/properties/code/enum", lambda c: c["host_protocol"]["allowed_error_codes"]),
     ("host-protocol.schema.json", "/$defs/error_response/properties/error/properties/code/const", lambda c: [c["host_protocol"]["rpc_error_code"]]),
     ("host-protocol.schema.json", "/$defs/hello_result/required", lambda c: c["host_protocol"]["handshake"]["response_keys"]),
     ("evidence.schema.json", "/properties/runs/items/properties/matrix_row/enum", lambda c: [r["row"] for r in c["behavior_matrix_rows"]]),
+    ("adapter.schema.json", "/$defs/requests/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
+    ("adapter.schema.json", "/$defs/results/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
+    ("behavior-matrix.schema.json", "/$defs/row/properties/row/enum", lambda c: [r["row"] for r in c["behavior_matrix_rows"]]),
+    ("commands.schema.json", "/$defs/command/properties", lambda c: c["registration_fields"]),
+    ("eval-report.schema.json", "/$defs/question/properties/scenario/enum", lambda c: [x["scenario"] for g in ("general", "driver") for x in c["skill"]["eval_scenarios"][g]]),
     ("reference.schema.json", "/$defs/command/properties/maturity/enum", lambda c: [m["level"] for m in c["maturity_levels"]]),
 ]
 
@@ -755,6 +795,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.doc:
         for lang in LANG:
             check_markers_once(parsed, lang, report)
+        check_test_columns(parsed, report)
         check_schemas_and_examples(contract, report)
         check_schema_consistency(contract, report)
         check_repo_docs(report)

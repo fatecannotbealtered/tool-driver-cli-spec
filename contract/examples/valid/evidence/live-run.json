@@ -16,7 +16,11 @@
     {
       "command": "footprint move",
       "arguments": [
-        "--ref",
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
         "R1",
         "--x",
         "12.5mm",

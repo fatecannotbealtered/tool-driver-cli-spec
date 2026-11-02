@@ -1,14 +1,15 @@
 {
   "scope_id": "board-rev-c",
   "effects": [
-    "session",
+    "lifecycle",
     "change",
     "artifact",
     "persist"
   ],
   "dangerous": false,
   "targets": [
-    "file:///D:/proj/"
+    "file:///D:/proj/",
+    "untitled:"
   ],
   "expires_at": "2026-11-09T00:00:00Z"
 }

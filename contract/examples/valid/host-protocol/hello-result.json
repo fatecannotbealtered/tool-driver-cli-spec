@@ -14,7 +14,8 @@
     },
     "methods": [
       "hello",
-      "ping",
+      "documents",
+      "save_doc",
       "read",
       "preview",
       "apply",

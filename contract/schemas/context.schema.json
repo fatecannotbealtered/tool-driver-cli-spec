@@ -4,13 +4,13 @@
   "title": "context data",
   "description": "Local state reported by context without network access (DCLI-032).",
   "type": "object",
-  "required": ["tool", "version", "spec_version", "state", "authorization", "application", "sessions", "components", "knowledge"],
+  "required": ["tool", "version", "spec_version", "state_dir", "authorization", "application", "sessions", "components", "knowledge"],
   "additionalProperties": false,
   "properties": {
     "tool": {"type": "string"},
     "version": {"type": "string"},
     "spec_version": {"type": "string"},
-    "state": {
+    "state_dir": {
       "type": "object",
       "required": ["path", "usable", "protection"],
       "additionalProperties": false,

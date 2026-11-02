@@ -5,7 +5,8 @@
     "command": "footprint move",
     "target": {
       "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
-      "kind": "footprint"
+      "kind": "footprint",
+      "label": "R1"
     },
     "effects": [
       "change"
@@ -29,7 +30,7 @@
     },
     "document": {
       "id": "doc_1",
-      "revision": 8,
+      "revision": "rev-8",
       "dirty": true
     }
   },

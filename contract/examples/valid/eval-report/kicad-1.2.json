@@ -1,0 +1,30 @@
+{
+  "tool": "kicad-cli",
+  "tool_version": "1.2.0",
+  "date": "2026-11-01",
+  "agent": "Claude Code 2.4",
+  "model": "claude-opus-5-5",
+  "questions": [
+    {
+      "scenario": "read_answer",
+      "id": "read-r1-position",
+      "passed": true
+    },
+    {
+      "scenario": "scoped_change",
+      "id": "move-r1",
+      "passed": true
+    },
+    {
+      "scenario": "knowledge_lookup",
+      "id": "locked-footprint",
+      "passed": true
+    },
+    {
+      "scenario": "separate_save",
+      "id": "move-then-save",
+      "passed": false,
+      "notes": "The Agent saved without showing the external change on C3."
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "operation_id": "op_s0p3n1",
+  "command": "session open",
+  "effects": [
+    "lifecycle"
+  ],
+  "tier": "direct",
+  "scope_id": "board-rev-c",
+  "state": "completed",
+  "planned_at": "2026-11-02T08:20:00Z",
+  "dispatched_at": "2026-11-02T08:20:00Z",
+  "finished_at": "2026-11-02T08:20:09Z"
+}

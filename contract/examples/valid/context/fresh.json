@@ -2,7 +2,7 @@
   "tool": "kicad-cli",
   "version": "1.2.0",
   "spec_version": "1.0.0",
-  "state": {
+  "state_dir": {
     "path": "C:/Users/me/.kicad-cli",
     "usable": true,
     "protection": "windows_acl"

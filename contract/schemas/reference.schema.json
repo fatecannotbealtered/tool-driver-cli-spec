@@ -2,9 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/reference.schema.json",
   "title": "reference data",
-  "description": "Data of reference, reference --index and reference --command (DCLI-031).",
+  "description": "Data of reference (DCLI-031): without flags, the index; with --command <path>, one command; with --all --output <path>, the file holds every command.",
   "oneOf": [
     {
+      "description": "reference without flags: the index.",
+      "type": "object",
+      "required": ["tool", "version", "spec_version", "driver", "index"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {"type": "string"},
+        "version": {"type": "string"},
+        "spec_version": {"type": "string"},
+        "driver": {"$ref": "#/$defs/driver"},
+        "index": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path", "summary", "effects", "tier"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {"$ref": "#/$defs/command/properties/path"},
+              "summary": {"type": "string"},
+              "effects": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/effect"}},
+              "tier": {"$ref": "#/$defs/tier_value"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "The file written by reference --all --output <path>.",
       "type": "object",
       "required": ["tool", "version", "spec_version", "driver", "commands"],
       "additionalProperties": false,
@@ -16,30 +44,6 @@
         "commands": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/command"}}
       }
     },
-    {
-      "type": "object",
-      "required": ["tool", "version", "index"],
-      "additionalProperties": false,
-      "properties": {
-        "tool": {"type": "string"},
-        "version": {"type": "string"},
-        "index": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "required": ["path", "summary", "effects", "tier"],
-            "additionalProperties": false,
-            "properties": {
-              "path": {"type": "string"},
-              "summary": {"type": "string"},
-              "effects": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/effect"}},
-              "tier": {"enum": ["none", "direct", "two_step", "dangerous"]}
-            }
-          }
-        }
-      }
-    },
     {"$ref": "#/$defs/command"}
   ],
   "$defs": {
@@ -48,11 +52,31 @@
       "required": ["modes", "application", "versions"],
       "additionalProperties": false,
       "properties": {
-        "modes": {"type": "array", "minItems": 1, "items": {"enum": ["file", "session", "device"]}},
+        "modes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mode"}},
         "application": {"type": "string"},
         "versions": {"type": "string"},
         "host_component": {"type": "boolean"}
       }
+    },
+    "mode": {"enum": ["file", "session", "device"]},
+    "tier_name": {"enum": ["none", "direct", "two_step", "dangerous"]},
+    "tier_value": {
+      "description": "One tier, or a tier per mode when the command's tier depends on the mode.",
+      "oneOf": [
+        {"$ref": "#/$defs/tier_name"},
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"$ref": "#/$defs/mode"},
+          "additionalProperties": {"$ref": "#/$defs/tier_name"}
+        }
+      ]
+    },
+    "evidence_ref": {"type": "string", "pattern": "^(simulated|live|eval):[^#\\s]+(#\\S+)?$"},
+    "coordinate_system": {
+      "description": "The origin, axis directions and unit of coordinate values, as the application defines them.",
+      "type": "string",
+      "minLength": 1
     },
     "flag": {
       "type": "object",
@@ -65,7 +89,9 @@
         "type": {"type": "string"},
         "unit": {"type": "string"},
         "default": true,
-        "maximum": {"type": "number"}
+        "maximum": {"type": "number"},
+        "secret": {"type": "boolean"},
+        "coordinate_system": {"$ref": "#/$defs/coordinate_system"}
       }
     },
     "command": {
@@ -77,12 +103,27 @@
         "summary": {"type": "string", "minLength": 1},
         "flags": {"type": "array", "items": {"$ref": "#/$defs/flag"}},
         "output_schema": {"type": "object"},
+        "output_coordinate_system": {"$ref": "#/$defs/coordinate_system"},
         "examples": {"type": "array", "minItems": 1, "items": {"type": "string"}},
         "effects": {"type": "array", "minItems": 1, "items": {"$ref": "preview.schema.json#/$defs/effect"}},
-        "tier": {"enum": ["none", "direct", "two_step", "dangerous"]},
+        "tier": {"$ref": "#/$defs/tier_value"},
+        "tier_when": {
+          "description": "Conditions that raise the tier, such as discarding unsaved changes, closing an instance the tool did not start, or writing over an existing file.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["when", "tier"],
+            "additionalProperties": false,
+            "properties": {
+              "when": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+              "tier": {"$ref": "preview.schema.json#/$defs/tier"}
+            }
+          }
+        },
         "maturity": {"enum": ["draft", "experimental", "verified", "stable"]},
-        "evidence": {"type": "array", "items": {"type": "string", "pattern": "^(simulated|live|eval):[^#\\s]+(#\\S+)?$"}},
-        "modes": {"type": "array", "minItems": 1, "items": {"enum": ["file", "session", "device"]}},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
+        "modes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mode"}},
         "capabilities": {"type": "array", "items": {"type": "string"}},
         "errors": {"type": "array", "items": {"$ref": "error.schema.json#/properties/code"}},
         "default_fields": {"type": "array", "items": {"type": "string"}},

@@ -57,6 +57,7 @@ Command behavior, security, Skills and verification have their own clauses. This
 | disposition | What the tool does with a capability: `provided`, `deferred`, `excluded` or `unknown` |
 | badge row | The row of badges at the top of the README |
 | info card | The table under the README title area that gives the details behind the badges |
+| support matrix | The table in `docs/COMPATIBILITY.md`, generated from the live records and the platform packages, that shows where the tool works (DREPO-016) |
 | compatibility label | The status mark in a row of the support matrix, such as ✅ verified |
 | live record | The JSON record of one run on the real application, kept in `docs/evidence/` (DVER-042) |
 | merge gate | The checks every change passes before it merges, and every release before it publishes |
@@ -67,9 +68,9 @@ Command behavior, security, Skills and verification have their own clauses. This
 
 | Area | The template, the sync script and the checks provide | The tool author does |
 |---|---|---|
-| Project skeleton | Every required file and directory, with all fixed headings in both languages and the fixed text: How It Works, Bare minimum to obey and the install block | Fills in the tool's own sections and removes every placeholder |
+| Project skeleton | Every required file and directory, with all fixed headings in both languages and the fixed text: How It Works, Bare minimum to obey, the install block and the five fixed SECURITY sections | Fills in the tool's own sections and removes every placeholder |
 | Pinned copies | `sync_spec` copies the specification, the contract, the runtime and the licenses, and replaces them as a whole on upgrade | Runs `sync_spec` to upgrade and never edits a pinned copy |
-| Generated content | Scripts that generate `contract/commands.json`, the command map, the badge row and the info card from data | Registers commands and keeps `docs/COMPATIBILITY.md` and the evidence true |
+| Generated content | Scripts that generate `contract/commands.json`, the command map, the badge row, the info card and the support matrix from data | Registers commands and keeps the evidence and the other sections of `docs/COMPATIBILITY.md` true |
 | Checks | `check_project`: layout, root files, sections, language pairs, placeholders, hashes, badges, labels and capability tracing | Fixes everything `check_project` reports |
 | CI and release | The workflows `ci.yml` and `release.yml` with the merge gate, platform delivery and publishing with provenance | Keeps both workflows passing and picks the key operation for platform delivery |
 | Distribution | Packaging scripts for the native program, the platform packages and the launcher; `update` and the direct command entry in the runtime (DCLI-070, DCLI-075) | Sets the package name, command name and platform packages in `package.json` |
@@ -79,7 +80,7 @@ Command behavior, security, Skills and verification have their own clauses. This
 
 ### DREPO-001 Project layout
 
-Every tool project MUST use the layout below. The example shows a Python tool. A tool built with another build system replaces `pyproject.toml` with its own build configuration and keeps every other path.
+The tree below shows a typical tool project. It illustrates the layout and is not itself the rule: the required files and paths are those of DREPO-002 and DREPO-004, and other clauses add paths inside them, such as `tests/simulation/` (DVER-023) and `tests/matrix/` (DVER-030). The example shows a Python tool; a tool built with another build system replaces `pyproject.toml` with its own build configuration.
 
 ```
 <tool>/
@@ -109,10 +110,12 @@ Every tool project MUST use the layout below. The example shows a Python tool. A
 ├── docs/
 │   ├── APPLICATION.md / _zh        capability survey
 │   ├── COMPATIBILITY.md / _zh      support matrix
-│   ├── E2E.md / _zh                live acceptance
-│   └── evidence/                   live records (JSON)
+│   ├── E2E.md / _zh                live acceptance and the list of authorized targets
+│   └── evidence/                   live records and eval reports (JSON)
 ├── scripts/                        build, npm platform packages, smoke test, checks
-├── tests/                          conformance tests, behavior matrices
+├── tests/                          the tool's tests and conformance runs
+│   ├── simulation/                 command simulations for the fake host
+│   ├── matrix/                     behavior matrices, one JSON file per command
 │   └── eval/                       evaluation questions (required before a command is marked stable)
 └── .github/                        workflows ci.yml and release.yml, issue and pull request templates
 ```
@@ -160,7 +163,7 @@ Check: 🤖 `check_project` rejects any other file at the root.
 
 ### DREPO-004 Required paths
 
-Every tool project MUST have these paths:
+Every tool project MUST have these paths. This table and the conditional paths below are the normative list; the tree of DREPO-001 only illustrates it.
 
 <!-- contract:required_paths -->
 | Path | Content |
@@ -168,7 +171,7 @@ Every tool project MUST have these paths:
 | `.agent/` | The pinned specification (DREPO-030) |
 | `.agent/SPEC_VERSION` | The version of the pinned specification (DREPO-030) |
 | `contract/driver-contract.json` | The pinned contract (DREPO-031) |
-| `contract/commands.json` | The tool's commands, generated from command registration (DREPO-031) |
+| `contract/commands.json` | The tool's commands, generated from command registration (DCLI-029) and validated by `contract/schemas/commands.schema.json` (DREPO-031) |
 | `licenses/` | The licenses of the specification and the runtime (DREPO-033) |
 | `knowledge/` | Builtin knowledge, with at least the entries DSKL-126 requires |
 | `skills/` | The entry Skill and the domain Skills (DSKL-022, DSKL-023) |
@@ -176,11 +179,13 @@ Every tool project MUST have these paths:
 | `docs/APPLICATION_zh.md` | The Chinese capability survey |
 | `docs/COMPATIBILITY.md` | The support matrix (DREPO-016) |
 | `docs/COMPATIBILITY_zh.md` | The Chinese support matrix |
-| `docs/E2E.md` | Live acceptance (DREPO-017, DVER-051) |
+| `docs/E2E.md` | Live acceptance, with the only list of authorized targets (DREPO-017, DVER-051) |
 | `docs/E2E_zh.md` | The Chinese live acceptance document |
-| `docs/evidence/` | Live records (DVER-042) |
+| `docs/evidence/` | Live records and eval reports (DVER-042, DSKL-043) |
 | `scripts/` | Build, packaging, smoke test and check scripts |
-| `tests/` | The tool's tests, including the conformance runs and the behavior matrices |
+| `tests/` | The tool's tests, including the conformance runs, the command simulations and the behavior matrices (DVER-023, DVER-030) |
+| `tests/matrix/` | One behavior matrix per command (DVER-030) |
+| `tests/simulation/` | One command simulation per domain command (DVER-023) |
 | `.github/workflows/ci.yml` | The merge gate (DREPO-041) |
 | `.github/workflows/release.yml` | The release workflow, run only by a tag (DREPO-043) |
 
@@ -231,7 +236,7 @@ The README MUST start with the title area, in this order: the `#` title with the
 | `Install` | The install block (DREPO-054) |
 | `Capabilities` | The command map of all commands, generated from command registration by the same generator as the Skills' maps (DSKL-006) |
 | `How It Works` | Choosing the instance and the document, the confirmation tiers and saving, in fixed text from the template |
-| `Authorization` | How a person grants writes with the scope file (DSEC-010 to DSEC-017), and which effects the tool's commands need |
+| `Authorization` | How a person grants writes with the scope file (DSEC-010 to DSEC-018), and which effects the tool's commands need |
 | `About This Tool` | The free section: the domain, typical tasks, screenshots, whatever shows the tool's character |
 | `Configuration` | Environment variables, such as `<PREFIX>_STATE_DIR` (DSEC-030) and `<PREFIX>_SCOPE_FILE` (DSEC-010), and how the tool finds the application |
 | `Uninstall` | How to remove the host component when there is one, the npm package, the installed Skills and the state directory |
@@ -251,7 +256,7 @@ Check: 🤖 `check_project` checks the title area, the info card, the section or
 | Section | Content |
 |---|---|
 | `Bare minimum to obey` | The fixed rules from the template |
-| `This project` | The application the tool drives, its modes, where the adapter code lives, the authorized targets for live tests (DVER-050) and the common commands |
+| `This project` | The application the tool drives, its modes, where the adapter code lives and the common commands. For live tests it points to Authorized Targets in `docs/E2E.md` and lists no target itself (DVER-050) |
 
 The tool MUST NOT change the text of Bare minimum to obey.
 
@@ -265,18 +270,20 @@ Check: 🤖 `check_project` checks the sections and compares Bare minimum to obe
 <!-- contract:security_sections -->
 | Section | Content |
 |---|---|
-| `Supported Versions` | Which versions receive security fixes |
+| `Supported Versions` | Which versions receive security fixes; a version with a known vulnerability is deprecated on npm, so update notices warn its users (DCLI-079) |
 | `Reporting a Vulnerability` | How to report a vulnerability privately |
 | `Risk Tier` | The tool's risk tier and the commands that set it (DSEC-002) |
-| `Authorization` | The scope file: where it is, who writes it and what it grants (DSEC-010 to DSEC-017) |
-| `Write Confirmation` | Confirmation tiers, confirm tokens and the confirm-time review (DCLI-052 to DCLI-056) |
+| `Authorization` | The scope file: where it is, who writes it and what it grants (DSEC-010 to DSEC-018) |
+| `Write Confirmation` | Fixed text: confirmation tiers, confirm tokens and the confirm-time review (DCLI-052 to DCLI-056) |
 | `Host Component` | What runs inside the application, how it is installed and how it connects (DSEC-050 to DSEC-054) |
 | `Physical Effects` | How physical effects are guarded (DSEC-060 to DSEC-062) |
-| `State Directory` | Location, contents and access protection of the state directory (DSEC-030 to DSEC-033) |
+| `State Directory` | Fixed text: location, contents and access protection of the state directory (DSEC-030 to DSEC-033) |
 | `Credentials` | The secrets the tool handles, how they are masked, and the addresses the tool connects to (DSEC-040 to DSEC-043) |
-| `Untrusted Content` | What content is untrusted and how it is marked (DSEC-020 to DSEC-022) |
-| `Supply Chain` | Locked dependencies, releases with provenance, no install scripts, Skills from the installed package (DSEC-070 to DSEC-073) |
-| `Self-update` | What `update` changes and checks (DCLI-070 to DCLI-079) |
+| `Untrusted Content` | Fixed text: what content is untrusted and how it is marked (DSEC-020 to DSEC-022) |
+| `Supply Chain` | Fixed text: locked dependencies, releases with provenance, no install scripts, Skills from the installed package (DSEC-070 to DSEC-073) |
+| `Self-update` | Fixed text: what `update` changes and checks (DCLI-070 to DCLI-079) |
+
+Write Confirmation, State Directory, Untrusted Content, Supply Chain and Self-update describe runtime behavior that is the same in every tool. Their text is fixed and comes from the template, like How It Works, and the tool MUST NOT change it.
 
 Two sections depend on the tool:
 
@@ -285,8 +292,8 @@ Two sections depend on the tool:
 
 All other sections MUST always appear.
 
-Why: A person deciding whether to grant a scope reads the same safety facts, in the same order, for every tool.
-Check: 🤖 `check_project` checks the sections, including the two conditional ones against `reference`.
+Why: A person deciding whether to grant a scope reads the same safety facts, in the same order, for every tool; text that describes the shared runtime is written once and cannot drift from it.
+Check: 🤖 `check_project` checks the sections, compares the five fixed sections with the template, and checks the two conditional ones against `reference`.
 
 ### DREPO-014 CONTRIBUTING sections
 
@@ -299,8 +306,8 @@ Check: 🤖 `check_project` checks the sections, including the two conditional o
 | `Commands` | The commands developers run to build, test and check the tool |
 | `Branch and Commit Convention` | How branches are named and commit messages are written |
 | `CI Checks` | The merge gate (DREPO-041) and how to run it locally |
-| `Tests and Evidence` | Conformance tests, behavior matrices, live records and how evidence sets maturity (DVER-001, DVER-030, DVER-040) |
-| `Adding or Changing a Command` | Registration with effect, units, target type and capability IDs (DREPO-061), the write sample (DVER-002), the behavior matrix, the Skill and the CHANGELOG entry |
+| `Tests and Evidence` | Conformance tests, command simulations, behavior matrices, live records, eval reports, and how evidence sets maturity (DVER-001, DVER-023, DVER-030, DVER-040) |
+| `Adding or Changing a Command` | Registration with effects, units, target type and capability IDs (DCLI-029, DREPO-061), the simulation and the behavior matrix, whose `normal` row is the write sample (DVER-002, DVER-023, DVER-030), the Skill and the CHANGELOG entry |
 | `Pull Requests` | What a pull request contains and how it is reviewed |
 | `Security` | Where to report vulnerabilities instead of opening a public issue (`SECURITY.md`) |
 
@@ -314,7 +321,7 @@ Check: 🤖 `check_project`.
 <!-- contract:application_sections -->
 | Section | Content |
 |---|---|
-| `Application` | Name, vendor, the versions surveyed, and the operating systems on which the application, or in device mode the device driver or SDK, runs (DREPO-052) |
+| `Application` | Name, vendor, the versions surveyed, and the operating systems and CPU architectures on which the application, or in device mode the device driver or SDK, runs (DREPO-052) |
 | `Automation Interfaces` | Every interface the application offers, and whether the CLI can call it or it works only in-process or on the main thread (DCLI-262) |
 | `Object Model` | The application's objects and their names, which become command nouns (DCLI-023) |
 | `Units and Coordinates` | Internal and display units, origin and axis directions (DCLI-080 to DCLI-084) |
@@ -336,12 +343,12 @@ Check: 🤖 `check_project`.
 <!-- contract:compatibility_sections -->
 | Section | Content |
 |---|---|
-| `Support Matrix` | One row per combination of application version, operating system and mode, with its compatibility label (DREPO-022) |
+| `Support Matrix` | One row per combination of application version, operating system and mode, with its compatibility label (DREPO-022); generated, never typed by hand |
 | `Client and Host` | Which tool versions work with which host protocol and host component versions; the tool and the application always run on the same machine |
 | `Host Component Versions` | Each host component version, with its protocol version and the application versions it loads into |
 | `Known Limitations` | Known gaps and failures, with the versions they affect |
 
-A tool without a host component MUST keep Client and Host and Host Component Versions, and say there that it has none. A support matrix looks like this:
+A tool without a host component MUST keep Client and Host and Host Component Versions, and say there that it has none. The Support Matrix section MUST be generated by the template's script from the live records in `docs/evidence/` and the platform packages in `package.json`, and MUST NOT be edited by hand. A support matrix looks like this:
 
 | Application version | Operating system | Mode | Status |
 |---|---|---|---|
@@ -349,8 +356,8 @@ A tool without a host component MUST keep Client and Host and Host Component Ver
 | 10.0 | Linux | session | 🧪 simulated |
 | 9.0 | macOS | file | ⏳ untested |
 
-Why: A person sees at a glance where the tool works and how sure that is, before installing it.
-Check: 🤖 `check_project`.
+Why: A person sees at a glance where the tool works and how sure that is, before installing it. A matrix generated from the records cannot claim more than they show.
+Check: 🤖 `check_project` checks the sections, regenerates the support matrix and compares.
 
 ### DREPO-017 Acceptance sections
 
@@ -359,13 +366,13 @@ Check: 🤖 `check_project`.
 <!-- contract:e2e_sections -->
 | Section | Content |
 |---|---|
-| `Environment` | The machines, operating systems, application versions and modes used for live runs |
-| `Authorized Targets` | The application instances, files, folders and devices a person allowed live runs to use (DVER-050) |
-| `Procedure` | How to prepare and run the behavior matrices on the real application (DVER-030, DVER-031) |
+| `Authorized Targets` | The only list of the application instances, files, folders and devices a person allowed live runs to use; only a person adds to it (DVER-050) |
+| `Procedure` | The machines, operating systems, application versions and modes used for live runs, and how to prepare and run the behavior matrices on the real application (DVER-030, DVER-031) |
 | `Evidence Records` | An index of the live records in `docs/evidence/` (DVER-042) |
-| `Last Run` | The date, the tool version and the result of the latest live run |
 
-Why: A reviewer, or the next maintainer, needs one place that says what was run on the real application, where and when.
+The results of live runs are not repeated here: the support matrix shows them, generated from the same records (DREPO-016).
+
+Why: A reviewer, or the next maintainer, needs one place that says which targets may be used, how live runs are done and where their records are.
 Check: 🤖 `check_project`.
 
 ### DREPO-018 CHANGELOG
@@ -462,7 +469,7 @@ Each row of the support matrix (DREPO-016) MUST carry exactly one of these label
 | Label | Mark | Meaning | Evidence needed |
 |---|---|---|---|
 | `verified` | ✅ | Tested on the real application | A current live record for this application version, operating system and mode (DVER-042, DVER-043) |
-| `simulated` | 🧪 | Tested only with the fake host | Both conformance suites pass on this operating system (DVER-021) |
+| `simulated` | 🧪 | Tested only with the fake host | Both conformance suites and the behavior matrices pass on this operating system (DVER-021) |
 | `untested` | ⏳ | Not tested yet | None |
 | `unsupported` | ⛔ | The tool does not support this combination | None |
 
@@ -473,22 +480,20 @@ Check: 🤖 `check_project` checks every label and its evidence.
 
 Badges, the info card and compatibility labels MUST NOT claim more than the data shows:
 
-- The badge row and the info card MUST be generated from the sources named in DREPO-020 and DREPO-021, never typed by hand.
+- The badge row, the info card and the support matrix MUST be generated from the sources named in DREPO-016, DREPO-020 and DREPO-021, never typed by hand.
 - The maturity badge MUST equal the level derived from `reference`.
 - ✅ verified MUST rest on a current live record (DVER-043). A row backed only by the fake host is 🧪 simulated at most (DVER-021).
-- A platform MUST appear as supported only when `package.json` lists a platform package for it. Every listed platform package has passed platform delivery, because the release workflow publishes nothing otherwise (DREPO-043).
+- A platform MUST appear as supported only when it was delivered: `package.json` lists a platform package for it, and the release workflow published that package only after its platform delivery passed (DREPO-042, DREPO-043). This holds everywhere: in the badge row, the info card, `docs/COMPATIBILITY.md` and the release notes.
 
 Why: Not run is not passed and simulated is not real; a label that claims more than its evidence misleads exactly the person who trusts it.
-Check: 🤖 `check_project` regenerates the badges and the info card and checks every ✅ against the live records.
+Check: 🤖 `check_project` regenerates the badges, the info card and the support matrix and checks every ✅ against the live records.
 
 ### DREPO-024 No invented labels
 
 A tool MUST use only the badges of DREPO-020, the info card rows of DREPO-021 and the labels of DREPO-022. It MUST NOT add other badges or status labels to its documents, such as a "beta" or "production ready" badge. Colors, icons and order come from the template and MUST NOT be changed.
 
-The check line of every clause in these specifications uses only two labels: 🤖 when a script or a test checks the clause, 👀 when a person checks it in review.
-
 Why: The badges and labels are the series' shared signs; they work only if every tool uses the same few, with the same meaning.
-Check: 🤖 `check_project` for the tool documents; `check_spec` for the check lines of the specifications.
+Check: 🤖 `check_project`.
 
 ## Pinning
 
@@ -501,10 +506,10 @@ Check: 🤖 `check_project` compares hashes (DREPO-034).
 
 ### DREPO-031 Contract copy
 
-`contract/driver-contract.json` MUST be the contract of the same release, unchanged. `contract/commands.json` MUST be generated from the tool's command registration and MUST NOT be edited by hand; it is regenerated whenever a command changes.
+`contract/driver-contract.json` MUST be the contract of the same release, unchanged. `contract/commands.json` MUST be generated from the tool's command registration (DCLI-029), MUST validate against `contract/schemas/commands.schema.json` and MUST NOT be edited by hand; it is regenerated whenever a command changes.
 
 Why: Tests and scripts read the rules and the commands as data; a hand-edited copy lets the data drift from the code.
-Check: 🤖 `check_project` compares the contract's hash and regenerates `commands.json`.
+Check: 🤖 `check_project` compares the contract's hash, regenerates `commands.json`, compares it and validates it against `commands.schema.json`.
 
 ### DREPO-032 Runtime copy
 
@@ -543,15 +548,16 @@ Check: 🤖 `check_project` compares the versions; the release workflow compares
 
 ### DREPO-041 Merge gate
 
-Every change MUST pass these checks before it merges. The release workflow MUST run the same checks before it publishes.
+Every change MUST pass these checks before it merges. The release workflow runs the same checks before it publishes (DREPO-043).
 
 | Check | What it covers |
 |---|---|
 | Lint | The tool's code style rules |
 | Unit tests | The tool's own tests |
 | Conformance suites | Both suites (DVER-001), on every shipped platform |
+| Behavior matrices | Every row that applies in every behavior matrix, run on the fake host with the command simulations (DVER-030), on every shipped platform |
 | Project check | `check_project`: layout, documents, labels, pinned copies and capability tracing |
-| Output size check | Every envelope stays within the size limits (DCLI-008) |
+| Output size check | Every envelope stays within the size limits (DCLI-008); general conformance test R04 performs it |
 | npm package content check | Each package holds only what DREPO-051 allows, with no install scripts (DSEC-072) |
 
 The merge gate runs in `.github/workflows/ci.yml`. A failed check blocks the merge and the release.
@@ -569,14 +575,14 @@ Before a release is published, CI MUST do the following for every platform packa
 4. Run one representative key operation. When the clean environment cannot have the application, the operation runs against the fake host (DVER-020) and the record says so.
 5. Record the package digest and the result.
 
-The release workflow MUST refuse to publish unless platform delivery passed for every platform package listed in `package.json` (DREPO-043). A platform without a platform package in `package.json` MUST NOT be described as supported anywhere: not in the badge row, the info card, `docs/COMPATIBILITY.md` or the release notes.
+The release workflow publishes only when platform delivery passed for every platform package listed in `package.json` (DREPO-043). A platform that was not delivered is never described as supported (DREPO-023).
 
 Why: Tests on a development machine do not prove that the published package installs and starts; only a clean install of the real package does.
 Check: 🤖 The release workflow stops before publishing when delivery fails for any platform package; 👀 review of `.github/workflows/release.yml`.
 
 ### DREPO-043 Release only from CI
 
-A release MUST run only in the release workflow `.github/workflows/release.yml`, started by pushing an annotated tag `vX.Y.Z` that equals the version in `package.json`. The workflow runs the merge gate (DREPO-041) and platform delivery (DREPO-042) for every platform package listed in `package.json`. It MUST publish nothing unless both pass for every one of them; only then does it publish every package to npm with provenance (DSEC-071). Nobody publishes from a personal machine.
+A release MUST run only in the release workflow `.github/workflows/release.yml`, started by pushing an annotated tag `vX.Y.Z` that equals the version in `package.json`. The workflow runs the merge gate (DREPO-041) and platform delivery (DREPO-042) for every platform package listed in `package.json`. It MUST publish nothing unless both pass for every one of them; only then does it publish every package to npm with provenance (DSEC-071). A package MUST NOT be published any other way, such as from a personal machine.
 
 Why: A release built by CI from a tag can be traced to its source; a release from a laptop cannot.
 Check: 👀 Review of the release workflow; `update` reports `provenance_status` after every install (DCLI-074).
@@ -602,12 +608,13 @@ Check: 🤖 The npm package content check of the merge gate (DREPO-041).
 
 ### DREPO-052 Platforms follow the application
 
-- A tool MUST ship every platform among Windows, macOS and Linux on which everything it needs runs: the application, or in device mode the device driver or SDK. It MUST NOT ship a platform on which they do not run.
-- A tool that needs neither the application nor a platform-specific driver, such as a file-mode tool that reads the files itself, MUST ship all three.
+- A tool SHOULD ship every platform among Windows, macOS and Linux on which everything it needs runs: the application, or in device mode the device driver or SDK. It MUST NOT ship a platform on which they do not run, and MUST NOT claim a platform it did not deliver (DREPO-023).
+- A tool that needs neither the application nor a platform-specific driver, such as a file-mode tool that reads the files itself, can run everywhere and SHOULD therefore ship all three.
+- On every shipped platform the tool MUST ship an x64 platform package. It SHOULD also ship an arm64 platform package where the application, or in device mode the device driver or SDK, ships for arm64 on that system.
 - The tool and the application always run on the same machine. A tool MUST NOT ship a platform only to drive the application on another machine.
-- The Application section of `docs/APPLICATION.md` records the operating systems on which the application, or in device mode the device driver or SDK, runs. The platform packages in `package.json` MUST follow from it by the rules above.
+- The Application section of `docs/APPLICATION.md` records the operating systems and CPU architectures on which the application, or in device mode the device driver or SDK, runs. The platform packages in `package.json` MUST follow from it by the rules above.
 
-Why: Users get the tool wherever they can run the application, and no package promises to drive an application that cannot run beside it.
+Why: Users get the tool wherever they can run the application, and no package promises to drive an application that cannot run beside it or claims a platform nobody delivered.
 Check: 🤖 `check_project` compares the platform packages with the capability survey.
 
 ### DREPO-053 package.json is the source
@@ -652,7 +659,7 @@ Check: 🤖 `check_project` checks the IDs and the dispositions.
 
 ### DREPO-061 Commands trace to capabilities
 
-- Every domain command MUST name, in its registration, one or more capability IDs that exist in the survey. The registration also states the command's effects (DCLI-051), units (DCLI-080) and target type (DCLI-028).
+- Every domain command MUST name, in the `survey_ids` of its registration (DCLI-029), one or more capability IDs that exist in the survey. The registration also states the command's effects (DCLI-051), units (DCLI-080) and target type (DCLI-028).
 - Every capability in the survey MUST have a disposition.
 
 Why: Each command can then be traced back to a surveyed fact about the application, and nothing in the survey is silently forgotten.
@@ -667,11 +674,11 @@ A new tool is usually built by an AI Agent. It SHOULD follow these eight steps, 
 | 1 Survey | Fill in `docs/APPLICATION.md`; give every capability an ID and a disposition (DREPO-060) |
 | 2 Choose modes | Choose file, session or device mode from the survey; modes MAY be combined (DCLI-201) |
 | 3 Generate the project | Generate the project from the template; `check_project` passes right away |
-| 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024), each with effects, units, target type and capability IDs (DREPO-061) |
+| 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024) and the registration fields (DCLI-029), each with effects, units, target type and capability IDs (DREPO-061) |
 | 5 Implement the adapter | Implement only the adapter capabilities the chosen modes need (DCLI-260); put each in the adapter layer or the host component (DCLI-262) |
-| 6 Test | Run both conformance suites (DVER-001), then the behavior matrices on the real application (DVER-030) |
+| 6 Test | Write a simulation and a behavior matrix for each domain command (DVER-023, DVER-030) and run them with both conformance suites on the fake host (DVER-001); then run the matrices on the real application, on authorized targets (DVER-031, DVER-050) |
 | 7 Write Skills and knowledge | Decide whether to split the Skills (DSKL-020, DSKL-021); add playbooks to the template's fixed sections (DSKL-009); turn the survey's operating notes, limits and troubleshooting into knowledge entries (DSKL-126); run the evaluation before marking a command stable (DSKL-043) |
-| 8 Publish | Build platform packages for every platform DREPO-052 requires, run platform delivery (DREPO-042) and publish to npm with provenance (DREPO-043) |
+| 8 Publish | Build platform packages for the platforms and CPU architectures DREPO-052 calls for, run platform delivery (DREPO-042) and publish to npm with provenance (DREPO-043) |
 
 The development Skill `build-driver-cli`, which comes with this specification, guides an Agent through these steps. For each step it names the clauses to read, the template to fill and the check to run. At the end it reviews the tool against this specification and lists what does not conform.
 

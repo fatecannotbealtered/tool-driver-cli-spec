@@ -1,0 +1,9 @@
+{
+  "code": "E_PARTIAL",
+  "message": "Some footprints moved.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "dispatched",
+    "next_action": "Check the footprints."
+  }
+}

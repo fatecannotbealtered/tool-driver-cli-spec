@@ -1,0 +1,56 @@
+{
+  "id": "8",
+  "operation_id": "op_d8x3",
+  "state": "completed",
+  "cancel_requested": false,
+  "progress": {
+    "done": 400,
+    "total": 400,
+    "unit": "checks"
+  },
+  "started_at": "2026-11-02T08:30:00Z",
+  "finished_at": "2026-11-02T08:34:10Z",
+  "receipt": {
+    "operation_id": "op_d8x3",
+    "command": "drc run",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "artifact"
+    ],
+    "tier": "direct",
+    "outcome": {
+      "execution": "completed",
+      "change": "not_applicable",
+      "delivery": "not_applicable",
+      "persistence": "saved",
+      "verification": "passed"
+    },
+    "observed": {
+      "files": [
+        {
+          "path": "D:/proj/drc-report.json",
+          "bytes": 18234,
+          "sha256": "9f2c4e7a1b3d5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8091a2b3c4d5e6f7"
+        }
+      ]
+    },
+    "mismatched": [],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": "rev-8",
+      "dirty": true
+    }
+  },
+  "result": {
+    "report": "D:/proj/drc-report.json",
+    "violations": 3
+  }
+}

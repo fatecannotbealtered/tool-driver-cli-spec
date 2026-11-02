@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/commands.schema.json",
+  "title": "Command registration",
+  "description": "contract/commands.json of a tool, generated from its command registration (DCLI-029, DREPO-031). Never edited by hand.",
+  "type": "object",
+  "required": [
+    "tool",
+    "version",
+    "commands"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "$ref": "host-protocol.schema.json#/$defs/semver"
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "required": [
+        "path",
+        "summary",
+        "effects",
+        "modes",
+        "target_kind",
+        "flags",
+        "untrusted_fields",
+        "adapter_capabilities",
+        "survey_ids",
+        "irreversible",
+        "halt",
+        "tolerances",
+        "default_fields",
+        "related_knowledge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "preview.schema.json#/$defs/effect"
+          }
+        },
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "reference.schema.json#/$defs/mode"
+          }
+        },
+        "target_kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          }
+        },
+        "untrusted_fields": {
+          "description": "Output fields that hold text from the application or its files.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "adapter_capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "probe",
+              "sessions",
+              "open_session",
+              "close_session",
+              "documents",
+              "create_doc",
+              "open_doc",
+              "save_doc",
+              "save_doc_as",
+              "close_doc",
+              "undo",
+              "read",
+              "preview",
+              "apply",
+              "read_back",
+              "job_status",
+              "cancel",
+              "devices",
+              "plugin_status",
+              "plugin_install"
+            ]
+          }
+        },
+        "survey_ids": {
+          "description": "Capability IDs from the capability survey (DREPO-061).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^CAP-[0-9]{3}$"
+          }
+        },
+        "irreversible": {
+          "type": "boolean"
+        },
+        "halt": {
+          "type": "boolean"
+        },
+        "tolerances": {
+          "description": "Read-back tolerance per output field, in the field's unit.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "default_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "related_knowledge": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "knowledge.schema.json#/$defs/id"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "description": "A halt command has only the lifecycle effect.",
+          "if": {
+            "properties": {
+              "halt": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "effects": {
+                "const": [
+                  "lifecycle"
+                ]
+              },
+              "irreversible": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "flag": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^--[a-z][a-z0-9-]*$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "quantity": {
+          "description": "The physical quantity, from the contract's units table; the flag then takes a value with a unit.",
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "secret": {
+          "type": "boolean"
+        },
+        "coordinate_system": {
+          "$ref": "reference.schema.json#/$defs/coordinate_system"
+        }
+      }
+    }
+  }
+}

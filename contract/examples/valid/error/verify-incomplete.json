@@ -4,13 +4,14 @@
   "retryable": false,
   "details": {
     "dispatch_state": "dispatched",
-    "next_action": "Read R1 with `kicad-cli footprint get --ref R1` to check its position.",
+    "next_action": "Read R1 with `kicad-cli footprint get --session kicad-1234 --doc doc_1 --id R1` to check its position.",
     "receipt": {
       "operation_id": "op_7mq2xk4v",
       "command": "footprint move",
       "target": {
         "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
-        "kind": "footprint"
+        "kind": "footprint",
+        "label": "R1"
       },
       "effects": [
         "change"
@@ -31,7 +32,7 @@
       },
       "document": {
         "id": "doc_1",
-        "revision": 8,
+        "revision": "rev-8",
         "dirty": true
       }
     }

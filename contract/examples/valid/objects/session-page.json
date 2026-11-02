@@ -9,12 +9,33 @@
       "pid": 4312,
       "owned": true,
       "generation": 3,
-      "state": "busy",
+      "state": "ready",
+      "documents": [
+        {
+          "id": "doc_1",
+          "path": "D:/proj/board.kicad_pcb",
+          "dirty": true
+        }
+      ],
+      "plugin_loaded": "1.0.0"
+    },
+    {
+      "id": "kicad-5120",
+      "application": {
+        "name": "KiCad",
+        "version": "10.0.1"
+      },
+      "pid": 5120,
+      "owned": false,
+      "generation": 1,
+      "state": "unresponsive",
       "documents": [],
-      "plugin_loaded": null
+      "plugin_loaded": "1.0.0",
+      "since_at": "2026-11-02T08:29:40Z"
     }
   ],
-  "count": 1,
+  "count": 2,
   "has_more": false,
-  "total": 1
+  "total": 2,
+  "complete": false
 }

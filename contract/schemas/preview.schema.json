@@ -2,17 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/preview.schema.json",
   "title": "Dry-run data",
-  "description": "The data of a --dry-run call (DCLI-054). Direct-tier commands return only the preview.",
+  "description": "The data of a --dry-run call (DCLI-054). Two-step and dangerous commands return the preview, the confirm token and its expiry, the same three keys as the details of E_CONFIRMATION_REQUIRED; direct-tier commands return only the preview. The operation ID lives only inside the preview.",
   "oneOf": [
     {
       "type": "object",
-      "required": ["preview", "confirm_token", "expires_at", "operation_id"],
+      "required": ["preview", "confirm_token", "expires_at"],
       "additionalProperties": false,
       "properties": {
-        "preview": {"$ref": "#/$defs/preview"},
+        "preview": {"allOf": [{"$ref": "#/$defs/preview"}, {"properties": {"tier": {"not": {"const": "direct"}}}}]},
         "confirm_token": {"type": "string", "minLength": 1},
-        "expires_at": {"$ref": "error.schema.json#/$defs/utc"},
-        "operation_id": {"$ref": "#/$defs/operation_id"}
+        "expires_at": {"$ref": "error.schema.json#/$defs/utc"}
       }
     },
     {
@@ -27,16 +26,25 @@
   "$defs": {
     "operation_id": {"type": "string", "pattern": "^op_[A-Za-z0-9]+$"},
     "tier": {"enum": ["direct", "two_step", "dangerous"]},
-    "effect": {"enum": ["observe", "session", "change", "artifact", "persist", "configure", "deliver", "physical"]},
+    "effect": {"enum": ["observe", "lifecycle", "change", "artifact", "persist", "configure", "deliver", "physical"]},
+    "target_key": {
+      "description": "A normalized target key: file:///<absolute-path>, file:///<absolute-path>#<domain-path>, untitled:<session-id>/<n> or device:<device-id>/<part>.",
+      "type": "string",
+      "pattern": "^(file:///.+|untitled:[^/\\s]+/[1-9][0-9]*|device:[^/\\s]+(/.+)?)$"
+    },
     "target": {
       "type": "object",
       "required": ["key", "kind"],
       "additionalProperties": false,
       "properties": {
-        "key": {"type": "string", "pattern": "^(file:///|session:|device:)"},
+        "key": {"$ref": "#/$defs/target_key"},
         "kind": {"type": "string", "minLength": 1},
         "label": {"type": "string"}
       }
+    },
+    "targets": {
+      "description": "One target, or several for a batch.",
+      "oneOf": [{"$ref": "#/$defs/target"}, {"type": "array", "items": {"$ref": "#/$defs/target"}, "minItems": 1}]
     },
     "session_ref": {
       "type": "object",
@@ -53,33 +61,59 @@
       "additionalProperties": false,
       "properties": {
         "id": {"type": "string"},
-        "revision": {"type": "integer", "minimum": 0},
+        "revision": {"type": "string", "minLength": 1},
         "dirty": {"type": "boolean"}
       }
     },
     "change": {
+      "description": "One change. `after` is the value the application will actually store. An external change groups everything that changed on one object, so it may leave out `field` and give whole values in `before` and `after`.",
       "type": "object",
-      "required": ["field", "before", "after"],
+      "required": ["target", "before", "after"],
       "additionalProperties": false,
       "properties": {
+        "target": {"$ref": "#/$defs/target_key"},
         "field": {"type": "string", "minLength": 1},
         "before": true,
         "after": true,
         "origin": {"enum": ["tool", "external"]}
+      },
+      "if": {"required": ["origin"], "properties": {"origin": {"const": "external"}}},
+      "then": true,
+      "else": {"required": ["field"]}
+    },
+    "summary": {
+      "description": "Counts of all changes, including those left out of `changes`.",
+      "type": "object",
+      "required": ["total", "by_origin", "by_kind"],
+      "additionalProperties": false,
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "by_origin": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/change/properties/origin"},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "by_kind": {
+          "type": "object",
+          "propertyNames": {"minLength": 1},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
       }
     },
     "preview": {
       "type": "object",
-      "required": ["operation_id", "command", "action", "target", "effects", "tier", "changes", "inputs", "can_apply"],
+      "required": ["operation_id", "command", "action", "effects", "tier", "summary", "changes", "inputs", "can_apply"],
       "additionalProperties": false,
       "properties": {
         "operation_id": {"$ref": "#/$defs/operation_id"},
         "command": {"type": "string", "minLength": 1},
         "action": {"type": "string", "minLength": 1},
-        "target": {"oneOf": [{"$ref": "#/$defs/target"}, {"type": "array", "items": {"$ref": "#/$defs/target"}, "minItems": 1}]},
+        "target": {"$ref": "#/$defs/targets"},
         "effects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/effect"}},
         "tier": {"$ref": "#/$defs/tier"},
-        "changes": {"type": "array", "items": {"$ref": "#/$defs/change"}},
+        "summary": {"$ref": "#/$defs/summary"},
+        "changes": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/change"}},
+        "changes_truncated": {"type": "boolean"},
         "session": {"$ref": "#/$defs/session_ref"},
         "document": {"$ref": "#/$defs/document_ref"},
         "inputs": {"type": "object"},

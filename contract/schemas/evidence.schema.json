@@ -14,7 +14,7 @@
     "application": {"$ref": "host-protocol.schema.json#/$defs/application"},
     "os": {"type": "string", "minLength": 1},
     "recorded_at": {"$ref": "error.schema.json#/$defs/utc"},
-    "targets": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^(file:///|session:|device:)"}},
+    "targets": {"type": "array", "minItems": 1, "items": {"$ref": "scope.schema.json#/properties/targets/items"}},
     "runs": {
       "type": "array",
       "minItems": 1,

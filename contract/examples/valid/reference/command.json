@@ -3,33 +3,50 @@
   "summary": "Move one or more footprints.",
   "flags": [
     {
-      "name": "--ref",
-      "summary": "Reference designator.",
-      "required": true,
+      "name": "--id",
+      "summary": "Reference designator of the footprint.",
+      "type": "string"
+    },
+    {
+      "name": "--ids",
+      "summary": "Several reference designators, comma-separated.",
       "type": "string"
     },
     {
       "name": "--x",
       "summary": "X position.",
       "type": "length",
-      "unit": "mm"
+      "unit": "mm",
+      "coordinate_system": "board: origin at the page's top-left corner, x right, y down"
+    },
+    {
+      "name": "--y",
+      "summary": "Y position.",
+      "type": "length",
+      "unit": "mm",
+      "coordinate_system": "board: origin at the page's top-left corner, x right, y down"
     }
   ],
   "output_schema": {
     "type": "object"
   },
+  "output_coordinate_system": "board: origin at the page's top-left corner, x right, y down",
   "examples": [
-    "kicad-cli footprint move --ref R1 --x 12.5mm --y 30mm"
+    "kicad-cli footprint move --session kicad-1234 --doc doc_1 --id R1 --x 12.5mm --y 30mm"
   ],
   "effects": [
     "change"
   ],
-  "tier": "direct",
+  "tier": {
+    "file": "two_step",
+    "session": "direct"
+  },
   "maturity": "experimental",
   "evidence": [
     "simulated:tests/matrix/footprint-move.json"
   ],
   "modes": [
+    "file",
     "session"
   ],
   "capabilities": [
@@ -41,14 +58,16 @@
     "E_AMBIGUOUS",
     "E_BUSY",
     "E_HUMAN_REQUIRED",
-    "E_OUTCOME_UNKNOWN"
+    "E_OUTCOME_UNKNOWN",
+    "E_PARTIAL"
   ],
   "default_fields": [
-    "ref",
+    "id",
     "x_mm",
     "y_mm"
   ],
   "related_knowledge": [
-    "move-locked-footprint"
+    "move-locked-footprint",
+    "board-coordinates"
   ]
 }

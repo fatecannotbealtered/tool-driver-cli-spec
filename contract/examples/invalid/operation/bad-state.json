@@ -1,6 +1,6 @@
 {
   "operation_id": "op_1",
-  "command": "x y",
+  "command": "footprint move",
   "target": {
     "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
     "kind": "footprint",

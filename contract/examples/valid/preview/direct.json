@@ -12,16 +12,21 @@
       "change"
     ],
     "tier": "direct",
+    "summary": {
+      "total": 1,
+      "by_origin": {
+        "tool": 1
+      },
+      "by_kind": {
+        "footprint": 1
+      }
+    },
     "changes": [
       {
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
         "field": "x_mm",
         "before": 10.0,
         "after": 12.5
-      },
-      {
-        "field": "y_mm",
-        "before": 30.0,
-        "after": 30.0
       }
     ],
     "session": {
@@ -30,11 +35,11 @@
     },
     "document": {
       "id": "doc_1",
-      "revision": 7,
+      "revision": "rev-7",
       "dirty": true
     },
     "inputs": {
-      "ref": "R1",
+      "id": "R1",
       "x": "12.5mm",
       "y": "30mm"
     },

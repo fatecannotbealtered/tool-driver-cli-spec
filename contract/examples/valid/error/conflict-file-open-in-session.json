@@ -1,0 +1,10 @@
+{
+  "code": "E_CONFLICT",
+  "message": "board.kicad_pcb is open in KiCad session kicad-1234; the file was not written.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Run the command again in session mode: `kicad-cli footprint move --session kicad-1234 --doc doc_1 --id R1 --x 12.5mm --y 30mm`.",
+    "conflict": "file_open_in_session"
+  }
+}

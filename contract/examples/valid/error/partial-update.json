@@ -1,0 +1,19 @@
+{
+  "code": "E_PARTIAL",
+  "message": "kicad-cli 1.3.0 is installed but the Skills could not be updated.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "dispatched",
+    "next_action": "Run `kicad-cli update` again to sync the Skills.",
+    "update": {
+      "status": "updated",
+      "current_version": "1.3.0",
+      "target_version": "1.3.0",
+      "previous_version": "1.2.0",
+      "update_available": false,
+      "provenance_status": "verified",
+      "skill_sync_status": "failed",
+      "entry": "direct"
+    }
+  }
+}
