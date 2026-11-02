@@ -1,0 +1,11 @@
+{
+  "address": "\\\\.\\pipe\\kicad-cli-host-4312",
+  "pid": 4312,
+  "application": {
+    "name": "KiCad",
+    "version": "10.0.1"
+  },
+  "protocol_version": "1.0.0",
+  "plugin_version": "1.0.0",
+  "started_at": "2026-11-02T08:30:00Z"
+}

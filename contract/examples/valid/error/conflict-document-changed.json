@@ -1,0 +1,10 @@
+{
+  "code": "E_CONFLICT",
+  "message": "The document changed after the dry run; nothing was saved.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Run `kicad-cli doc save --doc doc_1 --dry-run` again and check the new preview.",
+    "conflict": "document_changed"
+  }
+}

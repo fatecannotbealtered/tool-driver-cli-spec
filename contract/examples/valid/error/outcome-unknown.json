@@ -1,0 +1,10 @@
+{
+  "code": "E_OUTCOME_UNKNOWN",
+  "message": "The connection to KiCad was lost after the change was sent; it may have been applied.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "unknown",
+    "next_action": "Check the result before doing anything else.",
+    "lookup": "kicad-cli operation get --id op_7mq2xk4v"
+  }
+}

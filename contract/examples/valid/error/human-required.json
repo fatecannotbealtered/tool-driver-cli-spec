@@ -1,0 +1,15 @@
+{
+  "code": "E_HUMAN_REQUIRED",
+  "message": "A dialog is open in KiCad; nothing was sent.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Ask the user to close the dialog, then run the resume command.",
+    "action": "dismiss_dialog",
+    "resume": "kicad-cli footprint move --ref R1 --x 12.5mm --y 30mm",
+    "native_message": "Footprint library not found",
+    "knowledge": [
+      "library-not-found-dialog"
+    ]
+  }
+}

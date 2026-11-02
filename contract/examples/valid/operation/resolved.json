@@ -1,0 +1,22 @@
+{
+  "operation_id": "op_7mq2xk4v",
+  "command": "footprint move",
+  "target": {
+    "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+    "kind": "footprint",
+    "label": "R1"
+  },
+  "effects": [
+    "change"
+  ],
+  "tier": "direct",
+  "scope_id": "board-rev-c",
+  "state": "unknown",
+  "planned_at": "2026-11-02T08:30:00Z",
+  "dispatched_at": "2026-11-02T08:30:00Z",
+  "resolution": {
+    "outcome": "applied",
+    "evidence": "footprint get --ref R1 shows x_mm 12.5",
+    "resolved_at": "2026-11-02T08:40:00Z"
+  }
+}

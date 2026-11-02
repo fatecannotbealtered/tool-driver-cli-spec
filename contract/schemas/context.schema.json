@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/context.schema.json",
+  "title": "context data",
+  "description": "Local state reported by context without network access (DCLI-032).",
+  "type": "object",
+  "required": ["tool", "version", "spec_version", "state", "authorization", "application", "sessions", "components", "knowledge"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {"type": "string"},
+    "version": {"type": "string"},
+    "spec_version": {"type": "string"},
+    "state": {
+      "type": "object",
+      "required": ["path", "usable", "protection"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "usable": {"type": "boolean"},
+        "protection": {"enum": ["posix_0700", "windows_acl", "none"]}
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {"enum": ["granted", "missing", "invalid", "expired"]},
+        "scope_id": {"type": "string"},
+        "path": {"type": "string"},
+        "effects": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/effect"}},
+        "dangerous": {"type": "boolean"},
+        "expires_at": {"$ref": "error.schema.json#/$defs/utc"}
+      }
+    },
+    "application": {
+      "type": "object",
+      "required": ["found"],
+      "additionalProperties": false,
+      "properties": {
+        "found": {"type": "boolean"},
+        "path": {"type": "string"},
+        "version": {"type": "string"},
+        "license": {"enum": ["valid", "missing", "expired", "unknown", "not_required"]}
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "required": ["count"],
+      "additionalProperties": false,
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "components": {
+      "type": "object",
+      "required": ["cli"],
+      "additionalProperties": false,
+      "properties": {
+        "cli": {"type": "string"},
+        "plugin_on_disk": {"type": ["string", "null"]},
+        "plugin_loaded": {"type": "array", "items": {"type": "object", "required": ["session", "version"], "properties": {"session": {"type": "string"}, "version": {"type": "string"}}}}
+      }
+    },
+    "knowledge": {
+      "type": "object",
+      "required": ["builtin_count", "team"],
+      "additionalProperties": false,
+      "properties": {
+        "builtin_count": {"type": "integer", "minimum": 0},
+        "team": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "kind", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {"type": "string"},
+              "title": {"type": "string"},
+              "kind": {"$ref": "knowledge.schema.json#/$defs/kind"},
+              "url": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/host-protocol.schema.json",
+  "title": "Host protocol",
+  "description": "Discovery files and JSON-RPC 2.0 messages between the CLI and a host component (DCLI-270 to DCLI-281). Each message is framed by a Content-Length header.",
+  "anyOf": [
+    {"$ref": "#/$defs/discovery_file"},
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/result_response"},
+    {"$ref": "#/$defs/error_response"},
+    {"$ref": "#/$defs/event"}
+  ],
+  "$defs": {
+    "semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"},
+    "rpc_id": {"type": ["integer", "string"]},
+    "application": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {"name": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "discovery_file": {
+      "type": "object",
+      "required": ["address", "pid", "application", "protocol_version", "plugin_version", "started_at"],
+      "additionalProperties": false,
+      "properties": {
+        "address": {"type": "string", "pattern": "^(\\\\\\\\\\.\\\\pipe\\\\|/)"},
+        "pid": {"type": "integer", "minimum": 1},
+        "application": {"$ref": "#/$defs/application"},
+        "protocol_version": {"$ref": "#/$defs/semver"},
+        "plugin_version": {"type": "string"},
+        "started_at": {"$ref": "error.schema.json#/$defs/utc"}
+      }
+    },
+    "method": {
+      "enum": ["hello", "ping", "probe", "sessions", "open_session", "close_session", "documents", "open_doc", "save_doc", "close_doc", "undo", "read", "preview", "apply", "read_back", "job_status", "cancel", "devices", "plugin_status"]
+    },
+    "request": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"$ref": "#/$defs/rpc_id"},
+        "method": {"$ref": "#/$defs/method"},
+        "params": {
+          "type": "object",
+          "required": ["deadline_ms"],
+          "properties": {"deadline_ms": {"type": "integer", "minimum": 1}}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"method": {"const": "hello"}}},
+          "then": {"properties": {"params": {"required": ["protocol_version", "cli_version"], "properties": {"protocol_version": {"$ref": "#/$defs/semver"}, "cli_version": {"type": "string"}}}}}
+        }
+      ]
+    },
+    "hello_result": {
+      "type": "object",
+      "required": ["protocol_version", "plugin_version", "application", "session", "methods"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {"$ref": "#/$defs/semver"},
+        "plugin_version": {"type": "string"},
+        "application": {"$ref": "#/$defs/application"},
+        "session": {"$ref": "preview.schema.json#/$defs/session_ref"},
+        "methods": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/method"}}
+      }
+    },
+    "result_response": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "result"],
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"$ref": "#/$defs/rpc_id"},
+        "result": {
+          "anyOf": [
+            {"$ref": "#/$defs/hello_result"},
+            {
+              "type": "object",
+              "properties": {"dispatch_state": {"enum": ["not_started", "dispatched", "unknown"]}}
+            }
+          ]
+        }
+      }
+    },
+    "error_response": {
+      "type": "object",
+      "required": ["jsonrpc", "id", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"$ref": "#/$defs/rpc_id"},
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "data"],
+          "additionalProperties": false,
+          "properties": {
+            "code": {"const": -32000},
+            "message": {"type": "string"},
+            "data": {
+              "type": "object",
+              "required": ["code", "dispatch_state"],
+              "properties": {
+                "code": {"enum": ["E_BUSY", "E_NATIVE_FAILURE", "E_HUMAN_REQUIRED", "E_NOT_FOUND", "E_VALIDATION", "E_UNSUPPORTED"]},
+                "dispatch_state": {"enum": ["not_started", "dispatched", "unknown"]},
+                "native_message": {"type": "string"},
+                "retry_after_ms": {"type": "integer", "minimum": 0},
+                "action": {"$ref": "error.schema.json#/$defs/details/properties/action"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["jsonrpc", "method", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "method": {"enum": ["dialog_opened", "busy", "document_changed", "session_closing"]},
+        "params": {"type": "object"}
+      },
+      "not": {"required": ["id"]}
+    }
+  }
+}

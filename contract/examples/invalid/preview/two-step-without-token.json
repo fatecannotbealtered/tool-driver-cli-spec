@@ -1,0 +1,43 @@
+{
+  "preview": {
+    "operation_id": "op_9xk2m4qa",
+    "command": "doc save",
+    "action": "Save board.kicad_pcb to its original path.",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "persist"
+    ],
+    "tier": "two_step",
+    "changes": [
+      {
+        "field": "/footprints/R1/x_mm",
+        "before": 10.0,
+        "after": 12.5,
+        "origin": "tool"
+      },
+      {
+        "field": "/footprints/C3/angle_deg",
+        "before": 0,
+        "after": 90,
+        "origin": "external"
+      }
+    ],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": 7,
+      "dirty": true
+    },
+    "inputs": {
+      "doc": "doc_1"
+    },
+    "can_apply": true
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "error": {
+    "code": -32000,
+    "message": "x",
+    "data": {
+      "code": "E_OUTCOME_UNKNOWN",
+      "dispatch_state": "unknown"
+    }
+  }
+}

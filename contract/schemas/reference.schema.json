@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/reference.schema.json",
+  "title": "reference data",
+  "description": "Data of reference, reference --index and reference --command (DCLI-031).",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["tool", "version", "spec_version", "driver", "commands"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {"type": "string"},
+        "version": {"type": "string"},
+        "spec_version": {"type": "string"},
+        "driver": {"$ref": "#/$defs/driver"},
+        "commands": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/command"}}
+      }
+    },
+    {
+      "type": "object",
+      "required": ["tool", "version", "index"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {"type": "string"},
+        "version": {"type": "string"},
+        "index": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path", "summary", "effects", "tier"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {"type": "string"},
+              "summary": {"type": "string"},
+              "effects": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/effect"}},
+              "tier": {"enum": ["none", "direct", "two_step", "dangerous"]}
+            }
+          }
+        }
+      }
+    },
+    {"$ref": "#/$defs/command"}
+  ],
+  "$defs": {
+    "driver": {
+      "type": "object",
+      "required": ["modes", "application", "versions"],
+      "additionalProperties": false,
+      "properties": {
+        "modes": {"type": "array", "minItems": 1, "items": {"enum": ["file", "session", "device"]}},
+        "application": {"type": "string"},
+        "versions": {"type": "string"},
+        "host_component": {"type": "boolean"}
+      }
+    },
+    "flag": {
+      "type": "object",
+      "required": ["name", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^--[a-z][a-z0-9-]*$"},
+        "summary": {"type": "string"},
+        "required": {"type": "boolean"},
+        "type": {"type": "string"},
+        "unit": {"type": "string"},
+        "default": true,
+        "maximum": {"type": "number"}
+      }
+    },
+    "command": {
+      "type": "object",
+      "required": ["path", "summary", "flags", "output_schema", "examples", "effects", "tier", "maturity", "evidence", "modes", "capabilities", "errors"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"},
+        "summary": {"type": "string", "minLength": 1},
+        "flags": {"type": "array", "items": {"$ref": "#/$defs/flag"}},
+        "output_schema": {"type": "object"},
+        "examples": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "effects": {"type": "array", "minItems": 1, "items": {"$ref": "preview.schema.json#/$defs/effect"}},
+        "tier": {"enum": ["none", "direct", "two_step", "dangerous"]},
+        "maturity": {"enum": ["draft", "experimental", "verified", "stable"]},
+        "evidence": {"type": "array", "items": {"type": "string", "pattern": "^(simulated|live|eval):[^#\\s]+(#\\S+)?$"}},
+        "modes": {"type": "array", "minItems": 1, "items": {"enum": ["file", "session", "device"]}},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "errors": {"type": "array", "items": {"$ref": "error.schema.json#/properties/code"}},
+        "default_fields": {"type": "array", "items": {"type": "string"}},
+        "related_knowledge": {"type": "array", "items": {"type": "string"}},
+        "departures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["clause", "summary"],
+            "additionalProperties": false,
+            "properties": {
+              "clause": {"type": "string", "pattern": "^(DCLI|DSEC|DSKL|DVER|DREPO)-[0-9]{3}$"},
+              "summary": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "formats": {"type": "array", "items": {"enum": ["json", "text", "raw"]}}
+      }
+    }
+  }
+}

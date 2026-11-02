@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/operation.schema.json",
+  "title": "Operation record",
+  "description": "One record in the state directory, returned by operation get (DCLI-035, DCLI-059).",
+  "type": "object",
+  "required": ["operation_id", "command", "target", "effects", "tier", "scope_id", "state", "planned_at"],
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
+    "command": {"type": "string", "minLength": 1},
+    "target": {"$ref": "preview.schema.json#/$defs/target"},
+    "effects": {"type": "array", "minItems": 1, "items": {"$ref": "preview.schema.json#/$defs/effect"}},
+    "tier": {"$ref": "preview.schema.json#/$defs/tier"},
+    "scope_id": {"type": "string"},
+    "state": {"enum": ["planned", "dispatched", "completed", "failed", "unknown"]},
+    "preview": {"$ref": "preview.schema.json#/$defs/preview"},
+    "receipt": {"$ref": "receipt.schema.json#/$defs/receipt"},
+    "planned_at": {"$ref": "error.schema.json#/$defs/utc"},
+    "dispatched_at": {"$ref": "error.schema.json#/$defs/utc"},
+    "finished_at": {"$ref": "error.schema.json#/$defs/utc"},
+    "resolution": {
+      "type": "object",
+      "required": ["outcome", "evidence", "resolved_at"],
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {"enum": ["applied", "not_applied", "partial"]},
+        "evidence": {"type": "string", "minLength": 1},
+        "resolved_at": {"$ref": "error.schema.json#/$defs/utc"}
+      }
+    }
+  }
+}

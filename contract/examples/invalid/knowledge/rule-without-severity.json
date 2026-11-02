@@ -1,0 +1,10 @@
+{
+  "id": "power-net-width",
+  "title": "Power nets",
+  "kind": "rule",
+  "applies_to": [],
+  "tags": [],
+  "lang": "en",
+  "based_on": "x",
+  "updated_on": "2026-11-01"
+}

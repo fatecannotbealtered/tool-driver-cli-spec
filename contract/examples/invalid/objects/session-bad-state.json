@@ -1,0 +1,13 @@
+{
+  "id": "kicad-1",
+  "application": {
+    "name": "KiCad",
+    "version": "10"
+  },
+  "pid": 1,
+  "owned": false,
+  "generation": 0,
+  "state": "hung",
+  "documents": [],
+  "plugin_loaded": null
+}

@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "kicad-1234",
+      "application": {
+        "name": "KiCad",
+        "version": "10.0.1"
+      },
+      "pid": 4312,
+      "owned": true,
+      "generation": 3,
+      "state": "busy",
+      "documents": [],
+      "plugin_loaded": null
+    }
+  ],
+  "count": 1,
+  "has_more": false,
+  "total": 1
+}

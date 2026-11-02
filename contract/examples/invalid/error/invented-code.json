@@ -1,0 +1,9 @@
+{
+  "code": "E_RATE_LIMITED",
+  "message": "Too many calls.",
+  "retryable": true,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Wait."
+  }
+}

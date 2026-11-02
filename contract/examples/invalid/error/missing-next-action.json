@@ -1,0 +1,8 @@
+{
+  "code": "E_NOT_FOUND",
+  "message": "No such document.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started"
+  }
+}

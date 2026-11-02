@@ -1,0 +1,22 @@
+{
+  "tool": "kicad-cli",
+  "version": "1.2.0",
+  "index": [
+    {
+      "path": "footprint move",
+      "summary": "Move footprints.",
+      "effects": [
+        "change"
+      ],
+      "tier": "direct"
+    },
+    {
+      "path": "doc save",
+      "summary": "Save a document.",
+      "effects": [
+        "persist"
+      ],
+      "tier": "two_step"
+    }
+  ]
+}

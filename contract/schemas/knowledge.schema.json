@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/knowledge.schema.json",
+  "title": "Knowledge base",
+  "description": "Builtin entry front matter, the team registration file and knowledge get results (DSKL-120 to DSKL-123).",
+  "anyOf": [
+    {"$ref": "#/$defs/builtin_front_matter"},
+    {"$ref": "#/$defs/registration_file"},
+    {"$ref": "#/$defs/get_builtin"},
+    {"$ref": "#/$defs/get_team"}
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"},
+    "kind": {"enum": ["guide", "rule", "resource", "troubleshooting", "reference"]},
+    "applies_to": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "builtin_front_matter": {
+      "type": "object",
+      "required": ["id", "title", "kind", "applies_to", "tags", "lang", "based_on", "updated_on"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1},
+        "kind": {"$ref": "#/$defs/kind"},
+        "applies_to": {"$ref": "#/$defs/applies_to"},
+        "tags": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}},
+        "lang": {"enum": ["zh", "en"]},
+        "based_on": {"type": "string", "minLength": 1},
+        "updated_on": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "severity": {"enum": ["error", "warning", "info"]},
+        "check": {"type": "string", "minLength": 1},
+        "location": {"type": "string", "minLength": 1},
+        "version": {"type": "string"},
+        "units": {"type": "string"},
+        "license": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "rule"}}},
+          "then": {"required": ["severity", "check"]},
+          "else": {"not": {"anyOf": [{"required": ["severity"]}, {"required": ["check"]}]}}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "resource"}}},
+          "then": {"required": ["location", "version", "units", "license"]},
+          "else": {"not": {"anyOf": [{"required": ["location"]}, {"required": ["version"]}, {"required": ["units"]}, {"required": ["license"]}]}}
+        }
+      ]
+    },
+    "feishu_url": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://([a-z0-9-]+\\.)+(feishu\\.cn|larksuite\\.com)(/[^\\s@]*)?$"
+    },
+    "team_entry": {
+      "type": "object",
+      "required": ["id", "title", "kind", "url", "provider", "added_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1},
+        "kind": {"$ref": "#/$defs/kind"},
+        "url": {"$ref": "#/$defs/feishu_url"},
+        "about": {"type": "string", "maxLength": 200},
+        "applies_to": {"$ref": "#/$defs/applies_to"},
+        "provider": {"const": "feishu"},
+        "added_at": {"$ref": "error.schema.json#/$defs/utc"}
+      }
+    },
+    "registration_file": {
+      "type": "object",
+      "required": ["entries"],
+      "additionalProperties": false,
+      "properties": {
+        "entries": {"type": "array", "items": {"$ref": "#/$defs/team_entry"}}
+      }
+    },
+    "get_builtin": {
+      "type": "object",
+      "required": ["source", "entry", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {"const": "builtin"},
+        "entry": {"$ref": "#/$defs/builtin_front_matter"},
+        "body": {"type": "string", "maxLength": 6000}
+      }
+    },
+    "get_team": {
+      "type": "object",
+      "required": ["source", "entry", "reader"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {"const": "team"},
+        "entry": {"$ref": "#/$defs/team_entry"},
+        "reader": {"const": "lark-cli"}
+      }
+    }
+  }
+}

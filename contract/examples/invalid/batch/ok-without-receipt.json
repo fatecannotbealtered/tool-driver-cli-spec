@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "target": {
+        "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+        "kind": "footprint",
+        "label": "R1"
+      },
+      "ok": true
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "failed": 0,
+    "unknown": 0,
+    "skipped": 0
+  }
+}

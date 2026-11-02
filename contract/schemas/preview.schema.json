@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/preview.schema.json",
+  "title": "Dry-run data",
+  "description": "The data of a --dry-run call (DCLI-054). Direct-tier commands return only the preview.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["preview", "confirm_token", "expires_at", "operation_id"],
+      "additionalProperties": false,
+      "properties": {
+        "preview": {"$ref": "#/$defs/preview"},
+        "confirm_token": {"type": "string", "minLength": 1},
+        "expires_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "operation_id": {"$ref": "#/$defs/operation_id"}
+      }
+    },
+    {
+      "type": "object",
+      "required": ["preview"],
+      "additionalProperties": false,
+      "properties": {
+        "preview": {"allOf": [{"$ref": "#/$defs/preview"}, {"properties": {"tier": {"const": "direct"}}}]}
+      }
+    }
+  ],
+  "$defs": {
+    "operation_id": {"type": "string", "pattern": "^op_[A-Za-z0-9]+$"},
+    "tier": {"enum": ["direct", "two_step", "dangerous"]},
+    "effect": {"enum": ["observe", "session", "change", "artifact", "persist", "configure", "deliver", "physical"]},
+    "target": {
+      "type": "object",
+      "required": ["key", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {"type": "string", "pattern": "^(file:///|session:|device:)"},
+        "kind": {"type": "string", "minLength": 1},
+        "label": {"type": "string"}
+      }
+    },
+    "session_ref": {
+      "type": "object",
+      "required": ["id", "generation"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "generation": {"type": "integer", "minimum": 0}
+      }
+    },
+    "document_ref": {
+      "type": "object",
+      "required": ["id", "revision", "dirty"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "revision": {"type": "integer", "minimum": 0},
+        "dirty": {"type": "boolean"}
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["field", "before", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "field": {"type": "string", "minLength": 1},
+        "before": true,
+        "after": true,
+        "origin": {"enum": ["tool", "external"]}
+      }
+    },
+    "preview": {
+      "type": "object",
+      "required": ["operation_id", "command", "action", "target", "effects", "tier", "changes", "inputs", "can_apply"],
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {"$ref": "#/$defs/operation_id"},
+        "command": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "target": {"oneOf": [{"$ref": "#/$defs/target"}, {"type": "array", "items": {"$ref": "#/$defs/target"}, "minItems": 1}]},
+        "effects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/effect"}},
+        "tier": {"$ref": "#/$defs/tier"},
+        "changes": {"type": "array", "items": {"$ref": "#/$defs/change"}},
+        "session": {"$ref": "#/$defs/session_ref"},
+        "document": {"$ref": "#/$defs/document_ref"},
+        "inputs": {"type": "object"},
+        "can_apply": {"type": "boolean"},
+        "blocked_by": {"type": "array", "items": {"type": "string"}}
+      },
+      "if": {"properties": {"can_apply": {"const": false}}},
+      "then": {"required": ["blocked_by"], "properties": {"blocked_by": {"minItems": 1}}}
+    }
+  }
+}

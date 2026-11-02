@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/objects.schema.json",
+  "title": "Standard objects",
+  "description": "Sessions, documents, long jobs, devices and host components (DCLI-203, DCLI-210, DCLI-220, DCLI-230, DCLI-240). A value is one object or a list page of one kind.",
+  "anyOf": [
+    {"$ref": "#/$defs/session"},
+    {"$ref": "#/$defs/document"},
+    {"$ref": "#/$defs/job"},
+    {"$ref": "#/$defs/device"},
+    {"$ref": "#/$defs/plugin"},
+    {"$ref": "#/$defs/page"}
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1},
+    "session": {
+      "type": "object",
+      "required": ["id", "application", "pid", "owned", "generation", "state", "documents", "plugin_loaded"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "application": {
+          "type": "object",
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": {"name": {"type": "string"}, "version": {"type": "string"}}
+        },
+        "pid": {"type": "integer", "minimum": 0},
+        "owned": {"type": "boolean"},
+        "generation": {"type": "integer", "minimum": 0},
+        "state": {"enum": ["starting", "ready", "busy", "blocked", "lost", "closed"]},
+        "documents": {"type": "array", "items": {"type": "string"}},
+        "plugin_loaded": {"type": ["string", "null"]}
+      }
+    },
+    "document": {
+      "type": "object",
+      "required": ["id", "path", "revision", "dirty", "readonly", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "path": {"type": ["string", "null"]},
+        "session": {"type": ["string", "null"]},
+        "revision": {"type": "integer", "minimum": 0},
+        "dirty": {"type": "boolean"},
+        "readonly": {"type": "boolean"},
+        "state": {"enum": ["clean", "dirty", "readonly", "conflict", "missing"]}
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": ["id", "operation_id", "status", "cancel_requested", "started_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
+        "status": {"enum": ["planned", "running", "succeeded", "failed", "partial", "unknown", "cancelled"]},
+        "cancel_requested": {"type": "boolean"},
+        "progress": {
+          "type": "object",
+          "required": ["done", "total", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "done": {"type": "number", "minimum": 0},
+            "total": {"type": ["number", "null"], "minimum": 0},
+            "unit": {"type": "string"}
+          }
+        },
+        "started_at": {"$ref": "error.schema.json#/$defs/utc"}
+      }
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "model", "firmware", "state", "simulated"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "model": {"type": "string"},
+        "firmware": {"type": "string"},
+        "state": {"enum": ["ready", "busy", "fault", "emergency_stop", "offline"]},
+        "simulated": {"type": "boolean"}
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "required": ["name", "version_on_disk", "protocol_version", "install_path", "loaded"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "version_on_disk": {"type": ["string", "null"]},
+        "protocol_version": {"type": "string"},
+        "install_path": {"type": ["string", "null"]},
+        "loaded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["session", "version"],
+            "additionalProperties": false,
+            "properties": {"session": {"type": "string"}, "version": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "page": {
+      "allOf": [
+        {"$ref": "envelope.schema.json#/$defs/list_page"},
+        {
+          "properties": {
+            "items": {
+              "oneOf": [
+                {"items": {"$ref": "#/$defs/session"}},
+                {"items": {"$ref": "#/$defs/document"}},
+                {"items": {"$ref": "#/$defs/job"}},
+                {"items": {"$ref": "#/$defs/device"}}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

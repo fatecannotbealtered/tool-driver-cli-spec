@@ -1,0 +1,13 @@
+{
+  "scope_id": "review-only",
+  "effects": [
+    "change",
+    "persist"
+  ],
+  "dangerous": false,
+  "targets": [
+    "file:///D:/proj/board.kicad_pcb"
+  ],
+  "expires_at": "2026-11-03T00:00:00Z",
+  "confirm": "always"
+}

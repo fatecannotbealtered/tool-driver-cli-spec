@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "id": "team-layout-rules",
+      "title": "Team PCB layout rules",
+      "kind": "rule",
+      "url": "https://example.feishu.cn/wiki/AbCdEf123456",
+      "about": "Read before placing or routing.",
+      "applies_to": [
+        "footprint",
+        "track"
+      ],
+      "provider": "feishu",
+      "added_at": "2026-11-02T08:30:00Z"
+    }
+  ]
+}

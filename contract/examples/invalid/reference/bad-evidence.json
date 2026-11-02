@@ -1,0 +1,54 @@
+{
+  "path": "footprint move",
+  "summary": "Move one or more footprints.",
+  "flags": [
+    {
+      "name": "--ref",
+      "summary": "Reference designator.",
+      "required": true,
+      "type": "string"
+    },
+    {
+      "name": "--x",
+      "summary": "X position.",
+      "type": "length",
+      "unit": "mm"
+    }
+  ],
+  "output_schema": {
+    "type": "object"
+  },
+  "examples": [
+    "kicad-cli footprint move --ref R1 --x 12.5mm --y 30mm"
+  ],
+  "effects": [
+    "change"
+  ],
+  "tier": "direct",
+  "maturity": "experimental",
+  "evidence": [
+    "real:docs/evidence/run.json"
+  ],
+  "modes": [
+    "session"
+  ],
+  "capabilities": [
+    "preview",
+    "apply",
+    "read_back"
+  ],
+  "errors": [
+    "E_AMBIGUOUS",
+    "E_BUSY",
+    "E_HUMAN_REQUIRED",
+    "E_OUTCOME_UNKNOWN"
+  ],
+  "default_fields": [
+    "ref",
+    "x_mm",
+    "y_mm"
+  ],
+  "related_knowledge": [
+    "move-locked-footprint"
+  ]
+}
