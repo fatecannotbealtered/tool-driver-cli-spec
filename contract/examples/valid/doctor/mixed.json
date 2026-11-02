@@ -1,0 +1,51 @@
+{
+  "checks": [
+    {
+      "check": "state_store",
+      "status": "pass",
+      "message": "State directory is usable and private."
+    },
+    {
+      "check": "authorization",
+      "status": "warn",
+      "message": "No scope file; writes will be refused.",
+      "fix": "Ask the user to write a scope file."
+    },
+    {
+      "check": "version",
+      "status": "pass",
+      "message": "CLI and Skills are both 1.2.0."
+    },
+    {
+      "check": "update",
+      "status": "pass",
+      "message": "1.2.0 is the latest version."
+    },
+    {
+      "check": "application",
+      "status": "pass",
+      "message": "KiCad 10.0.1 found."
+    },
+    {
+      "check": "license",
+      "status": "pass",
+      "message": "No license needed."
+    },
+    {
+      "check": "plugin",
+      "status": "pass",
+      "message": "No host component needed."
+    },
+    {
+      "check": "sessions",
+      "status": "pass",
+      "message": "No running instances."
+    },
+    {
+      "check": "knowledge",
+      "status": "warn",
+      "message": "Team knowledge is registered but lark-cli is not on PATH.",
+      "fix": "Install lark-cli and sign in, following lark-cli's own instructions."
+    }
+  ]
+}

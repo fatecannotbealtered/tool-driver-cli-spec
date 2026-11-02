@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "read",
+  "params": {
+    "command": "footprint get",
+    "inputs": {
+      "id": "R1"
+    },
+    "session": "kicad-1234",
+    "document": "doc_1"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "schema_version": "1.0",
+  "data": {
+    "id": "doc_1",
+    "path": "D:/proj/board.kicad_pcb",
+    "session": "kicad-1234",
+    "revision": "rev-7",
+    "dirty": true,
+    "readonly": false,
+    "disk": "in_sync"
+  },
+  "meta": {
+    "duration_ms": 38
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/eval-report.schema.json",
+  "title": "Evaluation report",
+  "description": "One run of a tool's evaluation questions with an Agent, stored as docs/evidence/eval-*.json (DSKL-043, DVER-041).",
+  "type": "object",
+  "required": ["tool", "tool_version", "date", "agent", "model", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {"type": "string", "minLength": 1},
+    "tool_version": {"$ref": "host-protocol.schema.json#/$defs/semver"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "agent": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "questions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/question"}}
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["scenario", "id", "passed"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario": {
+          "enum": ["read_answer", "scoped_change", "ambiguous_name", "injected_instruction", "requested_dangerous", "out_of_scope_change", "lost_reply", "multi_page_list", "partial_batch", "knowledge_lookup", "multiple_instances", "close_unsaved", "blocking_dialog", "busy_application", "dialog_after_dispatch", "separate_save", "physical_action", "long_job"]
+        },
+        "id": {"type": "string", "pattern": "^[a-z0-9]+([-_][a-z0-9]+)*$"},
+        "passed": {"type": "boolean"},
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}

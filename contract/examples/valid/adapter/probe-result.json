@@ -1,0 +1,10 @@
+{
+  "result": {
+    "probe": {
+      "found": true,
+      "path": "C:/Program Files/KiCad/10.0/bin/kicad.exe",
+      "version": "10.0.1",
+      "license": "not_required"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "code": "E_VERIFY_INCOMPLETE",
+  "message": "R1 was moved but could not be read back.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "dispatched",
+    "next_action": "Read R1 with `kicad-cli footprint get --session kicad-1234 --doc doc_1 --id R1` to check its position.",
+    "receipt": {
+      "operation_id": "op_7mq2xk4v",
+      "command": "footprint move",
+      "target": {
+        "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+        "kind": "footprint",
+        "label": "R1"
+      },
+      "effects": [
+        "change"
+      ],
+      "tier": "direct",
+      "outcome": {
+        "execution": "completed",
+        "change": "applied",
+        "delivery": "not_applicable",
+        "persistence": "unchanged",
+        "verification": "not_run"
+      },
+      "observed": {},
+      "mismatched": [],
+      "session": {
+        "id": "kicad-1234",
+        "generation": 3
+      },
+      "document": {
+        "id": "doc_1",
+        "revision": "rev-8",
+        "dirty": true
+      }
+    }
+  }
+}

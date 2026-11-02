@@ -1,0 +1,17 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "apply",
+  "params": {
+    "operation_id": "op_7mq2xk4v",
+    "command": "footprint move",
+    "inputs": {
+      "id": "R1",
+      "x_mm": 12.5,
+      "y_mm": 30.0
+    },
+    "session": "kicad-1234",
+    "document": "doc_1",
+    "deadline_ms": 10000
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "operation_id": "op_d8x3",
+  "receipt": {
+    "operation_id": "op_d8x3",
+    "command": "drc run",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "artifact"
+    ],
+    "tier": "direct",
+    "outcome": {
+      "execution": "completed",
+      "change": "not_applicable",
+      "delivery": "not_applicable",
+      "persistence": "not_applicable",
+      "verification": "not_applicable"
+    },
+    "observed": {},
+    "mismatched": [],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": "rev-8",
+      "dirty": true
+    }
+  },
+  "result": {
+    "job": {
+      "id": "8",
+      "state": "running",
+      "poll": "kicad-cli job get --job 8"
+    }
+  }
+}

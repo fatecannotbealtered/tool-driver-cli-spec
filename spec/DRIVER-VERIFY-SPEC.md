@@ -1,0 +1,396 @@
+# DRIVER-VERIFY-SPEC
+
+English | [中文](DRIVER-VERIFY-SPEC_zh.md)
+
+> Version 1.0.0-rc.1 · Clauses DVER-001 to DVER-051
+
+## How to Read
+
+This specification says how a driver tool proves that it works. Each rule is a clause with a fixed ID, such as `DVER-010`. A clause ends with two lines. `Why:` gives the reason. `Check:` says how the rule is checked: 🤖 means a test or a script checks it, 👀 means a person checks it in review.
+
+The normative words mean:
+
+- MUST and MUST NOT: required. A tool that breaks the rule does not conform.
+- SHOULD and SHOULD NOT: the expected choice. Depart from it only for a reason you can state.
+- MAY: allowed, not required.
+
+The machine contract `contract/driver-contract.json` holds the test IDs, the behavior matrix rows, when each test and each row applies, the maturity levels and the evidence kinds as data. The schemas in `contract/schemas/` define the files that hold evidence. Tables that repeat contract values carry a contract marker. When such a table and the contract disagree, the contract wins.
+
+## Scope
+
+This specification applies to every driver tool and to the driver runtime. It covers:
+
+- the two conformance suites every tool runs: the general suite (G and R tests) and the driver suite (D tests)
+- the fake host, which stands in for the application in tests, and the command simulations a tool supplies for it
+- the behavior matrix of each domain command, and of each standard command that calls an adapter capability
+- the maturity level and the evidence that every command declares
+- live acceptance on the real application
+
+It does not repeat the rules being tested. Each test names the clauses it checks.
+
+Three kinds of runs give evidence, and each proves something different. The conformance suites prove that the runtime handles every situation correctly for the tool. The behavior matrix, run on the fake host with the command's simulation, proves that the command behaves as it declares. Only a live run exercises the tool's real adapter with the real application (DVER-021).
+
+One idea runs through this specification: only what is tested counts. Not run is not passed. Simulated is not real. Not verified is not success.
+
+## Terms
+
+| Term | Meaning |
+|---|---|
+| driver runtime | The shared code every tool copies unchanged. It implements the built-in and standard commands, the write flow and receipts |
+| domain command | A command the tool author registers, as opposed to the built-in and standard commands of the runtime |
+| write command | A command whose declared effect is anything other than `observe` (DCLI-051) |
+| halt command | A command that only stops work in progress: a `stop` command or `job cancel`, registered with `halt: true`. It runs at once, without confirmation (DSEC-018) |
+| conformance test | One test of the two suites in this specification: general (G00 to G10, R01 to R06) and driver (D01 to D25) |
+| write sample | The arguments of one valid call to a write command, kept in the `normal` row of its behavior matrix and used by the general suite (DVER-002) |
+| fake host | A small program from the tool-driver-cli-spec repository that stands in for the application in tests (DVER-020) |
+| command simulation | The tool's fake adapter in `tests/simulation/` that lets its domain commands run on the fake host (DVER-023) |
+| behavior matrix | A JSON file per command, with one row per situation: arguments, expected and actual result, and evidence (DVER-030) |
+| maturity | How far a command is proven: `draft`, `experimental`, `verified` or `stable` (DVER-040) |
+| evidence | A file that shows a maturity claim is true. An evidence reference points to it (DVER-041) |
+| simulated evidence | Results obtained with the fake host, with or without a command simulation (DVER-021) |
+| live run | Running the tool, with its real adapter, against the real application on authorized targets |
+| live record | The JSON record of one live run, kept in `docs/evidence/` (DVER-042) |
+| eval report | The JSON file `docs/evidence/eval-*.json` that records a run of the tool's evaluation questions with Agents (DSKL-043) |
+| live acceptance | Checking the tool on the real application, as described in `docs/E2E.md` |
+| authorized target | An application instance, file, folder or device that a person allows live runs to use, listed in `docs/E2E.md` (DVER-050) |
+
+## Runtime and Tool Responsibilities
+
+| Area | The runtime and the tool-driver-cli-spec repository provide | The tool author does |
+|---|---|---|
+| Conformance suites | Both suites, which run any tool from the command line | Runs both suites in CI on every merge and release, on every shipped platform |
+| Write samples | The G tests that use the samples; samples for built-in and standard commands | The `normal` row of each domain write command's behavior matrix |
+| Fake host | The fake host, with the in-process adapter interface and the host protocol | Nothing to write |
+| Command simulations | The adapter payload schema; the fake host runs a simulation in place of the adapter | One simulation of each domain command in `tests/simulation/` |
+| Behavior matrix | The rows and when each applies, the matrix schema and the matrix runner | One matrix file per domain command and per standard command that calls an adapter capability |
+| Maturity and evidence | Maturity and evidence shown by `reference`; `check_project` compares levels with evidence | Declares the level and the evidence of each command and keeps the evidence current |
+| Live acceptance | The schemas of live records and eval reports | Runs on authorized targets; writes `docs/E2E.md` and the records in `docs/evidence/` |
+
+## General Conformance
+
+### DVER-001 Conformance suites
+
+The driver runtime comes with two conformance suites: the general suite (DVER-003) and the driver suite (DVER-010). Every tool MUST run both suites on every merge and every release, on every platform it ships (DREPO-041). A tool MUST NOT skip, weaken or edit any test, and MUST NOT mark a test as an expected failure. A test that applies (DVER-010) but did not run counts as failed. The suites MUST NOT need the real application, a license or a device: the fake host stands in for them (DVER-020).
+
+Why: The suites check the rules every Agent relies on. A skipped test hides a broken rule behind a green build.
+Check: 👀 Review of the CI workflow: both suites run on every shipped platform, and no test is skipped or changed.
+
+### DVER-002 Write samples
+
+The tool MUST supply one valid sample for each domain write command, as the arguments of the `normal` row of its behavior matrix (DVER-030). A sample is the arguments of one call that the command accepts and that, run with `--dry-run`, returns a valid preview (G02). The general suite runs the samples in its write tests, through the command simulations (DVER-023). Samples for built-in and standard commands come with the suites. A command at maturity `draft` still needs its sample (DVER-040).
+
+Why: The suite cannot guess valid arguments for a domain command. Without a sample, the confirmation tests cannot run on it, and keeping it in the matrix leaves one place to update.
+Check: 🤖 General conformance test G00.
+
+### DVER-003 General conformance tests
+
+The general suite MUST contain the tests below, and every tool MUST pass all of them. In the pass conditions, "nothing written" means the documents, files and devices the test uses are unchanged afterwards. The last column names the clauses each test checks.
+
+<!-- contract:conformance_general -->
+| ID | What the test does | Pass condition | Checks |
+|---|---|---|---|
+| `G00` | Looks up the sample of every write command: the `normal` row of its behavior matrix, or the suites' own sample for built-in and standard commands | Every write command has a sample | DVER-002 |
+| `G01` | Runs the sample of each two-step command without flags | Exit code 5 with `E_CONFIRMATION_REQUIRED`; `details` hold `preview`, `confirm_token` and `expires_at`; nothing written | DCLI-014, DCLI-050, DCLI-051, DCLI-053, DSEC-003 |
+| `G02` | Runs each sample with `--dry-run` | Exit code 0; the preview is valid; nothing written | DCLI-054 |
+| `G03` | Gets a token for a sample, then confirms with one argument changed, one removed or one added | `E_CONFLICT` with `token_mismatch`, naming the argument; nothing written | DCLI-055, DCLI-056 |
+| `G04` | Confirms with the same arguments, then confirms again with the same token | The first call succeeds; the second gets `E_CONFLICT` with `token_used`; the change is written once | DCLI-055, DCLI-056, DSEC-033 |
+| `G05` | Confirms with tampered tokens | Every attempt is refused with `E_CONFLICT` `token_invalid`; nothing written | DCLI-055, DSEC-033 |
+| `G06` | Runs the sample of a two-step command with `--format text` and no token | Exit code 5; nothing written | DCLI-014, DCLI-053 |
+| `G07` | Dry-runs and confirms with no scope file | `E_FORBIDDEN` with `details.scope` naming what is missing; nothing written | DCLI-050, DSEC-015 |
+| `G08` | Makes `operations/` in the state directory unwritable, then runs the write samples and a read | Every write gets `E_IO` and nothing is written; the read still works | DCLI-059, DSEC-033 |
+| `G09` | Confirms the token of each dangerous command without `--dangerous` | Exit code 5; nothing written | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
+| `G10` | Changes the scope file between the dry run and the confirm | `E_CONFLICT` with `scope_changed`; nothing written | DCLI-056, DSEC-015 |
+| `R01` | Validates `reference` (the index), `reference --command` and `reference --all --output` | Valid structure; the index is at most 8000 characters and one command at most 6000; every command shows its tier per mode; every example parses | DCLI-030, DCLI-031, DCLI-051, DCLI-201 |
+| `R02` | Walks the command tree | Follows DCLI-020 to DCLI-024; every command has a summary, an output schema and examples | DCLI-020, DCLI-021, DCLI-022, DCLI-024, DCLI-031 |
+| `R03` | Sends an unknown command, an unknown flag and an extra argument | `E_USAGE` with `problem` and the suggested correct form | DCLI-011, DCLI-012, DCLI-013 |
+| `R04` | Validates every envelope the suites see | Matches the contract; keys are snake_case; `*_at` values are UTC; within the size limits | DCLI-001, DCLI-003, DCLI-004, DCLI-005, DCLI-006, DCLI-008, DCLI-010, DCLI-011, DCLI-012, DCLI-013, DCLI-014, DCLI-061 |
+| `R05` | Runs `context`, `doctor` and `operation list` on an empty state directory | Valid output; `doctor` lists every fixed check | DCLI-030, DCLI-032, DCLI-033, DCLI-035, DSEC-016, DSKL-125 |
+| `R06` | Counts coverage after the tool's own tests | Every domain command and every standard command ran in the tool's own tests | DVER-004 |
+
+Why: These tests cover the write safety and the self-description that all tools share, so an Agent can trust every tool in the same way.
+Check: 🤖 General conformance tests G00 to G10 and R01 to R06.
+
+### DVER-004 Every command is exercised
+
+The tool's own tests MUST run every domain command and every driver standard command the tool offers (DCLI-200) at least once; the runs of the behavior matrices count. After they finish, test R06 counts which of these commands ran and fails when one did not. Built-in commands (DCLI-030) contain no tool code; the runtime's unit tests cover them (DVER-022).
+
+Why: A command that no test runs can break in any release without anyone noticing.
+Check: 🤖 General conformance test R06.
+
+## Driver Conformance
+
+### DVER-010 Driver conformance tests
+
+The driver suite MUST contain the tests below, and every tool MUST pass every test that applies to it. The contract lists, for each test, when it applies under `conformance.driver[].applies_when`, with values from `conformance.applies_when_values`. A test applies when any of its values holds:
+
+- `always`: for every tool;
+- `writes`: the tool has write commands;
+- `direct_writes`: the tool has a write command that runs in the direct tier, in at least one mode (DCLI-052);
+- `documents`: the tool acts on documents, in file or session mode;
+- `dangerous`: the tool has a command that runs in the dangerous tier, at least in some cases (DCLI-051);
+- `jobs`: the tool has long jobs;
+- `session` or `device`: the tool supports that mode;
+- `host_component`: the tool has a host component;
+- `physical`: the tool has commands with the `physical` effect;
+- `halt`: the tool has a halt command (DSEC-018) in session or device mode.
+
+The runtime, not the tool author, decides from the command registration (DCLI-029) which tests apply. It reports a test that does not apply as not applicable, with its condition. The suite runs the CLI with the fake host in place of the application, and with the command simulations for domain commands (DVER-023), so its results are simulated evidence (DVER-021). The last column names the clauses each test checks.
+
+<!-- contract:conformance_driver -->
+| ID | Applies when | Scenario | Expected result | Checks |
+|---|---|---|---|---|
+| `D01` | `session` | Several instances; the command has no `--session` | `E_AMBIGUOUS` listing the candidates, each with its session summary | DCLI-202 |
+| `D02` | `session` | The instance reconnects or restarts after the dry run | The confirm is refused with `E_CONFLICT` `session_changed` | DCLI-056, DCLI-203 |
+| `D03` | `documents` | The document changes after the dry run | The confirm is refused with `E_CONFLICT` `document_changed` | DCLI-056, DCLI-210 |
+| `D04` | `session`, `device` | The application or the device is busy | `E_BUSY`, retryable, with `retry_after_ms`; `dispatch_state` is `not_started` | DCLI-057, DCLI-204, DCLI-276 |
+| `D05` | `session` | A dialog blocks the application before dispatch; separately, the change itself opens a dialog after dispatch | Before dispatch: `E_HUMAN_REQUIRED` with `action` and a `resume` command that runs the call again. After dispatch: the operation is outcome unknown, the target stays locked and `resume` is the lookup, never the write | DCLI-066, DCLI-204 |
+| `D06` | `session`, `device` | The connection drops after dispatch | `E_OUTCOME_UNKNOWN` whose `lookup` names `operation resolve`; the target stays locked until the outcome is resolved | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-275 |
+| `D07` | `writes` | A change is applied but cannot be read back | `E_VERIFY_INCOMPLETE`, with the receipt | DCLI-057, DCLI-062 |
+| `D08` | `writes` | The read-back differs from the preview's `after` value by more than the declared tolerance | `E_VERIFY_FAILED`, with the mismatched fields | DCLI-057, DCLI-062 |
+| `D09` | `session` | A change in session mode | Persistence is `unchanged` and `dirty` is `true`; after `doc save`, persistence is `saved` | DCLI-058, DCLI-061 |
+| `D10` | `session` | Closing a document with unsaved changes | Refused with `E_CONFLICT` `unsaved_changes`; with `--discard` it is dangerous and refused without `--dangerous` | DCLI-212 |
+| `D11` | `jobs` | Cancelling a long job | `cancel_requested` is reported first; the job's `state` becomes `cancelled` only after the application confirms it stopped | DCLI-065, DCLI-220, DCLI-221 |
+| `D12` | `host_component` | The host component on disk differs from the loaded version | The `plugin` check of `doctor` fails; write commands are refused with `E_HUMAN_REQUIRED`, action `restart_application` | DCLI-240, DSEC-053 |
+| `D13` | `always` | A physical parameter registered without a unit; separately, a call that gives a physical parameter as a bare number | The registration is rejected; the call returns `E_USAGE` whose `problem` lists the accepted units | DCLI-029, DCLI-085 |
+| `D14` | `physical` | A physical effect without `--dangerous`, or with a scope that does not allow `physical` | Refused; nothing is dispatched | DSEC-014, DSEC-060 |
+| `D15` | `device` | A simulated device | The device object and the result of every command on it carry `simulated: true` | DCLI-230, DSEC-062 |
+| `D16` | `session` | A direct change in session mode | Done in one call, with an operation record, read-back and a full receipt; refused like any write when there is no scope | DCLI-050, DCLI-052, DSEC-015 |
+| `D17` | `direct_writes` | The scope sets `confirm` to `always` | A direct-tier command run without flags returns `E_CONFIRMATION_REQUIRED` with a preview and a token, and does not run | DCLI-052, DSEC-013 |
+| `D18` | `session` | A person edits the document in the application before save | The `doc save` preview lists both the tool's changes (`origin: tool`) and the external ones (`origin: external`) | DCLI-058, DCLI-277 |
+| `D19` | `always` | Registers a link that is not a Feishu link; then, with no scope file, registers a Feishu link and reads it | The first returns `E_VALIDATION` and registers nothing. The second needs two-step confirmation but no scope; `knowledge get` returns the link and the reader; the link and the description are listed in `meta.untrusted`. No network request at any point | DSEC-021, DSEC-041, DSEC-042, DSKL-102, DSKL-104, DSKL-105, DSKL-107, DSKL-110, DSKL-122, DSKL-123 |
+| `D20` | `host_component` | The host component's protocol major version differs from the CLI's | The handshake fails with `E_PROTOCOL`; no change is sent | DCLI-273, DCLI-280, DSEC-054 |
+| `D21` | `host_component` | The host closes the connection before it replies | To a write: the write is recorded as outcome unknown and its target stays locked. To a read: `E_BUSY`, and the session is reported `unresponsive` | DCLI-063, DCLI-204, DCLI-275, DCLI-278 |
+| `D22` | `session` | One of two instances does not respond | `session list` returns both within 5 s; the silent one has `state` `unresponsive` | DCLI-204, DCLI-205 |
+| `D23` | `device` | The device is in `emergency_stop` or `fault` when a command other than a halt command acts on it | `E_HUMAN_REQUIRED` with action `confirm_on_device`; `dispatch_state` is `not_started`; nothing is dispatched | DCLI-230, DSEC-061 |
+| `D24` | `writes` | A batch in which one object fails | `E_PARTIAL` with `details.batch`: the failed item carries its error code, and the other objects are applied and reported as succeeded | DCLI-064 |
+| `D25` | `halt` | The device, or the instance, is `busy` when a halt command acts on it; the scope sets `confirm: always` and covers the target but not the `lifecycle` effect | The command runs at once, with no `E_BUSY` and no confirmation, and returns a receipt | DCLI-230, DSEC-018 |
+
+Why: These are the failures specific to driving an application: two open projects, an unsaved change taken as done, a dialog that hangs the call, a lost connection after a write, a stop that waits behind the work it should stop.
+Check: 🤖 Driver conformance tests D01 to D25.
+
+### DVER-011 Black-box testing
+
+The suites MUST treat the CLI as a black box. They start it from the command line as a separate process, and judge only its exit code, the envelope on stdout and what the fake host received. They MUST NOT import the tool's code or call the runtime's functions directly. Each run MUST use a temporary state directory (DSEC-034). This keeps the suites independent of the implementation language: a runtime written in another language MUST pass the same suites unchanged.
+
+Why: An Agent sees only the command line. A test that looks inside would pass tools that fail Agents, and would tie the suites to one language.
+Check: 👀 Review of the suite code: every test starts the CLI as a process.
+
+## Fake Host
+
+### DVER-020 Fake host
+
+The tool-driver-cli-spec repository provides the fake host: a small program that stands in for the application in tests. It MUST offer both ways a tool reaches an application: the in-process adapter interface (DCLI-260) and the host protocol (DCLI-270 to DCLI-280), with the payloads of `contract/schemas/adapter.schema.json`. It is the reference implementation of that protocol (DCLI-281). It MUST be able to simulate:
+
+- several instances at once
+- documents in memory, with unsaved changes
+- dialogs, a busy main thread, an instance that does not reply in time, and a connection that closes before the reply
+- a person editing a document in the application
+- long jobs
+- one simulated device, which can be put in each device state (DCLI-230)
+
+The fake host implements the standard adapter capabilities itself. For domain commands it runs the tool's command simulations (DVER-023). Tests MUST be able to put the fake host into each of these situations and read its state, so they can see whether a change arrived and how often.
+
+The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
+
+Why: The failures that matter most, such as a dialog or a lost connection, are rare and hard to cause on demand in a real application.
+Check: 🤖 Driver conformance tests D01 to D25, which need each of these situations.
+
+### DVER-021 Simulated evidence
+
+Each kind of run proves something different:
+
+| Run | What runs | What it proves |
+|---|---|---|
+| Conformance suites (DVER-001) | The tool's CLI and command registration, with the fake host in place of the application | The runtime handles every situation correctly for this tool |
+| Behavior matrix on the fake host (DVER-030) | The same, with the command's simulation in place of the tool's adapter | The command behaves as it declares; enough for `experimental` |
+| Live run (DVER-042) | The tool's real adapter, with the real application | The adapter works with the application; needed for `verified` |
+
+Results of the first two kinds are simulated evidence. They MUST NOT be presented as results on the real application. A command or a support matrix entry backed only by simulated evidence MUST NOT be labeled `verified` (DREPO-022, DREPO-023). Results from a simulated device are simulated evidence too (DSEC-062).
+
+Why: The fake host and the simulations behave the way their authors wrote them, not the way the application behaves. Mixing the two would claim support that was never shown.
+Check: 🤖 `check_project`: nothing is marked `verified` without a `live:` record.
+
+### DVER-022 Fake host in the specification repository's CI
+
+The tool-driver-cli-spec repository MUST run the driver runtime, the project template and both conformance suites with the fake host in CI on Windows, macOS and Linux, on every merge and every release. It MUST also run every evaluation scenario of DSKL-040 there, with the template tool; a tool's own evaluation covers only the scenarios whose result depends on text its author wrote (DSKL-042). The runtime's unit tests MUST run in the same CI, on the same three systems. Like the two conformance suites, they are a required check: a failure blocks the merge and the release. They cover the built-in commands (DVER-004) and every rule whose check line cites runtime unit tests.
+
+Why: Every tool copies the runtime unchanged. A fault found here is fixed once instead of in every tool.
+Check: 👀 Review of the tool-driver-cli-spec repository's CI workflow.
+
+### DVER-023 Command simulations
+
+For each domain command, the tool MUST supply a simulation in `tests/simulation/`: a fake adapter that does, against the fake host's sessions, documents and device, what the command needs from the adapter, such as `read`, `preview`, `apply` and `read_back`, with the payloads of `contract/schemas/adapter.schema.json`. The fake host runs it in place of the tool's adapter whenever a test runs a domain command: the general suite runs the write samples through it (DVER-002), and the matrix runner runs every row of the command's behavior matrix through it (DVER-030).
+
+A simulation MUST behave as the command is registered (DCLI-029): it accepts the same inputs, previews and applies the change the command declares, reads back the fields that change, and gives the result each row of the matrix expects. It MUST NOT reach the real application. It is test code and MUST NOT ship in any npm package (DREPO-051).
+
+A simulation shows that the command is declared and handled correctly. It shows nothing about the real adapter or the real application (DVER-021, DVER-031).
+
+Why: The fake host does not know the application's objects, so a domain command can run in tests only through a simulation. Writing one also makes the author state the command's behavior in every situation.
+Check: 🤖 `check_project` checks that `tests/simulation/` covers every domain command in `contract/commands.json`; 👀 review compares each simulation with the command's registration.
+
+## Behavior Matrix
+
+### DVER-030 Behavior matrix
+
+Every domain command, and every standard command that calls an adapter capability (DCLI-200, DCLI-260), MUST have a behavior matrix: one JSON file per command in `tests/matrix/`, named after the command path, that validates against `contract/schemas/behavior-matrix.schema.json`. Built-in commands, and standard commands that call no adapter capability, such as the `knowledge` commands, need none; the runtime's unit tests cover them (DVER-022).
+
+The file lists each row of the table below once; each row is one situation. A row that applies to the command holds the arguments and the expected result: the exit code and, for a failure, the error code. Once the row has run, it also holds the actual result and an evidence reference (DVER-041). A row that does not apply holds `applies: false` and the reason. The contract lists when each row applies under `behavior_matrix_rows[].applies_when`; for a row, the values are read for the command: `writes` holds when it is a write command, `session` and `device` when it supports that mode, `documents` when it acts on a document, `host_component` when it reaches the application through the host component, and `always` always. Only the rows whose condition holds are run.
+
+<!-- contract:behavior_matrix_rows -->
+| Row | Group | Applies when | Situation |
+|---|---|---|---|
+| `normal` Normal | General | `always` | A valid call that succeeds; for a write command, its arguments are the sample (DVER-002) |
+| `empty` Empty | General | `always` | A valid call with nothing to return |
+| `invalid_input` Invalid input | General | `always` | Arguments that are malformed or out of range, or a physical value without a unit |
+| `not_found` Not found | General | `always` | The named object, document, session or job does not exist |
+| `ambiguous` Ambiguous | General | `always` | A name matches several objects or instances |
+| `conflict` Conflict | General | `writes` | A precondition fails, such as a locked target or a changed document |
+| `no_scope` No scope | General | `writes` | No scope file, or one that does not cover the call |
+| `busy` Busy | Driver | `session`, `device` | The application's main thread or the device is busy, or the instance does not reply in time |
+| `dialog` Dialog | Driver | `session` | A dialog blocks the application |
+| `disconnect` Disconnect | Driver | `session`, `device`, `host_component` | The connection drops during the call |
+| `unsaved` Unsaved | Driver | `documents` | The document has unsaved changes |
+| `read_back_mismatch` Read-back mismatch | Driver | `writes` | The value read back differs from the expected value by more than the declared tolerance |
+
+A row whose condition does not hold MUST be marked as not applying. A row whose condition holds but that cannot happen for the command MUST also stay in the file, marked as not applying, with the reason.
+
+The matrix runner, which comes with the runtime, runs every row that applies on the fake host, with the command's simulation for a domain command (DVER-023), and fills in its actual result and evidence. The merge gate runs it again (DREPO-041) and fails when a row's result differs from the expected one. A row that applies but has no actual result and evidence has not been run, and a row that has not been run MUST NOT count as passed. A live run of a row leaves its result in a live record that names the row (DVER-042); a row without a passing live run MUST NOT count as passed on the real application.
+
+Why: Agents meet these situations every day. A command whose behavior in them is unknown fails at the worst moment. A data file with every row lets a script see at once which row is missing or was never run.
+Check: 🤖 `check_project` validates every matrix file and compares each row's `applies` with the contract's conditions; the matrix runner runs every row that applies in the merge gate; 👀 review of the reasons given for rows that cannot happen.
+
+### DVER-031 Adapter behavior on real software
+
+The fake host and the command simulations cannot show how the real adapter behaves with the real application: whether it recognizes the application's real dialogs, and whether its read-back returns the values the application really holds. Only a live run exercises the real adapter. These MUST be checked by running the behavior matrix on the real application, on authorized targets (DVER-050). A claim about them MUST cite live evidence. Simulated evidence MUST NOT be used for it.
+
+Why: A fake dialog is whatever the test says it is. Only the real application shows whether the adapter sees its dialogs and reads its values correctly.
+Check: 🤖 `check_project`: in the matrix of every `verified` command, the `normal` row and, where they apply, the `dialog` and `read_back_mismatch` rows cite `live:` evidence.
+
+## Maturity and Evidence
+
+### DVER-040 Maturity levels
+
+Every command MUST declare a maturity level and the evidence references behind it. `reference` shows both (DCLI-031). A level MUST NOT be higher than its evidence supports. Built-in commands, and standard commands that call no adapter capability, take the level the runtime declares, backed by the runtime unit tests (DVER-022). Each level needs the evidence of the level below it plus its own:
+
+<!-- contract:maturity_levels -->
+| Level | Meaning | Evidence needed |
+|---|---|---|
+| `draft` | Declared; the interface may still change | None; a write command still needs its sample (G00) |
+| `experimental` | The behavior matrix passes on the fake host | `simulated:` references to the command's behavior matrix |
+| `verified` | Also run on the real application, with the real adapter and a record | Plus current `live:` evidence for the `normal` row and, where they apply, the `dialog` and `read_back_mismatch` rows (DVER-031, DVER-043) |
+| `stable` | Also passed evaluation, with no open severe defect | Plus a current `eval:` report (DSKL-043) |
+
+When evidence stops counting, the level MUST drop to the highest level the remaining evidence supports. A severe defect is one that makes a command report success for a wrong result, change something outside its target or scope, or lose the user's data.
+
+Why: Maturity tells an Agent and a person how far to trust a command. A level above its evidence is a false promise.
+Check: 🤖 `check_project`: the level of every command in `reference` is backed by the evidence that level needs.
+
+### DVER-041 Evidence references
+
+An evidence reference has the form `<kind>:<path>[#<anchor>]`. The `path` is relative to the root of the tool project and MUST name a file in the repository. The `anchor` is optional and names one part of that file, such as one behavior matrix row. The `kind` MUST be one of these:
+
+<!-- contract:evidence_kinds -->
+| Kind | What it shows | Where the file is |
+|---|---|---|
+| `simulated` | The command's behavior matrix passes on the fake host | The command's behavior matrix in `tests/matrix/`, with the row as anchor (DVER-030) |
+| `live` | The command ran on the real application, with the real adapter | A live record in `docs/evidence/` (DVER-042) |
+| `eval` | Agents completed the tool's evaluation questions with its Skills | An eval report `docs/evidence/eval-*.json` for the questions in `tests/eval/` (DSKL-043) |
+
+Each file MUST validate against its schema in `contract/schemas/`: a behavior matrix against `behavior-matrix.schema.json`, a live record against `evidence.schema.json` and an eval report against `eval-report.schema.json`.
+
+Examples: `simulated:tests/matrix/footprint-move.json` and `live:docs/evidence/2026-11-01-footprint-move.json#normal`.
+
+Why: A reference that names a real file lets a script and a person check each claim instead of trusting it.
+Check: 🤖 `check_project`: every reference parses, uses a listed kind and names an existing file, and every matrix, record and report validates against its schema.
+
+### DVER-042 Live records
+
+Each live run MUST leave one JSON record in `docs/evidence/` that validates against `contract/schemas/evidence.schema.json`. The record holds:
+
+- `kind`: always `live`
+- `tool`, `tool_version` and `commit`: the tool and the exact build that ran
+- `application`: the name and version of the application
+- `os`: the operating system
+- `recorded_at`: the time of the run, in UTC
+- `targets`: the authorized targets the run used (DVER-050)
+- `runs`: one entry per command, with the command path, its arguments, the exit code and `result`
+
+`result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`), its SHA-256 (`envelope_sha256`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
+
+```json
+{
+  "kind": "live",
+  "tool": "kicad-cli",
+  "tool_version": "1.4.2",
+  "commit": "3f9c2ab",
+  "application": {"name": "KiCad", "version": "10.0.1"},
+  "os": "Windows 11 24H2 x64",
+  "recorded_at": "2026-11-01T09:30:00Z",
+  "targets": ["file:///D:/e2e/demo-board/"],
+  "runs": [
+    {
+      "command": "footprint move",
+      "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
+      "exit": 0,
+      "result": "pass",
+      "matrix_row": "normal",
+      "envelope_sha256": "090b93f6516be82d6d224af36e040f4997faff07f3cda65b9c973520bd833fc3"
+    },
+    {
+      "command": "footprint move",
+      "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R2", "--x", "15mm", "--y", "30mm"],
+      "exit": 7,
+      "result": "pass",
+      "matrix_row": "busy",
+      "notes": "Started during a design rule check; E_BUSY with dispatch_state not_started."
+    }
+  ]
+}
+```
+
+Why: A record with versions, arguments and results lets anyone see what was run and run it again. A summary written from memory proves nothing.
+Check: 🤖 `check_project` validates every record in `docs/evidence/` against the evidence schema.
+
+### DVER-043 Current evidence
+
+A live record counts as evidence only while its `tool_version` has the same major and minor version as the tool. An eval report counts by the same rule, using the tool version it names. Evidence from another major or minor version MUST NOT support a maturity level. For tool version 1.4.2, a record from 1.4.0 counts and a record from 1.3.9 does not. After a new minor or major version, a command stays `verified` only with a new live record, and `stable` only with a new live record and a new eval report (DVER-040).
+
+Why: A minor version can change behavior. Evidence from an older version says little about the current one.
+Check: 🤖 `check_project` compares the tool version in each record and report with the version in `package.json`.
+
+## Live Acceptance
+
+### DVER-050 Authorized targets only
+
+Live runs MUST use only the application instances, files, folders and devices that a person has authorized and listed under Authorized Targets in `docs/E2E.md` (DREPO-017). That section is the only list of authorized targets; other documents, such as `AGENTS.md`, point to it. Only a person adds a target to it. Live runs MUST NOT touch any other project, instance or device. The scope file used for live runs MUST grant only these targets (DSEC-012), so the runtime refuses any write outside them.
+
+Why: A live run makes real changes. On an unauthorized project or a production machine, a test can do real damage. A single list cannot disagree with a second one.
+Check: 🤖 `check_project`: every entry in the `targets` of every record in `docs/evidence/` is listed under Authorized Targets; 👀 review of the scope file used for live runs.
+
+### DVER-051 Acceptance document
+
+Every tool MUST describe its live acceptance in `docs/E2E.md` and `docs/E2E_zh.md`, with the sections DREPO-017 sets, in that order. A reviewer finds there which targets a person authorized (DVER-050), how the behavior matrices run on the real application (DVER-031) and which records the runs left (DVER-042).
+
+Why: A reviewer, or the next maintainer, needs one place that says what may be run, how and where its records are.
+Check: 🤖 `check_project` checks that both files exist and that their sections are complete and in order.
+
+## Checklist
+
+- [ ] DVER-001 Conformance suites
+- [ ] DVER-002 Write samples
+- [ ] DVER-003 General conformance tests
+- [ ] DVER-004 Every command is exercised
+- [ ] DVER-010 Driver conformance tests
+- [ ] DVER-011 Black-box testing
+- [ ] DVER-020 Fake host
+- [ ] DVER-021 Simulated evidence
+- [ ] DVER-022 Fake host in the specification repository's CI
+- [ ] DVER-023 Command simulations
+- [ ] DVER-030 Behavior matrix
+- [ ] DVER-031 Adapter behavior on real software
+- [ ] DVER-040 Maturity levels
+- [ ] DVER-041 Evidence references
+- [ ] DVER-042 Live records
+- [ ] DVER-043 Current evidence
+- [ ] DVER-050 Authorized targets only
+- [ ] DVER-051 Acceptance document

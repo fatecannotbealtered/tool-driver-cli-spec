@@ -1,0 +1,16 @@
+{
+  "id": "power-net-width",
+  "title": "Power nets are at least 0.5 mm wide",
+  "kind": "rule",
+  "applies_to": [
+    "track"
+  ],
+  "tags": [
+    "layout"
+  ],
+  "lang": "zh",
+  "based_on": "Design rule PCB-07",
+  "updated_on": "2026-10-20",
+  "severity": "error",
+  "check": "kicad-cli board check"
+}

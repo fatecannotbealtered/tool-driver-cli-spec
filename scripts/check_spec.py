@@ -1,1187 +1,813 @@
-"""Validate the specification: schemas, examples, state relations, the pinned base and document links.
+#!/usr/bin/env python3
+"""Check the specifications, the contract, the schemas and the examples.
 
-This checker never contacts an application, device, schema server or Git remote. It does
-not establish that any receipt or evidence was produced by a real tool.
+Usage:
+    python scripts/check_spec.py                 # everything
+    python scripts/check_spec.py --doc DRIVER-CLI-SPEC   # one specification pair
 """
-
 from __future__ import annotations
 
-import hashlib
+import argparse
 import json
 import re
 import sys
-import time
-import types
-from collections import Counter
-from functools import lru_cache
-from datetime import datetime
-from pathlib import Path, PurePosixPath, PureWindowsPath
-from urllib.parse import unquote, urljoin, urlsplit
+from dataclasses import dataclass, field
+from pathlib import Path
 
-from jsonschema import Draft202012Validator, FormatChecker
-from jsonschema.exceptions import SchemaError
-from referencing import Registry, Resource
-from referencing.exceptions import Unresolvable
+ROOT = Path(__file__).resolve().parent.parent
+SPEC_DIR = ROOT / "spec"
+CONTRACT = ROOT / "contract" / "driver-contract.json"
+SCHEMA_DIR = ROOT / "contract" / "schemas"
+EXAMPLE_DIR = ROOT / "contract" / "examples"
 
-from contract_io import InputError, canonical_relative_path, path_identity
+SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$")
+CLAUSE_HEADING = re.compile(r"^### ([A-Z]+)-(\d{3}) (\S.*)$")
+CLAUSE_REF = re.compile(r"\b(DCLI|DSEC|DSKL|DVER|DREPO)-(\d{3})\b")
+TEST_REF = re.compile(r"\b([GRD]\d{2})\b")
+MARKER = re.compile(r"^<!-- contract:([a-z0-9_]+) -->$")
+FIRST_KEY = re.compile(r"^`([^`]+)`")
+CJK = re.compile(r"[㐀-鿿]")
+BANNED = [re.compile(r"ai-native", re.IGNORECASE)]
 
-ROOT = Path(__file__).resolve().parents[1]
-PUBLIC_PREFIX = "urn:tool-driver-cli-spec:"
-CLAUSE_DOCUMENTS = {
-    "LAYERING.md": "LAY", "CORE-SPEC.md": "COR", "DRIVER-SPEC.md": "DRV",
-    "VERIFICATION-SPEC.md": "VER", "DELIVERY-SPEC.md": "DEL", "SKILL-ADDENDUM.md": "SKL",
+LANG = {
+    "en": {
+        "suffix": "",
+        "front": ["How to Read", "Scope", "Terms", "Runtime and Tool Responsibilities"],
+        "checklist": "Checklist",
+        "why": "Why: ",
+        "check": "Check: ",
+        "normative": re.compile(r"\b(MUST|SHOULD|MAY)\b"),
+        "switch": "English | [中文]({name}_zh.md)",
+        "version": "> Version {version} · Clauses {first} to {last}",
+        "yes": "yes",
+        "no": "no",
+    },
+    "zh": {
+        "suffix": "_zh",
+        "front": ["怎么读", "适用范围", "术语", "运行时与工具的分工"],
+        "checklist": "检查清单",
+        "why": "为什么：",
+        "check": "检查：",
+        "normative": re.compile(r"(必须|禁止|应该|不应该|可以)"),
+        "switch": "[English]({name}.md) | 中文",
+        "version": "> 版本 {version} · 条款 {first} 至 {last}",
+        "yes": "是",
+        "no": "否",
+    },
 }
-RESERVED_PARAMS = {"format", "json", "fields", "compact", "quiet", "dry-run", "confirm", "dangerous",
-                   "request-id", "idempotency-key", "version", "help"}
-TIERS = {"T0": 0, "T1": 1, "T2": 2}
-PHASES_READ = {"observe", "verify", "status", "result"}
-BASE_BUILTINS = {"reference", "context", "doctor", "changelog"}
 
 
-def load(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
+# --------------------------------------------------------------------------- contract markers
+
+def _knowledge_commands(c):
+    return [s["path"] for s in c["standard_commands"] if s["path"].startswith("knowledge ")]
 
 
-def normalized_bytes(path: Path) -> bytes:
-    return path.read_bytes().replace(b"\r\n", b"\n")
+MARKERS = {
+    # name: (keys from the contract, extra row check or None)
+    "error_codes": lambda c: [e["code"] for e in c["error_codes"]],
+    "exit_codes": lambda c: [str(x) for x in c["exit_codes"]],
+    "verbs": lambda c: [v["verb"] for v in c["verbs"]],
+    "global_flags": lambda c: [f["flag"] for f in c["global_flags"]],
+    "shared_flags": lambda c: [f["flag"] for f in c["shared_flags"]],
+    "target_flags": lambda c: [f["flag"] for f in c["target_flags"]],
+    "target_keys": lambda c: [t["kind"] for t in c["target_keys"]],
+    "builtin_commands": lambda c: [b["path"] for b in c["builtin_commands"]],
+    "context_keys": lambda c: list(c["context_keys"]),
+    "doctor_checks": lambda c: list(c["doctor"]["checks"]),
+    "effects": lambda c: [e["effect"] for e in c["effects"]],
+    "preview_fields": lambda c: list(c["preview"]["fields"]),
+    "token_binds": lambda c: list(c["confirm_token"]["binds"]),
+    "confirm_review": lambda c: [str(r["step"]) for r in c["confirm_review"]],
+    "receipt_dimensions": lambda c: list(c["receipt"]["dimensions"]),
+    "derivation": lambda c: [str(r["rule"]) for r in c["derivation"]],
+    "human_required_actions": lambda c: list(c["human_required_actions"]),
+    "update_failures": lambda c: [f["case"] for f in c["update"]["failures"]],
+    "units": lambda c: [u["quantity"] for u in c["units"]],
+    "registration_fields": lambda c: list(c["registration_fields"]),
+    "standard_commands": lambda c: [s["path"] for s in c["standard_commands"]],
+    "modes": lambda c: [m["mode"] for m in c["modes"]],
+    "session_states": lambda c: [s["state"] for s in c["session_states"]],
+    "disk_states": lambda c: [s["state"] for s in c["disk_states"]],
+    "device_states": lambda c: [s["state"] for s in c["device_states"]],
+    "adapter_capabilities": lambda c: [a["name"] for a in c["adapter_capabilities"]],
+    "host_methods": lambda c: list(c["host_protocol"]["methods"]),
+    "host_error_codes": lambda c: list(c["host_protocol"]["allowed_error_codes"]),
+    "risk_tiers": lambda c: list(c["risk_tiers"]),
+    "scope_fields": lambda c: list(c["scope_file"]["fields"]),
+    "scope_statuses": lambda c: list(c["scope_statuses"]),
+    "state_dir_entries": lambda c: list(c["state_dir"]["entries"]),
+    "skill_frontmatter": lambda c: list(c["skill"]["frontmatter"]),
+    "stop_checkpoints": lambda c: list(c["skill"]["stop_checkpoints"]),
+    "driver_playbooks": lambda c: list(c["skill"]["driver_playbooks"]),
+    "eval_scenarios_general": lambda c: [x["scenario"] for x in c["skill"]["eval_scenarios"]["general"]],
+    "eval_scenarios_driver": lambda c: [x["scenario"] for x in c["skill"]["eval_scenarios"]["driver"]],
+    "knowledge_kinds": lambda c: list(c["knowledge"]["kinds"]),
+    "knowledge_sources": lambda c: list(c["knowledge"]["sources"]),
+    "knowledge_builtin_fields": lambda c: (
+        c["knowledge"]["builtin_fields"] + c["knowledge"]["rule_fields"] + c["knowledge"]["resource_fields"]
+    ),
+    "knowledge_team_fields": lambda c: list(c["knowledge"]["team_fields"]),
+    "knowledge_commands": _knowledge_commands,
+    "conformance_general": lambda c: [t["id"] for t in c["conformance"]["general"]],
+    "conformance_driver": lambda c: [t["id"] for t in c["conformance"]["driver"]],
+    "behavior_matrix_rows": lambda c: [r["row"] for r in c["behavior_matrix_rows"]],
+    "maturity_levels": lambda c: [m["level"] for m in c["maturity_levels"]],
+    "evidence_kinds": lambda c: list(c["evidence_kinds"]),
+    "badges": lambda c: list(c["badges"]),
+    "compatibility_labels": lambda c: [x["label"] for x in c["compatibility_labels"]],
+    "root_files": lambda c: list(c["project"]["root_files"]),
+    "required_paths": lambda c: list(c["project"]["required_paths"]),
+    "bilingual_files": lambda c: list(c["project"]["bilingual_files"]),
+    "readme_sections": lambda c: list(c["project"]["sections"]["README.md"]),
+    "agents_sections": lambda c: list(c["project"]["sections"]["AGENTS.md"]),
+    "security_sections": lambda c: list(c["project"]["sections"]["SECURITY.md"]),
+    "contributing_sections": lambda c: list(c["project"]["sections"]["CONTRIBUTING.md"]),
+    "application_sections": lambda c: list(c["project"]["sections"]["docs/APPLICATION.md"]),
+    "compatibility_sections": lambda c: list(c["project"]["sections"]["docs/COMPATIBILITY.md"]),
+    "e2e_sections": lambda c: list(c["project"]["sections"]["docs/E2E.md"]),
+    "changelog_sections": lambda c: list(c["project"]["changelog_sections"]),
+    "capability_dispositions": lambda c: list(c["project"]["capability_dispositions"]),
+}
 
 
-@lru_cache(maxsize=1)
-def driver_contract() -> dict:
-    return load(ROOT / "contract" / "driver-contract.json")
+SECTION_FILES = {
+    "readme_sections": "README.md",
+    "agents_sections": "AGENTS.md",
+    "security_sections": "SECURITY.md",
+    "contributing_sections": "CONTRIBUTING.md",
+    "application_sections": "docs/APPLICATION.md",
+    "compatibility_sections": "docs/COMPATIBILITY.md",
+    "e2e_sections": "docs/E2E.md",
+}
 
 
-@lru_cache(maxsize=1)
-def base_contract() -> dict:
-    return load(ROOT / "base" / "ai-native-cli-spec" / "contract.json")
+def _cell_has(cell: str, value: str) -> bool:
+    return re.search(r"(?<![A-Za-z0-9_])" + re.escape(value) + r"(?![A-Za-z0-9_])", cell) is not None
 
 
-@lru_cache(maxsize=1)
-def public_schemas() -> dict[str, dict]:
-    return {schema["$id"]: schema for schema in (load(path) for path in sorted((ROOT / "schemas").glob("*.schema.json")))}
+def extra_row_checks(name: str, contract: dict, key: str, cells: list[str], lang: str) -> list[str]:
+    """Checks beyond the first column, for tables where more columns are data."""
+    problems = []
+    row = " | ".join(cells)
+    if name == "error_codes":
+        entry = next(e for e in contract["error_codes"] if e["code"] == key)
+        if len(cells) < 3 or cells[1].strip("` ") != str(entry["exit"]):
+            problems.append(f"{key}: exit column must be {entry['exit']}")
+        want = LANG[lang]["yes"] if entry["retryable"] else LANG[lang]["no"]
+        if len(cells) < 3 or cells[2].strip("` ") != want:
+            problems.append(f"{key}: retryable column must be '{want}'")
+    elif name == "verbs":
+        entry = next(v for v in contract["verbs"] if v["verb"] == key)
+        want = entry["effect"] or "—"
+        if len(cells) < 2 or cells[1].strip("` ") != want:
+            problems.append(f"{key}: effect column must be '{want}'")
+    elif name == "standard_commands":
+        entry = next(s for s in contract["standard_commands"] if s["path"] == key)
+        if len(cells) < 2 or cells[1].strip("` ") != entry["effect"]:
+            problems.append(f"{key}: effect column must be '{entry['effect']}'")
+    elif name == "effects":
+        entry = next(e for e in contract["effects"] if e["effect"] == key)
+        if cells[-1].strip("` ") != entry["risk"]:
+            problems.append(f"{key}: last column must be the risk tier {entry['risk']}")
+    elif name == "confirm_review":
+        entry = next(r for r in contract["confirm_review"] if str(r["step"]) == key)
+        for value in entry["conflicts"]:
+            if not _cell_has(row, value):
+                problems.append(f"step {key}: row must name conflict '{value}'")
+    elif name == "receipt_dimensions":
+        for value in contract["receipt"]["dimensions"][key]:
+            if not _cell_has(row, value):
+                problems.append(f"{key}: row must list value '{value}'")
+    elif name == "derivation":
+        entry = next(r for r in contract["derivation"] if str(r["rule"]) == key)
+        code = entry.get("default_code") or entry.get("code")
+        if code and not _cell_has(row, code):
+            problems.append(f"rule {key}: row must name {code}")
+    elif name == "update_failures":
+        entry = next(f for f in contract["update"]["failures"] if f["case"] == key)
+        if not _cell_has(row, entry["code"]):
+            problems.append(f"{key}: row must name {entry['code']}")
+    elif name == "units":
+        entry = next(u for u in contract["units"] if u["quantity"] == key)
+        if entry["unit"] not in row:
+            problems.append(f"{key}: row must name the unit {entry['unit']}")
+    elif name in ("session_states", "disk_states", "device_states"):
+        entry = next(s for s in contract[name] if s["state"] == key)
+        if entry.get("error") and not _cell_has(row, entry["error"]):
+            problems.append(f"{key}: row must name {entry['error']}")
+    elif name in SECTION_FILES and lang == "zh":
+        names = contract["project"]["sections"][SECTION_FILES[name]]
+        want = contract["project"]["sections_zh"][SECTION_FILES[name]][names.index(key)]
+        if FIRST_KEY.sub("", cells[0]).strip() != want:
+            problems.append(f"{key}: the Chinese name must be '{want}'")
+    elif name == "compatibility_labels":
+        entry = next(x for x in contract["compatibility_labels"] if x["label"] == key)
+        if entry["emoji"] not in row:
+            problems.append(f"{key}: row must show {entry['emoji']}")
+    return problems
 
 
-@lru_cache(maxsize=1)
-def validators():
-    schemas = {p.name: load(p) for p in sorted((ROOT / "schemas").glob("*.schema.json"))}
-    registry = Registry()
-    for schema in schemas.values():
-        Draft202012Validator.check_schema(schema)
-        registry = registry.with_resource(schema["$id"], Resource.from_contents(schema))
-    return {
-        name: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
-        for name, schema in schemas.items()
-    }
+# --------------------------------------------------------------------------- parsing
+
+@dataclass
+class Clause:
+    id: str
+    prefix: str
+    number: int
+    title: str
+    line: int
+    body: list[str] = field(default_factory=list)
+    section: str = ""
+    markers: list[str] = field(default_factory=list)
+    table_rows: int = 0
 
 
-def schema_nodes(schema, base: str, pointer: str = ""):
-    """Visit real subschemas, excluding schema containers and annotation data."""
-    if isinstance(schema, bool):
-        yield pointer, base, schema
-        return
-    if not isinstance(schema, dict):
-        return
-    base = urljoin(base, schema.get("$id", base))
-    yield pointer, base, schema
-    for key in ["$defs", "definitions", "properties", "patternProperties", "dependentSchemas"]:
-        for name, child in schema.get(key, {}).items():
-            escaped = name.replace("~", "~0").replace("/", "~1")
-            yield from schema_nodes(child, base, f"{pointer}/{key}/{escaped}")
-    for key in ["items", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "contains",
-                "propertyNames", "if", "then", "else", "not", "contentSchema"]:
-        if key in schema:
-            yield from schema_nodes(schema[key], base, f"{pointer}/{key}")
-    for key in ["allOf", "anyOf", "oneOf", "prefixItems"]:
-        for index, child in enumerate(schema.get(key, [])):
-            yield from schema_nodes(child, base, f"{pointer}/{key}/{index}")
+@dataclass
+class Table:
+    marker: str
+    line: int
+    rows: list[list[str]]
+    clause: str | None
 
 
-# ---------------------------------------------------------------- error codes
+@dataclass
+class SpecFile:
+    path: Path
+    lang: str
+    lines: list[str]
+    h2: list[tuple[int, str]] = field(default_factory=list)
+    clauses: list[Clause] = field(default_factory=list)
+    tables: list[Table] = field(default_factory=list)
+    checklist: list[tuple[str, str]] = field(default_factory=list)
+    stray_h3: list[tuple[int, str]] = field(default_factory=list)
 
 
-def code_table() -> dict[str, dict]:
-    """Core codes from the pinned base plus the driver extension codes, each with exit and retryable."""
-    table = {code: {"exit": entry["exit"], "retryable": entry["retryable"], "layer": "core"}
-             for code, entry in base_contract()["error_codes"]["core"].items()}
-    for code, entry in driver_contract()["error_codes"]["extensions"].items():
-        table[code] = {"exit": entry["exit"], "retryable": entry["retryable"], "layer": "driver"}
-    return table
-
-
-def allowed_exits() -> set[int]:
-    return {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 130}
-
-
-def error_table_errors(error_codes: dict) -> list[str]:
-    errors = []
-    table = code_table()
-    for code, entry in error_codes.items():
-        known = table.get(code)
-        if known:
-            if entry["exit"] != known["exit"] or entry["retryable"] != known["retryable"]:
-                errors.append(f"{code} must keep the {known['layer']} exit {known['exit']} and retryable {str(known['retryable']).lower()}")
-        elif entry["exit"] not in allowed_exits():
-            errors.append(f"{code} uses an exit code the base contract does not define")
-        elif entry["exit"] == 9 and "HUMAN" not in code and "2FA" not in code:
-            errors.append(f"{code} cannot use exit 9, which the base reserves for human-action codes")
-    return errors
-
-
-# ---------------------------------------------------------------- receipts
-
-
-MODIFYING = set(driver_contract()["effects"]["confirm_gated"]) if (ROOT / "contract" / "driver-contract.json").exists() else set()
-
-
-def receipt_conditions(receipt: dict) -> dict[str, bool]:
-    outcome = receipt["outcome"]
-    dimensions = [outcome["execution"], outcome["change"], outcome["persistence"], outcome["delivery"]]
-    status = outcome["verification"]["status"]
-    return {
-        "unknown": "unknown" in dimensions,
-        "running": outcome["execution"] == "running",
-        "partial": "partial" in [outcome["change"], outcome["persistence"], outcome["delivery"]],
-        "stopped": outcome["execution"] in {"failed", "interrupted", "not_started"},
-        "lasting": outcome["change"] == "applied" or outcome["persistence"] == "saved"
-                   or outcome["delivery"] == "delivered" or (bool(receipt["artifacts"]) and "artifact" in receipt["effects"]),
-        "verification_failed": status == "failed",
-        "verification_missing": status == "incomplete" or (outcome["change"] == "applied" and status == "not_run"),
-    }
-
-
-def receipt_rule(receipt: dict) -> dict:
-    """Return the first matching rule of contract.receipt_codes: {when, ok, codes}."""
-    conditions = receipt_conditions(receipt)
-    for rule in driver_contract()["receipt_codes"]["rules"]:
-        if all(conditions[name] for name in rule["when"]):
-            return rule
-    raise ValueError("receipt_codes needs a final catch-all rule")
-
-
-def receipt_errors(value: dict) -> list[str]:
-    errors = []
-    outcome = value["outcome"]
-    verification = outcome["verification"]
-    before, after = value["snapshot_before"], value["snapshot_after"]
-    effects = set(value["effects"])
-    profile = verification.get("extensions", {}).get("verification_result")
-    marker = profile.get("profile") if isinstance(profile, dict) else None
-    if isinstance(marker, str) and marker.startswith(PUBLIC_PREFIX + "verification-result:"):
-        problems = instance_errors("verification-result", profile)
-        errors.extend(problems)
-        if not problems:
-            errors.extend(verification_helpers().receipt_profile_errors(value, profile))
-    if outcome["change"] in {"applied", "partial", "rolled_back"} and value["authorization_scope_id"] is None:
-        errors.append("known modifications must retain their applicable authorization reference")
-    if outcome["change"] == "unknown" and value["authorization_scope_id"] is None and not value.get("authorization_unavailable_reason"):
-        errors.append("unknown authorization must be disclosed without inventing a scope")
-    if outcome["change"] in {"applied", "partial", "rolled_back"} and not effects & {"change", "persist", "configure", "physical"}:
-        errors.append("a receipt that changed its target must declare a modifying effect")
-    if outcome["execution"] == "not_started" and outcome["change"] != "not_applied":
-        errors.append("not_started cannot claim an applied or unknown change")
-    if verification["status"] == "passed":
-        if not after or verification["snapshot_id"] != after["id"]:
-            errors.append("passed readback must identify snapshot_after")
-        if any(c["required"] and c["status"] != "passed" for c in verification["checks"]):
-            errors.append("all required checks must pass")
-        if any(c["required"] for c in verification["not_checked"]):
-            errors.append("required checks cannot be omitted from passed verification")
-    if verification["status"] == "not_applicable" and (
-        any(c["required"] for c in verification["checks"]) or any(c["required"] for c in verification["not_checked"])
-    ):
-        errors.append("not_applicable cannot bypass applicable required checks")
-    if outcome["change"] == "rolled_back" and (not before or not after or not verification["evidence_refs"]):
-        errors.append("rollback needs preimage, fresh readback and evidence")
-    if receipt_conditions(value)["unknown"] and value["recovery"]["action"] == "retry":
-        errors.append("unknown outcomes must be reconciled before retry")
-    if outcome["persistence"] == "saved":
-        if not after:
-            errors.append("saved state needs a post-operation snapshot")
-        if "persist" not in effects:
-            errors.append("saved state needs the declared persist effect")
-    if ("deliver" in effects) != (outcome["delivery"] != "not_applicable"):
-        errors.append("delivery is not_applicable exactly when deliver is not a declared effect")
-    statuses = [delivery["status"] for delivery in value["deliveries"]]
-    expectations = {
-        "delivered": bool(statuses) and all(status == "delivered" for status in statuses),
-        "rejected": "rejected" in statuses and "delivered" not in statuses,
-        "partial": "delivered" in statuses and any(status != "delivered" for status in statuses),
-        "not_attempted": all(status == "not_attempted" for status in statuses),
-    }
-    if outcome["delivery"] in expectations and not expectations[outcome["delivery"]]:
-        errors.append("outcome.delivery must agree with the per-destination delivery results")
-    if outcome["delivery"] == "rejected" and outcome["execution"] == "completed":
-        errors.append("a rejected delivery means the requested operation did not complete")
-    stage = value["failed_stage"]
-    if outcome["execution"] in {"failed", "interrupted"} and stage is None:
-        errors.append("a failed or interrupted operation must name the stage that failed")
-    if outcome["execution"] == "completed" and stage not in {None, "verify"}:
-        errors.append("a completed execution can only name verify as its failed stage")
-    if stage == "verify" and verification["status"] not in {"failed", "incomplete"}:
-        errors.append("failed_stage verify needs a failed or incomplete verification")
-    if stage in {"persist", "deliver"} and stage not in effects:
-        errors.append("failed_stage must be a stage the operation declared")
-    if value.get("replayed") and not value.get("request_id"):
-        errors.append("a replayed receipt must carry the idempotency key that matched")
-    return errors
-
-
-# ---------------------------------------------------------------- plans and responses
-
-
-def plan_errors(value: dict) -> list[str]:
-    errors = []
-    trial = value["trial_snapshot"]
-    items = value.get("items")
-    if items is not None:
-        keys = [item["key"] for item in items]
-        operations = [item["operation_id"] for item in items]
-        if value["total"] != len(items) or value["targets"] != keys:
-            errors.append("a batch plan lists every target once, in order, and counts them (base §15.2)")
-        if len(keys) != len(set(keys)):
-            errors.append("batch targets are deduplicated before planning")
-        if len(operations) != len(set(operations)) or value["operation_id"] in operations:
-            errors.append("every batch item runs under its own operation_id, distinct from the batch")
-        if value["can_apply"] and not all(item["can_apply"] for item in items):
-            errors.append("a batch that can be applied has no item that cannot")
-    base_snapshot = value.get("base_snapshot") or (items[0]["base_snapshot"] if items else None)
-    if value["level"] == "trial_observed":
-        if not trial or trial["source"] != "trial" or (base_snapshot and trial["id"] == base_snapshot["id"]):
-            errors.append("trial_observed needs an independent trial snapshot")
-        if "physical" in value["effects"]:
-            errors.append("a real physical effect cannot be an isolated observed trial")
-    elif trial is not None:
-        errors.append("only a trial_observed plan carries a trial snapshot")
-    outputs = value["outputs"] + [output for item in items or [] for output in item["outputs"]]
-    if any(output["effect"] not in value["effects"] for output in outputs):
-        errors.append("every planned output must belong to a declared effect")
-    blocked = [item for item in items or [] if not item["can_apply"]]
-    if not value["can_apply"] and not (value["constraints"] or value["unknowns"] or any(item.get("unknowns") for item in blocked)):
-        errors.append("a plan that cannot be applied must say which constraint or unknown blocks it")
-    return errors
-
-
-def details_errors(error: dict) -> list[str]:
-    errors = []
-    code, details = error["code"], error["details"]
-    contract = driver_contract()
-    known = code_table().get(code)
-    if known and error["retryable"] != known["retryable"]:
-        errors.append(f"{code} must report retryable {str(known['retryable']).lower()}")
-    table = contract["error_details"]["required"]
-    seen = set()
-    for key in table["every_error"] + table.get(code, []):
-        if key in seen:
+def split_row(line: str) -> list[str]:
+    body = line.strip()
+    if body.startswith("|"):
+        body = body[1:]
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    cells, current, i = [], "", 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body) and body[i + 1] == "|":
+            current += "|"
+            i += 2
             continue
-        seen.add(key)
-        options = key.split("|")
-        if not any(option in details for option in options):
-            label = "every driver error" if key in table["every_error"] else code
-            errors.append(f"{label} needs details.{' or details.'.join(options)}")
-    for key in contract["error_details"].get("conflict_requires", {}).get(details.get("conflict"), []):
-        if key not in details:
-            errors.append(f"conflict {details['conflict']} needs details.{key}")
-    state = details.get("dispatch_state")
-    if state in {"dispatched", "unknown"}:
-        if "operation_id" not in details:
-            errors.append("a dispatched or uncertain call must name its operation_id")
-        if not any(key in details for key in ["receipt", "workflow", "operation_status"]) and code not in {"E_OUTCOME_UNKNOWN", "E_HUMAN_REQUIRED"}:
-            errors.append("after dispatch, a failure without a receipt can only be E_OUTCOME_UNKNOWN or E_HUMAN_REQUIRED")
-    if code == "E_OUTCOME_UNKNOWN" and state == "not_started":
-        errors.append("E_OUTCOME_UNKNOWN cannot claim that nothing was dispatched")
-    for name in ["receipt", "workflow", "operation_status"]:
-        if name in details:
-            errors.extend(semantic_errors(name.replace("_", "-"), details[name]))
-    receipt = details.get("receipt")
-    if receipt:
-        rule = receipt_rule(receipt)
-        if rule["ok"]:
-            errors.append("a fully successful receipt cannot accompany a failure")
-        elif code not in rule["codes"]:
-            errors.append(f"receipt outcome requires one of {rule['codes']}, not {code}")
-    workflow = details.get("workflow")
-    if workflow:
-        errors.extend(workflow_failure_errors(workflow, code))
-    if "_untrusted" in details:
-        errors.extend(untrusted_errors(details, "error.details"))
-    return errors
+        if ch == "|":
+            cells.append(current.strip())
+            current = ""
+        else:
+            current += ch
+        i += 1
+    cells.append(current.strip())
+    return cells
 
 
-def untrusted_errors(container: dict, label: str) -> list[str]:
-    names = [entry.split(".", 1)[0].split("[", 1)[0] for entry in container.get("_untrusted", [])]
-    return [f"{label}._untrusted names a field it does not contain: {name}" for name in names if name not in container]
+def is_separator(line: str) -> bool:
+    return re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?", line.strip()) is not None
 
 
-def workflow_failure_errors(workflow: dict, code: str) -> list[str]:
-    steps = workflow["steps"]
-    if all(step["status"] == "completed" for step in steps):
-        return ["a workflow that completed every step is not a failure"]
-    if any(step["status"] == "unknown" for step in steps):
-        return [] if code == "E_OUTCOME_UNKNOWN" else ["a workflow with an unknown step fails with E_OUTCOME_UNKNOWN"]
-    lasting = any((step["status"] == "completed" and set(step["effects"]) & MODIFYING)
-                  or (step["receipt"] is not None and receipt_conditions(step["receipt"])["lasting"]) for step in steps)
-    if lasting:
-        return [] if code == "E_PARTIAL" else ["a workflow that applied some steps fails with E_PARTIAL"]
-    step_codes = {step["error"]["code"] for step in steps if step.get("error")}
-    if code not in step_codes | {"E_NATIVE_FAILURE"}:
-        return ["a workflow that changed nothing reports a failed step's code"]
-    return []
-
-
-def batch_errors(value: dict) -> list[str]:
-    errors = []
-    items = value["items"]
-    summary = value["summary"]
-    skipped = sum(1 for item in items if "skipped_reason" in item)
-    attempted = len(items) - skipped
-    succeeded = sum(1 for item in items if item["ok"])
-    failed = attempted - succeeded
-    unknown = sum(1 for item in items if item.get("error", {}).get("code") == "E_OUTCOME_UNKNOWN")
-    if summary["total"] != attempted or summary["succeeded"] != succeeded or summary["failed"] != failed:
-        errors.append("batch summary counts the attempted items exactly (base §15.5); skipped items are counted separately")
-    after_dispatch = {"E_PARTIAL", "E_OUTCOME_UNKNOWN", "E_VERIFY_FAILED", "E_VERIFY_INCOMPLETE"}
-    for item in items:
-        dispatched = item["ok"] or item.get("error", {}).get("code") in after_dispatch
-        if dispatched and "receipt" not in item and "operation_id" not in item:
-            errors.append("a dispatched batch item carries its receipt or operation_id")
-    if summary.get("skipped", 0) != skipped or (skipped and "skipped" not in summary):
-        errors.append("skipped items must be counted in summary.skipped")
-    if summary.get("unknown", 0) != unknown or (unknown and "unknown" not in summary):
-        errors.append("items with unknown outcomes must be counted in summary.unknown")
-    targets = [item["target"] for item in items]
-    if len(targets) != len(set(targets)):
-        errors.append("batch targets are deduplicated before execution")
-    for item in items:
-        receipt = item.get("receipt")
-        if receipt is None:
+def parse(path: Path, lang: str) -> SpecFile:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    spec = SpecFile(path=path, lang=lang, lines=lines)
+    current: Clause | None = None
+    section = ""
+    in_code = False
+    pending_marker: tuple[str, int] | None = None
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            in_code = not in_code
+            if current:
+                current.body.append(line)
+            i += 1
             continue
-        errors.extend(receipt_errors(receipt))
-        if "operation_id" in item and item["operation_id"] != receipt["operation_id"]:
-            errors.append("item and receipt operation identities must agree")
-        rule = receipt_rule(receipt)
-        if rule["ok"] != item["ok"]:
-            errors.append("an item's ok must follow its receipt")
-        elif not item["ok"] and "error" in item and item["error"]["code"] not in rule["codes"]:
-            errors.append(f"item receipt requires one of {rule['codes']}")
-    return errors
+        if in_code:
+            if current:
+                current.body.append(line)
+            i += 1
+            continue
+        if line.startswith("## "):
+            section = line[3:].strip()
+            spec.h2.append((i + 1, section))
+            current = None
+            i += 1
+            continue
+        if line.startswith("### "):
+            m = CLAUSE_HEADING.match(line)
+            if m:
+                current = Clause(
+                    id=f"{m.group(1)}-{m.group(2)}", prefix=m.group(1), number=int(m.group(2)),
+                    title=m.group(3).strip(), line=i + 1, section=section,
+                )
+                spec.clauses.append(current)
+            else:
+                spec.stray_h3.append((i + 1, line))
+                current = None
+            i += 1
+            continue
+        mk = MARKER.match(line.strip())
+        if mk:
+            pending_marker = (mk.group(1), i + 1)
+            if current:
+                current.markers.append(mk.group(1))
+            i += 1
+            continue
+        if line.lstrip().startswith("|"):
+            start = i
+            block = []
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                block.append(lines[i])
+                i += 1
+            rows = [split_row(r) for r in block[2:]] if len(block) >= 2 and is_separator(block[1]) else []
+            if current:
+                current.table_rows += len(rows)
+                current.body.extend(block)
+            if pending_marker and pending_marker[1] == start:
+                spec.tables.append(Table(pending_marker[0], start + 1, rows, current.id if current else None))
+                pending_marker = None
+            continue
+        if pending_marker and line.strip():
+            pending_marker = None
+        if section == LANG[lang]["checklist"]:
+            cm = re.match(r"^- \[ \] ([A-Z]+-\d{3}) (\S.*)$", line)
+            if cm:
+                spec.checklist.append((cm.group(1), cm.group(2).strip()))
+            elif line.strip():
+                spec.checklist.append(("?", line.strip()))
+        if current:
+            current.body.append(line)
+        i += 1
+    return spec
 
 
-def query_page_errors(value: dict) -> list[str]:
-    errors = []
-    limits = value.get("limits")
-    unread = value.get("unread_scopes", [])
-    explained = bool(unread) or bool(limits and limits["truncation_reason"])
-    if value["count"] != len(value["items"]):
-        errors.append("query count must equal the returned item count")
-    if (value["snapshot"] is None) == (value["snapshot_unavailable_reason"] is None):
-        errors.append("a missing snapshot needs a reason, and a present snapshot needs none")
-    if value.get("consistency", {}).get("mode") == "snapshot" and value["snapshot"] is None:
-        errors.append("snapshot consistency needs the snapshot it read")
-    continuation = value.get("next_cursor") is not None or "next_offset" in value
-    if value["has_more"] and not continuation and not explained:
-        errors.append("has_more needs a continuation or a reason it cannot continue")
-    if "next_offset" in value and not value["has_more"]:
-        errors.append("next_offset appears only when has_more is true")
-    if value.get("next_cursor") is not None and not value["has_more"]:
-        errors.append("next_cursor appears only when has_more is true")
-    if value["truncated"] and not explained:
-        errors.append("truncated results need a truncation reason or unread scopes")
-    if unread and not value["truncated"]:
-        errors.append("a page with unread scopes is incomplete and must say truncated")
-    if limits and limits["effective"] is not None and value["count"] > limits["effective"]:
-        errors.append("query items cannot exceed the effective output limit")
-    return errors
+# --------------------------------------------------------------------------- checks
+
+class Report:
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def add(self, where: str, message: str) -> None:
+        self.errors.append(f"{where}: {message}")
 
 
-def batch_status(statuses: list[str]) -> str:
-    """The status of a finished batch from its items: an item still active or unknown leaves the batch unknown;
-    an item that never started counts as failed."""
-    if any(status in {"unknown", "pending", "running", "cancel_requested"} for status in statuses):
-        return "unknown"
-    if all(status == "succeeded" for status in statuses):
-        return "succeeded"
-    if any(status in {"succeeded", "partial"} for status in statuses):
-        return "partial"
-    return "failed"
+def rel(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
-def operation_status_errors(value: dict) -> list[str]:
-    errors = []
-    status = value["status"]
-    receipt = value["receipt"]
-    if receipt:
-        errors.extend(receipt_errors(receipt))
-        if receipt["operation_id"] != value["operation_id"]:
-            errors.append("status and receipt operation identities must agree")
-        identity = ["mode", "engine_id", "instance_id", "object_id", "locator"]
-        if value["target"] is None or any(value["target"][key] != receipt["target"][key] for key in identity):
-            errors.append("status and receipt must describe the same target")
-        rule = receipt_rule(receipt)
-        if status == "succeeded" and not rule["ok"]:
-            errors.append("succeeded status needs a fully successful receipt")
-        if status == "partial" and "E_PARTIAL" not in rule["codes"]:
-            errors.append("partial status needs a partial receipt")
-        if status == "failed" and (rule["ok"] or rule["codes"] == ["E_OUTCOME_UNKNOWN"]):
-            errors.append("failed status needs a receipt that shows a known failure")
-        if status == "unknown" and rule["codes"] != ["E_OUTCOME_UNKNOWN"]:
-            errors.append("unknown status cannot hold a receipt with a known outcome")
-        if status == "pending" and receipt["outcome"]["execution"] != "not_started":
-            errors.append("pending status cannot describe an already-started operation")
-        if status == "cancelled" and receipt["outcome"]["execution"] not in {"not_started", "interrupted"}:
-            errors.append("cancelled status needs a stopped or never-started execution")
-    elif status in {"succeeded", "partial"} and value.get("items") is None:
-        errors.append(f"{status} status needs the receipt it was derived from")
-    elif status in {"failed", "cancelled"} and value.get("items") is None and value["started_at"] is not None:
-        errors.append("a terminal dispatched operation needs effect readback; without its receipt the outcome is unknown")
-    items = value.get("items")
-    if items is not None:
-        plan = value.get("plan") or {}
-        if receipt is not None or value["target"] is not None:
-            errors.append("a batch record has no single target or receipt; each item is its own operation")
-        if plan and [(item["key"], item["operation_id"]) for item in items] != [(item["key"], item["operation_id"]) for item in plan.get("items", [])]:
-            errors.append("a batch record lists the items of its plan, in plan order")
-        statuses = [item["status"] for item in items]
-        if status == "planned" and set(statuses) != {"planned"}:
-            errors.append("a planned batch has only planned items")
-        if status in {"succeeded", "partial", "failed", "unknown"} and status != batch_status(statuses):
-            errors.append(f"a finished batch reports {batch_status(statuses)} for these items")
-    if status == "planned" and (value["started_at"] is not None or value["plan_id"] is None):
-        errors.append("a planned operation has a plan and has not started")
-    plan = value.get("plan")
-    if plan:
-        errors.extend(plan_errors(plan))
-        if plan["operation_id"] != value["operation_id"] or plan["plan_id"] != value["plan_id"]:
-            errors.append("the recorded plan belongs to this operation")
-    if status == "cancelled" and not value["stop_observed"]:
-        errors.append("cancelled needs an observed stop; otherwise report cancel_requested")
-    if value["stop_observed"]:
-        if status in {"planned", "pending", "running", "cancel_requested"}:
-            errors.append("an active task cannot claim an observed stop")
-        if value["stop_evidence_ref"] is None:
-            errors.append("an observed stop needs its evidence reference")
-    if value["resolution"] is not None and status not in {"unknown", "partial"}:
-        errors.append("only unknown or partial operations are resolved after the fact")
-    if value["blocked"] is not None and status not in {"pending", "running"}:
-        errors.append("only a pending or running operation can be blocked")
-    if value["record"]["availability"] != "available" and (status != "unknown" or receipt is not None):
-        errors.append("an expired or unavailable record cannot report a known outcome")
-    if value["commands"]["lookup"]["argv"][:2] != ["operation", "show"]:
-        errors.append("the lookup command is the built-in operation show")
-    return errors
+def segment_of(doc: dict, number: int) -> dict | None:
+    for seg in doc["segments"]:
+        if seg["from"] <= number <= seg["to"]:
+            return seg
+    return None
 
 
-def workflow_errors(value: dict) -> list[str]:
-    errors = []
-    steps = value["steps"]
-    ids = [step["id"] for step in steps]
-    if len(ids) != len(set(ids)):
-        errors.append("workflow step identities must be unique")
-    by_id = {step["id"]: step for step in steps}
-    for step in steps:
-        if any(dependency not in by_id for dependency in step["depends_on"]):
-            errors.append("workflow dependencies must identify existing steps")
-        receipt = step["receipt"]
-        modifying = bool(set(step["effects"]) & MODIFYING)
-        executing = step["phase"] not in {"plan", "submit", "status"}
-        if receipt:
-            errors.extend(receipt_errors(receipt))
-            if receipt["operation_id"] != step["operation_id"]:
-                errors.append("step and receipt operation identities must agree")
-            if not set(receipt["effects"]).issubset(set(step["effects"])):
-                errors.append("step effects cannot hide effects reported by its receipt")
-            rule = receipt_rule(receipt)
-            if step["status"] == "completed" and not rule["ok"]:
-                errors.append("a completed step needs a fully successful receipt")
-            if step["status"] in {"failed", "unknown"} and step["error"] and step["error"]["code"] not in rule["codes"]:
-                errors.append("a step's error code must follow its receipt")
-        if step["status"] == "completed" and modifying and executing and not receipt:
-            errors.append("completed modifying steps cannot substitute output refs for a receipt")
-        if step["status"] in {"running", "completed", "failed", "cancelled", "unknown"}:
-            for dependency in step["depends_on"]:
-                parent = by_id.get(dependency)
-                if parent is None:
+def check_spec_file(spec: SpecFile, doc: dict, version: str, contract: dict, report: Report) -> None:
+    where = rel(spec.path)
+    lang = LANG[spec.lang]
+    content = [ln for ln in spec.lines if ln.strip()]
+    if not content or content[0] != f"# {doc['name']}":
+        report.add(where, f"first line must be '# {doc['name']}'")
+    if len(content) < 2 or content[1] != lang["switch"].format(name=doc["name"]):
+        report.add(where, f"second line must be '{lang['switch'].format(name=doc['name'])}'")
+    if spec.clauses:
+        want = lang["version"].format(version=version, first=spec.clauses[0].id, last=spec.clauses[-1].id)
+        if len(content) < 3 or content[2] != want:
+            report.add(where, f"version line must be '{want}'")
+    else:
+        report.add(where, "no clauses found")
+
+    names = [name for _, name in spec.h2]
+    if names[: len(lang["front"])] != lang["front"]:
+        report.add(where, f"the first sections must be {lang['front']}, found {names[:len(lang['front'])]}")
+    if not names or names[-1] != lang["checklist"]:
+        report.add(where, f"the last section must be '{lang['checklist']}'")
+    for line_no, text in spec.stray_h3:
+        report.add(f"{where}:{line_no}", f"level-3 headings are only for clauses: {text!r}")
+
+    seen: set[str] = set()
+    previous = -1
+    section_segment: dict[str, dict] = {}
+    for clause in spec.clauses:
+        at = f"{where}:{clause.line}"
+        if clause.prefix != doc["prefix"]:
+            report.add(at, f"{clause.id} must use prefix {doc['prefix']}")
+        if clause.id in seen:
+            report.add(at, f"duplicate clause {clause.id}")
+        seen.add(clause.id)
+        if clause.number <= previous:
+            report.add(at, f"{clause.id} is out of order")
+        previous = clause.number
+        seg = segment_of(doc, clause.number)
+        if seg is None:
+            report.add(at, f"{clause.id} is outside every numbering segment")
+        elif clause.section in section_segment and section_segment[clause.section] is not seg:
+            report.add(at, f"{clause.id} shares section '{clause.section}' with another segment")
+        else:
+            section_segment[clause.section] = seg
+        if clause.section in lang["front"] or clause.section == lang["checklist"]:
+            report.add(at, f"{clause.id} must not sit in section '{clause.section}'")
+
+        text = [ln for ln in clause.body if ln.strip()]
+        why = [ln for ln in text if ln.startswith(lang["why"])]
+        check = [ln for ln in text if ln.startswith(lang["check"])]
+        if len(why) != 1 or len(check) != 1 or text[-2:] != [why[0] if why else None, check[0] if check else None]:
+            report.add(at, f"{clause.id} must end with one '{lang['why'].strip()}' line and one '{lang['check'].strip()}' line")
+        if check:
+            label = check[0][len(lang["check"]):].lstrip()
+            if not (label.startswith("🤖") or label.startswith("👀")):
+                report.add(at, f"{clause.id}: the check line must start with 🤖 or 👀")
+            known = {t["id"] for t in contract["conformance"]["general"] + contract["conformance"]["driver"]}
+            for test in TEST_REF.findall(check[0]):
+                if test not in known:
+                    report.add(at, f"{clause.id}: unknown conformance test {test}")
+        normative_text = "\n".join(ln for ln in text if not ln.startswith((lang["why"], lang["check"])))
+        if not lang["normative"].search(normative_text):
+            report.add(at, f"{clause.id} has no normative word")
+
+    want_list = [(c.id, c.title) for c in spec.clauses]
+    if spec.checklist != want_list:
+        missing = [c for c in want_list if c not in spec.checklist]
+        extra = [c for c in spec.checklist if c not in want_list]
+        report.add(where, f"checklist must list every clause in order with its title; missing {missing[:3]}, extra {extra[:3]}")
+
+    for table in spec.tables:
+        at = f"{where}:{table.line}"
+        if table.marker not in MARKERS:
+            report.add(at, f"unknown contract marker '{table.marker}'")
+            continue
+        try:
+            want = MARKERS[table.marker](contract)
+        except (KeyError, TypeError) as exc:
+            report.add(at, f"contract has no data for marker '{table.marker}': {exc}")
+            continue
+        got = []
+        for cells in table.rows:
+            m = FIRST_KEY.match(cells[0]) if cells else None
+            got.append(m.group(1) if m else None)
+        if got != want:
+            report.add(at, f"table '{table.marker}' keys must be {want}, found {got}")
+            continue
+        for key, cells in zip(got, table.rows):
+            for problem in extra_row_checks(table.marker, contract, key, cells, spec.lang):
+                report.add(at, f"table '{table.marker}': {problem}")
+
+    for i, line in enumerate(spec.lines, 1):
+        for pattern in BANNED:
+            if pattern.search(line):
+                report.add(f"{where}:{i}", f"banned reference: {line.strip()[:60]}")
+
+
+def check_pair(en: SpecFile, zh: SpecFile, report: Report) -> None:
+    where = f"{rel(en.path)} <-> {rel(zh.path)}"
+    if len(en.h2) != len(zh.h2):
+        report.add(where, f"section count differs: {len(en.h2)} vs {len(zh.h2)}")
+    ids_en = [c.id for c in en.clauses]
+    ids_zh = [c.id for c in zh.clauses]
+    if ids_en != ids_zh:
+        only_en = [x for x in ids_en if x not in ids_zh]
+        only_zh = [x for x in ids_zh if x not in ids_en]
+        report.add(where, f"clause IDs differ; only English {only_en[:5]}, only Chinese {only_zh[:5]}")
+        return
+    for a, b in zip(en.clauses, zh.clauses):
+        if a.table_rows != b.table_rows:
+            report.add(where, f"{a.id}: table rows differ ({a.table_rows} vs {b.table_rows})")
+        if a.markers != b.markers:
+            report.add(where, f"{a.id}: contract markers differ ({a.markers} vs {b.markers})")
+        if [s for s in (a.section,)] and en.h2 and zh.h2:
+            ia = [n for _, n in en.h2].index(a.section)
+            ib = [n for _, n in zh.h2].index(b.section)
+            if ia != ib:
+                report.add(where, f"{a.id}: sits in section {ia + 1} in English and {ib + 1} in Chinese")
+    rows_en = sum(len(t.rows) for t in en.tables if t.clause is None)
+    rows_zh = sum(len(t.rows) for t in zh.tables if t.clause is None)
+    if rows_en != rows_zh:
+        report.add(where, f"marked tables outside clauses differ in rows: {rows_en} vs {rows_zh}")
+
+
+def check_cross_refs(specs: list[SpecFile], all_ids: set[str], checked_prefixes: set[str], report: Report) -> None:
+    for spec in specs:
+        for i, line in enumerate(spec.lines, 1):
+            for prefix, number in CLAUSE_REF.findall(line):
+                ref = f"{prefix}-{number}"
+                if prefix in checked_prefixes and ref not in all_ids:
+                    report.add(f"{rel(spec.path)}:{i}", f"reference to missing clause {ref}")
+
+
+TEST_RANGE = re.compile(r"\b[GRD]\d{2} (to|至) [GRD]\d{2}\b")
+
+
+def check_test_columns(specs: list[SpecFile], report: Report) -> None:
+    """The last column of the G/R/D tables lists exactly the clauses whose check line cites that test.
+
+    A check line that names a range of tests (such as "D01 to D25") cites a whole suite and is not counted.
+    """
+    for lang in LANG:
+        cited: dict[str, set[str]] = {}
+        listed: dict[str, set[str]] = {}
+        for spec in (s for s in specs if s.lang == lang):
+            for clause in spec.clauses:
+                check = [ln for ln in clause.body if ln.startswith(LANG[lang]["check"])]
+                if not check or TEST_RANGE.search(check[0]):
                     continue
-                if parent["status"] != "completed":
-                    errors.append("a dependent step cannot run before its prerequisite completes")
-                if parent["receipt"]:
-                    verification = parent["receipt"]["outcome"]["verification"]
-                    if any(c["required"] and c["status"] != "passed" for c in verification["checks"]) or any(c["required"] for c in verification["not_checked"]):
-                        errors.append("dependent steps cannot bypass required prerequisite checks")
-    if value["failure_policy"] == "stop" and any(step["status"] in {"failed", "unknown"} for step in steps):
-        if any(step["status"] == "running" for step in steps):
-            errors.append("a stop policy cannot keep steps running after a failure")
-    incoming = {identifier: sum(dependency in by_id for dependency in step["depends_on"]) for identifier, step in by_id.items()}
-    downstream = {identifier: [] for identifier in by_id}
-    for identifier, step in by_id.items():
-        for dependency in step["depends_on"]:
-            if dependency in by_id:
-                downstream[dependency].append(identifier)
-    ready = [identifier for identifier, count in incoming.items() if count == 0]
-    visited = 0
-    while ready:
-        identifier = ready.pop()
-        visited += 1
-        for child in downstream[identifier]:
-            incoming[child] -= 1
-            if incoming[child] == 0:
-                ready.append(child)
-    if visited != len(by_id):
-        errors.append("workflow dependencies must be acyclic")
-    counts = Counter(step["status"] for step in steps)
-    summary = value["summary"]
-    if summary["total"] != len(steps) or any(summary[status] != counts[status] for status in summary if status != "total"):
-        errors.append("workflow summary must exactly count the step results")
-    return errors
+                for test in set(TEST_REF.findall(check[0])):
+                    cited.setdefault(test, set()).add(clause.id)
+            for table in spec.tables:
+                if table.marker in ("conformance_general", "conformance_driver"):
+                    for cells in table.rows:
+                        key = FIRST_KEY.match(cells[0])
+                        if key:
+                            listed[key.group(1)] = {f"{a}-{b}" for a, b in CLAUSE_REF.findall(cells[-1])}
+        if not listed:
+            continue
+        for test in sorted(set(cited) | set(listed)):
+            if cited.get(test, set()) != listed.get(test, set()):
+                report.add(
+                    f"spec/DRIVER-VERIFY-SPEC{LANG[lang]['suffix']}.md",
+                    f"test {test}: the last column must list exactly the clauses citing it; "
+                    f"missing {sorted(cited.get(test, set()) - listed.get(test, set()))}, "
+                    f"extra {sorted(listed.get(test, set()) - cited.get(test, set()))}",
+                )
 
 
-def response_errors(value: dict) -> list[str]:
-    errors = []
-    if value["ok"]:
-        data = value["data"]
-        preview = data.get("preview")
-        if preview:
-            errors.extend(plan_errors(preview))
-            if data.get("expires_at") != preview["expires_at"]:
-                errors.append("the confirm token and its plan expire together")
-        receipt = data.get("receipt")
-        if receipt:
-            errors.extend(receipt_errors(receipt))
-            rule = receipt_rule(receipt)
-            if not rule["ok"]:
-                errors.append(f"this receipt cannot be reported as ok; it requires {rule['codes']}")
-        workflow = data.get("workflow")
-        if workflow:
-            errors.extend(workflow_errors(workflow))
-            if any(step["status"] != "completed" for step in workflow["steps"]):
-                errors.append("a successful workflow completes every requested step")
-        status = data.get("operation_status")
-        if status:
-            errors.extend(operation_status_errors(status))
-        if "items" in data and "summary" in data:
-            errors.extend(instance_errors("batch", data))
-        elif "items" in data and "count" in data:
-            errors.extend(instance_errors("query-page", data))
-        if "_untrusted" in data:
-            errors.extend(untrusted_errors(data, "data"))
-    else:
-        errors.extend(details_errors(value["error"]))
-    return errors
+def check_markers_once(specs: list[SpecFile], lang: str, report: Report) -> None:
+    counts: dict[str, int] = {}
+    for spec in specs:
+        if spec.lang != lang:
+            continue
+        for table in spec.tables:
+            counts[table.marker] = counts.get(table.marker, 0) + 1
+    for name in MARKERS:
+        if counts.get(name, 0) != 1:
+            report.add(f"spec/*{LANG[lang]['suffix']}.md", f"marker '{name}' appears {counts.get(name, 0)} times; it must appear once")
 
 
-# ---------------------------------------------------------------- reference
+def check_version(contract: dict, report: Report) -> str:
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    m = SEMVER.match(version)
+    if not m:
+        report.add("VERSION", f"'{version}' is not a semantic version")
+        return version
+    if contract.get("version") != version:
+        report.add("contract/driver-contract.json", f"version must be {version}")
+    if contract.get("schema_version") != f"{m.group(1)}.{m.group(2)}":
+        report.add("contract/driver-contract.json", f"schema_version must be {m.group(1)}.{m.group(2)}")
+    return version
 
 
-def tier_floor(effects: set[str]) -> int:
-    minimum = driver_contract()["effects"]["minimum_risk_tier"]
-    return max((TIERS[minimum[effect]] for effect in effects), default=0)
-
-
-def builtin_commands() -> set[str]:
-    """Base self-description commands (CLI-SPEC §11) plus the driver operation commands (COR-025)."""
-    return BASE_BUILTINS | set(driver_contract()["self_description"]["builtin_commands"])
-
-
-def operation_states() -> list[str]:
-    return public_schemas()[PUBLIC_PREFIX + "operation-status:2.0"]["properties"]["status"]["enum"]
-
-
-def path_errors(paths: list[str]) -> list[str]:
-    errors = []
-    split = [tuple(path.split()) for path in paths]
-    if len(split) != len(set(split)):
-        errors.append("command paths must be unique")
-    for path in split:
-        if any(other != path and other[:len(path)] == path for other in split):
-            errors.append(f"a command path cannot also be a group: {' '.join(path)}")
-    missing = sorted(builtin_commands() - set(paths))
-    if missing:
-        errors.append(f"the built-in commands are listed: missing {', '.join(missing)}")
-    return errors
-
-
-def classification_errors(label: str, ctype: str, dangerous: bool, effects: set[str]) -> list[str]:
-    """Type, danger and built-in rules shared by reference, reference --index and reference --command."""
-    contract = driver_contract()["effects"]
-    if label in contract["exempt"]:
-        if ctype != "write" or effects != {"observe"}:
-            return [f"{label}: the base self-update is declared type write with effects [observe] (base §14)"]
-        return []
-    errors = []
-    if (ctype == "write") != bool(effects & set(contract["confirm_gated"])):
-        errors.append(f"{label}: type is write exactly when an effect other than observe is declared")
-    if effects & set(contract["dangerous"]) and not dangerous:
-        errors.append(f"{label}: deliver, configure and physical commands are dangerous")
-    if label in builtin_commands() and (ctype != "read" or effects != {"observe"}):
-        errors.append(f"{label}: built-in commands are read commands that only observe")
-    return errors
-
-
-def builtin_param_errors(command: dict) -> list[str]:
-    errors = []
-    label = command["path"]
-    params = {param["name"]: param for param in command["params"]}
-    if label in {"operation show", "operation resolve"} and not params.get("id", {}).get("required"):
-        errors.append(f"{label}: takes the required --id")
-    if label == "operation list" and set(params.get("status", {}).get("enum", [])) != set(operation_states()):
-        errors.append("operation list: --status accepts exactly the operation states")
-    if label == "operation resolve":
-        if set(params.get("outcome", {}).get("enum", [])) != {"applied", "not_applied", "partial"}:
-            errors.append("operation resolve: --outcome is applied, not_applied or partial")
-        if not params.get("evidence", {}).get("required"):
-            errors.append("operation resolve: takes the required --evidence")
-    return errors
-
-
-def command_errors(tool: str, command: dict, schemas: dict, error_codes: dict, json_schemas: dict,
-                   tier: int | None = None, level: str | None = None) -> list[str]:
-    errors = []
-    driver = command["driver"]
-    label = command["path"]
-    effects = set(driver["effects"])
-    exempt = label in driver_contract()["effects"]["exempt"]
-    examples = command["examples"]
-    errors.extend(classification_errors(label, command["type"], bool(command.get("dangerous")), effects))
-    errors.extend(builtin_param_errors(command))
-    if tier is not None and tier_floor(effects) > tier:
-        errors.append(f"{label}: its effects need a higher tool risk_tier")
-    if command["output_schema"] not in schemas:
-        errors.append(f"{label}: output_schema must name an entry in schemas")
-    prefix = f"{tool} {label}"
-    if any(not example.startswith(prefix) for example in examples):
-        errors.append(f"{label}: examples are runnable calls that start with '{prefix}'")
-    if exempt:
-        if any("--confirm" in example for example in examples):
-            errors.append(f"{label}: the base self-update never takes --confirm (base §14)")
-    elif command["type"] == "write":
-        if not any("--dry-run" in example for example in examples) or not any("--confirm" in example for example in examples):
-            errors.append(f"{label}: a write command shows the --dry-run and --confirm pair")
-        if "plan" not in driver["phases"] or not set(driver["phases"]) & {"apply", "submit"}:
-            errors.append(f"{label}: a write command declares the plan phase and apply or submit")
-    elif not set(driver["phases"]) <= PHASES_READ:
-        errors.append(f"{label}: a read command cannot declare plan, apply or submit")
-    if command.get("dangerous") and not any("--dangerous" in example for example in examples):
-        errors.append(f"{label}: a dangerous command's examples carry --dangerous")
-    if "operation_status" in driver["profiles"] and "submit" not in driver["phases"]:
-        errors.append(f"{label}: the operation_status profile belongs to submit commands")
-    names = [param["name"] for param in command["params"]]
-    if len(names) != len(set(names)):
-        errors.append(f"{label}: parameter names must be unique")
-    for param in command["params"]:
-        if param["name"] in RESERVED_PARAMS:
-            errors.append(f"{label}: --{param['name']} is a base global flag")
-        errors.extend(f"{label}: {problem}" for problem in param_errors(param))
-    if any(code not in error_codes for code in driver["error_codes"]):
-        errors.append(f"{label}: command error codes must be declared in error_codes")
-    if driver["maturity"] in {"verified", "stable"} and not driver["evidence_refs"]:
-        errors.append(f"{label}: verified commands need scoped evidence")
-    if level == "stable" and driver["maturity"] == "draft":
-        errors.append(f"{label}: a stable release cannot expose draft commands")
-    for stage in driver.get("stages", []):
-        if not set(stage["effects"]) <= effects:
-            errors.append(f"{label}: stage effects must be declared command effects")
-    for key in ["request_schema", "result_schema"]:
-        identifier = driver.get(key)
-        if identifier is not None and identifier not in json_schemas and identifier not in public_schemas():
-            errors.append(f"{label}: {key} names an unknown schema")
-    return errors
-
-
-def reference_errors(value: dict) -> list[str]:
-    errors = []
-    commands = value["commands"]
-    schemas = value["schemas"]
-    error_codes = value["error_codes"]
-    errors.extend(path_errors([command["path"] for command in commands]))
-    capability_ids = [command["driver"]["capability_id"] for command in commands]
-    if len(capability_ids) != len(set(capability_ids)):
-        errors.append("capability IDs must be unique")
-    errors.extend(error_table_errors(error_codes))
-    exits = {"0"} | {str(entry["exit"]) for entry in error_codes.values()}
-    if not exits <= set(value["exit_codes"]):
-        errors.append("exit_codes must explain every exit code the error table uses")
-    for label, entry in schemas.items():
-        if any(field.split(".", 1)[0] not in entry["fields"] for field in entry["untrusted_fields"]):
-            errors.append(f"schema {label} marks untrusted fields it does not list")
-    json_schemas = value.get("json_schemas", {})
-    errors.extend(json_schema_errors(json_schemas, public_schemas()))
-    level = value["release_readiness"]["level"]
-    if level == "stable" and value["release_readiness"]["fcc_status"] != "verified":
-        errors.append("a stable release needs verified functional contract coverage")
-    for command in commands:
-        errors.extend(command_errors(value["tool"], command, schemas, error_codes, json_schemas,
-                                     TIERS[value["risk_tier"]], level))
-    return errors
-
-
-def reference_index_errors(value: dict) -> list[str]:
-    errors = path_errors([command["path"] for command in value["commands"]])
-    tier = TIERS[value["risk_tier"]]
-    for command in value["commands"]:
-        effects = set(command["effects"])
-        errors.extend(classification_errors(command["path"], command["type"], command["dangerous"], effects))
-        if tier_floor(effects) > tier:
-            errors.append(f"{command['path']}: its effects need a higher tool risk_tier")
-    return errors
-
-
-def reference_command_errors(value: dict) -> list[str]:
-    errors = []
-    command = value["command"]
-    driver = command["driver"]
-    public = public_schemas()
-    if list(value["schemas"]) != [command["output_schema"]]:
-        errors.append("reference --command returns exactly the schemas entry its output_schema names")
-    if set(value["error_codes"]) != set(driver["error_codes"]):
-        errors.append("reference --command returns exactly the error codes the command declares")
-    errors.extend(error_table_errors(value["error_codes"]))
-    named = {driver[key] for key in ["request_schema", "result_schema"] if driver.get(key)}
-    entry = value["schemas"].get(command["output_schema"], {})
-    reference = entry.get("json_schema", {}).get("$ref")
-    if isinstance(reference, str):
-        named.add(reference.split("#", 1)[0])
-    if set(value["json_schemas"]) != {name for name in named if not name.startswith(PUBLIC_PREFIX)}:
-        errors.append("reference --command returns the product JSON Schemas the command names, and only those")
-    if set(value["public_schemas"]) != {name for name in named if name.startswith(PUBLIC_PREFIX)}:
-        errors.append("reference --command lists the public driver schemas the command names, by URN")
-    if any(name not in public for name in value["public_schemas"]):
-        errors.append("public_schemas name schemas of the pinned specification")
-    errors.extend(json_schema_errors(value["json_schemas"], public))
-    errors.extend(command_errors(value["tool"], command, value["schemas"], value["error_codes"], value["json_schemas"]))
-    return errors
-
-
-def param_errors(param: dict) -> list[str]:
-    errors = []
-    kinds = {"string": str, "path": str, "integer": int, "number": (int, float), "boolean": bool}
-
-    def matches(value) -> bool:
-        if param["type"] == "json":
-            return True
-        if param["type"] in {"integer", "number"} and isinstance(value, bool):
-            return False
-        return isinstance(value, kinds[param["type"]])
-
-    if "default" in param:
-        values = param["default"] if param["multiple"] and isinstance(param["default"], list) else [param["default"]]
-        if param["required"]:
-            errors.append(f"--{param['name']} is required and cannot also have a default")
-        if not all(matches(item) for item in values):
-            errors.append(f"--{param['name']} default does not match its type")
-    if any(not matches(item) for item in param.get("enum", [])):
-        errors.append(f"--{param['name']} enum values do not match its type")
-    return errors
-
-
-def json_schema_errors(json_schemas: dict, public: dict) -> list[str]:
-    errors = []
-    registry = Registry()
-    for schema in public.values():
-        registry = registry.with_resource(schema["$id"], Resource.from_contents(schema))
-    for identifier, schema in json_schemas.items():
-        if identifier.startswith(PUBLIC_PREFIX):
-            errors.append(f"public driver schema {identifier} is referenced by URN, never inlined")
+def check_schemas_and_examples(contract: dict, report: Report) -> None:
+    try:
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+    except ImportError:
+        report.add("requirements-dev.txt", "jsonschema is not installed; run pip install -r requirements-dev.txt")
+        return
+    resources = []
+    validators: dict[str, object] = {}
+    for name in contract.get("schemas", []):
+        path = SCHEMA_DIR / name
+        if not path.is_file():
+            report.add(rel(path), "listed in the contract but missing")
             continue
         try:
-            if schema.get("$id") != identifier or schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
-                errors.append("product JSON Schema identity or dialect mismatch")
-                continue
-            if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", identifier) or "#" in identifier:
-                errors.append("product schema IDs must be absolute resource identities without fragments")
-                continue
+            schema = json.loads(path.read_text(encoding="utf-8"))
             Draft202012Validator.check_schema(schema)
-            registry = registry.with_resource(identifier, Resource.from_contents(schema))
-        except SchemaError:
-            errors.append("invalid product JSON Schema definition")
-    if errors:
-        return errors
-    registry = registry.crawl()
-    for identifier, schema in json_schemas.items():
-        for _, base, node in schema_nodes(schema, identifier):
-            if isinstance(node, dict) and "$ref" in node:
-                try:
-                    registry.resolver(base).lookup(node["$ref"])
-                except Unresolvable:
-                    errors.append("product schema references must resolve offline")
-    return errors
+        except Exception as exc:  # noqa: BLE001 - report every kind of schema problem
+            report.add(rel(path), f"invalid schema: {exc}")
+            continue
+        resources.append((schema.get("$id", name), Resource.from_contents(schema)))
+        validators[name] = schema
+    for path in sorted(SCHEMA_DIR.glob("*.json")):
+        if path.name not in contract.get("schemas", []):
+            report.add(rel(path), "not listed in the contract's schemas")
+    registry = Registry().with_resources(resources)
 
+    def validator(name: str):
+        return Draft202012Validator(validators[name], registry=registry)
 
-# ---------------------------------------------------------------- other instances
+    if "contract.schema.json" in validators:
+        errors = list(validator("contract.schema.json").iter_errors(contract))
+        for err in errors[:5]:
+            report.add("contract/driver-contract.json", f"{'/'.join(map(str, err.path))}: {err.message}")
 
-
-def context_errors(value: dict) -> list[str]:
-    errors = []
-    authorization = value["authorization"]
-    errors.extend(authorization_errors(authorization))
-    roles = {component["role"] for component in value["environment"]["components"]}
-    if "cli" not in roles:
-        errors.append("context identifies the running CLI component")
-    connection = value["environment"]["connection"]
-    if connection["status"] == "connected" and connection["instance_id"] is None:
-        errors.append("a connected backend names its instance")
-    if not value["state"]["available"] and "reason" not in value["state"]:
-        errors.append("an unavailable operation store explains why")
-    return errors
-
-
-def authorization_errors(value: dict) -> list[str]:
-    errors = []
-    granted = value["status"] == "granted"
-    if granted and value["scope_id"] is None:
-        errors.append("a granted scope names its scope_id")
-    if value["status"] == "read_only" and (value["scope_id"] is not None or set(value["effects"]) - {"observe"} or value["dangerous"]):
-        errors.append("read_only allows observe and nothing else")
-    if not granted and value["status"] != "read_only" and value["reason"] is None:
-        errors.append("an expired, revoked or invalid scope explains why")
-    return errors
-
-
-def doctor_errors(value: dict) -> list[str]:
-    names = {check["check"] for check in value["checks"]}
-    missing = [name for name in driver_contract()["self_description"]["doctor"]["required_checks"] if name not in names]
-    return [f"doctor is missing the {name} check" for name in missing]
-
-
-def parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def is_absolute(path: str) -> bool:
-    return PurePosixPath(path).is_absolute() or PureWindowsPath(path).is_absolute()
-
-
-def well_formed_prefix(prefix: str) -> bool:
-    """A destination or locator prefix: an absolute path, or a URL without user info, query, fragment or dot segments."""
-    if not re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", prefix):
-        return is_absolute(prefix)
-    try:
-        parts = urlsplit(prefix)
-        segments = []
-        for segment in parts.path.split("/"):
-            if re.search(r"%(?![0-9a-fA-F]{2})", segment):
-                return False
-            segments.append(unquote(segment, errors="strict"))
-    except ValueError:
-        return False
-    return ("@" not in parts.netloc and not parts.query and not parts.fragment and "\\" not in prefix
-            and not any(segment in {".", ".."} or "/" in segment or "\\" in segment
-                        or any(ord(character) < 32 for character in segment) for segment in segments))
-
-
-def scope_errors(value: dict) -> list[str]:
-    errors = []
-    effects = set(value["effects"])
-    if effects & set(driver_contract()["effects"]["dangerous"]) and not value["dangerous"]:
-        errors.append("a scope that allows deliver, configure or physical effects must set dangerous")
-    if effects & {"change", "persist"} and not value["roots"] and not value.get("targets"):
-        errors.append("a write scope names the roots or targets it covers")
-    if "artifact" in effects and not value["outputs"]:
-        errors.append("an artifact scope names its output roots")
-    if "deliver" in effects and not value.get("destinations"):
-        errors.append("a deliver scope names the destinations it allows")
-    if any(not is_absolute(path) for path in value["roots"] + value["outputs"]):
-        errors.append("scope roots and outputs are absolute directories")
-    prefixes = value.get("destinations", []) + [selector["locator_prefix"] for selector in value.get("targets", []) if "locator_prefix" in selector]
-    if any(not well_formed_prefix(prefix) for prefix in prefixes):
-        errors.append("destinations and locator prefixes are absolute paths or URLs without user info, queries, fragments or dot segments")
-    if value["expires_at"] is not None and parse_time(value["expires_at"]) <= parse_time(value["granted_at"]):
-        errors.append("a scope expires after it was granted")
-    return errors
-
-
-def semver_key(value: str):
-    core = value.split("+", 1)[0].split("-", 1)
-    numbers = tuple(int(part) for part in core[0].split("."))
-    return numbers, (1,) if len(core) == 1 else (0, core[1])
-
-
-def changelog_errors(value: dict) -> list[str]:
-    errors = []
-    versions = [entry["version"] for entry in value["entries"]]
-    if [semver_key(version) for version in versions] != sorted((semver_key(version) for version in versions), reverse=True):
-        errors.append("changelog entries are newest first")
-    if "since" in value and any(semver_key(version) <= semver_key(value["since"]) for version in versions):
-        errors.append("--since returns only versions newer than since")
-    if "count" in value and value["count"] != len(value["entries"]):
-        errors.append("changelog count must equal the returned entries")
-    return errors
-
-
-def adoption_lock_errors(value: dict) -> list[str]:
-    errors = []
-    paths = []
-    for item in value["files"]:
-        try:
-            canonical_relative_path(item["path"])
-            canonical_relative_path(item["source_path"])
-        except InputError:
-            errors.append("adoption paths must stay within their declared relative roots")
-        paths.append(path_identity(item["path"]))
-    if len(paths) != len(set(paths)):
-        errors.append("adoption paths must be unique on case-insensitive filesystems")
-    return errors
-
-
-def release_manifest_errors(value: dict) -> list[str]:
-    errors = []
-    paths = []
-    for component in value["components"]:
-        path = component["path"]
-        normalized = PurePosixPath(path)
-        if path != normalized.as_posix() or any(p in {".", ".."} for p in normalized.parts):
-            errors.append("component paths must be canonical relative package paths")
-        if path == "manifest.json":
-            errors.append("manifest cannot contain its own checksum")
-        try:
-            canonical_relative_path(path)
-        except InputError:
-            errors.append("component paths must be safe on the declared target platforms")
-        paths.append(path_identity(path))
-    if len(paths) != len(set(paths)):
-        errors.append("component paths must be unique on case-insensitive targets too")
-    if value["source_dirty"]:
-        errors.append("release manifests cannot describe uncommitted source")
-    if value["artifact_kind"] == "cli_product" and not any(c["role"] == "cli" for c in value["components"]):
-        errors.append("a CLI product must identify its CLI component")
-    entries = [entry for group in value["compatibility"].values() for entry in group]
-    if any(entry["validation"] == "verified" and not entry["evidence_refs"] for entry in entries):
-        errors.append("a verified compatibility entry names its evidence")
-    return errors
-
-
-def evidence_errors(value: dict) -> list[str]:
-    errors = []
-    if value["package_sha256"] is None and not value["limitations"]:
-        errors.append("development evidence without a package must explain its limit")
-    if value["kind"] in {"real_application", "artifact_consumer"} and (not value["target"] or not value["snapshot_id"]):
-        errors.append("real-result evidence must identify the target and checked snapshot")
-    if value["kind"] in {"real_application", "artifact_consumer", "simulated_adapter"} and not value["commands"]:
-        errors.append("operational evidence records the commands it ran")
-    return errors
-
-
-@lru_cache(maxsize=1)
-def verification_helpers():
-    """Use only this pinned checkout/starter's pure helper, never a path from adapter data."""
-    source = ROOT / "packages" / "tool_driver_sdk" / "verification.py"
-    if not source.is_file():
-        source = ROOT.parent / "vendor" / "sdk" / "tool_driver_sdk" / "verification.py"
-    module = types.ModuleType("_pinned_verification_result")
-    exec(compile(source.read_bytes(), str(source), "exec"), module.__dict__)
-    return module
-
-
-def verification_result_errors(value: dict) -> list[str]:
-    return verification_helpers().profile_errors(value)
-
-
-SEMANTIC = {
-    "receipt": receipt_errors, "plan": plan_errors, "response": response_errors, "reference": reference_errors,
-    "reference-index": reference_index_errors, "reference-command": reference_command_errors,
-    "operation-status": operation_status_errors, "workflow": workflow_errors, "batch": batch_errors,
-    "query-page": query_page_errors, "context": context_errors, "doctor": doctor_errors, "scope": scope_errors,
-    "changelog": changelog_errors, "adoption-lock": adoption_lock_errors, "release-manifest": release_manifest_errors,
-    "evidence": evidence_errors, "verification-result": verification_result_errors,
-}
-
-
-def semantic_errors(kind: str, value: dict) -> list[str]:
-    if kind == "product-registry":
-        from generate_product import GenerationError, build_contract
-        try:
-            build_contract(value)
-        except GenerationError as exc:
-            return exc.errors or [str(exc)]
-        return []
-    checker = SEMANTIC.get(kind)
-    return checker(value) if checker else []
-
-
-def instance_errors(kind: str, value) -> list[str]:
-    """Schema plus semantic errors for a nested instance."""
-    checked = validators()[kind + ".schema.json"]
-    problems = [f"{kind}: {error.message}" for error in checked.iter_errors(value)]
-    return problems or semantic_errors(kind, value)
-
-
-# ---------------------------------------------------------------- base, contract and documents
-
-
-def base_errors() -> list[str]:
-    errors = []
-    lock = load(ROOT / "base" / "base-lock.json")
-    contract = driver_contract()
-    if lock["spec"] != "ai-native-cli-spec" or lock["tag"] != contract["base"]["tag"]:
-        errors.append("the driver contract and the base lock must pin the same base tag")
-    if not re.fullmatch(r"[0-9a-f]{40}", lock["commit"]):
-        errors.append("the base lock records the tagged commit")
-    listed = set()
-    for item in lock["files"]:
-        path = ROOT / item["path"]
-        listed.add(item["path"])
-        if not path.is_file() or hashlib.sha256(normalized_bytes(path)).hexdigest() != item["sha256"]:
-            errors.append(f"vendored base file differs from its pinned bytes: {item['path']}")
-    present = {p.relative_to(ROOT).as_posix() for p in (ROOT / "base").rglob("*") if p.is_file() and p.name != "base-lock.json"}
-    if present != listed:
-        errors.append("base/ must contain exactly the files its lock lists")
-    if len({base_contract()["contract_version"], lock["contract_version"], contract["base"]["contract_version"]}) != 1:
-        errors.append("the base contract, the base lock and the driver contract name different base contract versions")
-    core = base_contract()["error_codes"]["core"]
-    for code, entry in contract["error_codes"]["extensions"].items():
-        if code in core:
-            errors.append(f"{code} is a base core code and cannot be redefined")
-        if entry["exit"] not in allowed_exits():
-            errors.append(f"{code} uses an exit the base does not define")
-        if entry["exit"] == 9 and code != "E_HUMAN_REQUIRED":
-            errors.append(f"{code} cannot use the human-action exit 9")
-    known = base_contract()["error_codes"]["extension"]["known_extensions"]
-    for code, entry in known.items():
-        ours = contract["error_codes"]["extensions"].get(code)
-        if ours and (ours["exit"], ours["retryable"]) != (entry["exit"], entry["retryable"]):
-            errors.append(f"{code} must match the base known extension")
-    return errors
-
-
-def contract_errors() -> list[str]:
-    errors = []
-    contract = driver_contract()
-    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if contract["spec_version"] != version:
-        errors.append("driver contract spec_version differs from VERSION")
-    profile = public_schemas()[PUBLIC_PREFIX + "common:2.0"]["$defs"]["driver_profile"]["properties"]
-    if contract["schema_version"] != profile["schema_version"]["const"]:
-        errors.append("driver contract schema_version differs from the schemas")
-    rules = contract["receipt_codes"]["rules"]
-    if rules[-1]["when"] or not rules[-1]["ok"]:
-        errors.append("receipt rules end with the success catch-all")
-    conditions = set(contract["receipt_codes"]["conditions"])
-    if any(name not in conditions for rule in rules for name in rule["when"]):
-        errors.append("receipt rules use only declared conditions")
-    codes = code_table()
-    if any(code not in codes for rule in rules for code in rule["codes"]):
-        errors.append("receipt rules use only core or driver error codes")
-    return errors
-
-
-def document_errors() -> list[str]:
-    errors, identifiers = [], set()
-    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    status = (ROOT / "STATUS").read_text(encoding="utf-8").strip()
-    if status not in {"draft", "experimental", "stable"}:
-        errors.append("STATUS must declare a supported publication maturity")
-    for path in [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md")), ROOT / "examples" / "README.md"]:
-        text = path.read_text(encoding="utf-8")
-        for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
-            if re.match(r"^[a-z][a-z0-9+.-]*:", target) or target.startswith("#"):
+    for kind in ("valid", "invalid"):
+        base = EXAMPLE_DIR / kind
+        if not base.is_dir():
+            report.add(rel(base), "missing")
+            continue
+        for folder in sorted(p for p in base.iterdir() if p.is_dir()):
+            schema_name = f"{folder.name}.schema.json"
+            if schema_name not in validators:
+                report.add(rel(folder), f"no schema {schema_name}")
                 continue
-            target = target.split("#", 1)[0]
-            if not (path.parent / target).exists():
-                errors.append(f"{path.relative_to(ROOT)}: missing local link {target}")
-        if path.name in CLAUSE_DOCUMENTS:
-            if version not in text:
-                errors.append(f"{path.name}: missing current spec version")
-            if f"状态：`{status}`" not in text:
-                errors.append(f"{path.name}: maturity differs from STATUS")
-            found = re.findall(r"^### ([A-Z]{3}-\d{3})\b", text, re.M)
-            if not found:
-                errors.append(f"{path.name}: no addressable clauses")
-            for identifier in found:
-                if not identifier.startswith(CLAUSE_DOCUMENTS[path.name] + "-") or identifier in identifiers:
-                    errors.append(f"{path.name}: invalid or duplicate clause {identifier}")
-                identifiers.add(identifier)
-    missing = set(CLAUSE_DOCUMENTS) - {p.name for p in (ROOT / "docs").glob("*.md")}
-    if missing:
-        errors.append(f"missing clause documents: {sorted(missing)}")
-    return errors
+            files = sorted(folder.glob("*.json"))
+            if not files:
+                report.add(rel(folder), "has no examples")
+            for path in files:
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as exc:
+                    report.add(rel(path), f"not JSON: {exc}")
+                    continue
+                errors = list(validator(schema_name).iter_errors(data))
+                if kind == "valid" and errors:
+                    report.add(rel(path), f"must be valid: {errors[0].message}")
+                if kind == "invalid" and not errors:
+                    report.add(rel(path), "must be invalid but passes")
+    for name in validators:
+        stem = name[: -len(".schema.json")]
+        if stem != "contract" and not (EXAMPLE_DIR / "valid" / stem).is_dir():
+            report.add(f"contract/examples/valid/{stem}", "every schema needs valid examples")
 
 
-def clause_text(text: str, identifier: str) -> str:
-    match = re.search(rf"^### {identifier}\b.*?(?=^##)", text + "\n## ", re.M | re.S)
-    return match.group(0) if match else ""
+SCHEMA_ENUMS = [
+    # (schema file, JSON pointer to a list or an object whose keys count, values from the contract)
+    ("error.schema.json", "/properties/code/enum", lambda c: [e["code"] for e in c["error_codes"]]),
+    ("error.schema.json", "/allOf/0/if/properties/code/enum", lambda c: [e["code"] for e in c["error_codes"] if e["retryable"]]),
+    ("error.schema.json", "/$defs/details/properties/dispatch_state/enum", lambda c: c["envelope"]["dispatch_states"]),
+    ("error.schema.json", "/$defs/details/properties/conflict/enum", lambda c: c["conflict_values"]),
+    ("error.schema.json", "/$defs/details/properties/action/enum", lambda c: c["human_required_actions"]),
+    ("envelope.schema.json", "/$defs/meta/properties", lambda c: c["envelope"]["meta_keys"]),
+    ("envelope.schema.json", "/$defs/meta/properties/notices/items/properties/severity/enum", lambda c: c["envelope"]["notice_severities"]),
+    ("envelope.schema.json", "/$defs/success/required", lambda c: c["envelope"]["success_keys"]),
+    ("envelope.schema.json", "/$defs/failure/required", lambda c: c["envelope"]["error_keys"]),
+    ("preview.schema.json", "/$defs/tier/enum", lambda c: c["tiers"]),
+    ("preview.schema.json", "/$defs/effect/enum", lambda c: [e["effect"] for e in c["effects"]]),
+    ("preview.schema.json", "/$defs/preview/properties", lambda c: c["preview"]["fields"]),
+    ("preview.schema.json", "/$defs/change/properties", lambda c: c["preview"]["change_keys"]),
+    ("preview.schema.json", "/$defs/change/properties/origin/enum", lambda c: c["preview"]["change_origins"]),
+    ("receipt.schema.json", "/$defs/receipt/properties", lambda c: c["receipt"]["keys"]),
+    ("receipt.schema.json", "/$defs/outcome/properties", lambda c: list(c["receipt"]["dimensions"])),
+    ("receipt.schema.json", "/$defs/outcome/properties/execution/enum", lambda c: c["receipt"]["dimensions"]["execution"]),
+    ("receipt.schema.json", "/$defs/outcome/properties/change/enum", lambda c: c["receipt"]["dimensions"]["change"]),
+    ("receipt.schema.json", "/$defs/outcome/properties/delivery/enum", lambda c: c["receipt"]["dimensions"]["delivery"]),
+    ("receipt.schema.json", "/$defs/outcome/properties/persistence/enum", lambda c: c["receipt"]["dimensions"]["persistence"]),
+    ("receipt.schema.json", "/$defs/outcome/properties/verification/enum", lambda c: c["receipt"]["dimensions"]["verification"]),
+    ("receipt.schema.json", "/$defs/receipt/properties/failed_stage/enum", lambda c: c["receipt"]["failed_stages"]),
+    ("batch.schema.json", "/properties/summary/required", lambda c: c["batch"]["summary_keys"]),
+    ("batch.schema.json", "/properties/items/items/properties", lambda c: c["batch"]["item_keys"]),
+    ("objects.schema.json", "/$defs/session/required", lambda c: c["objects"]["session"]),
+    ("objects.schema.json", "/$defs/document/properties", lambda c: c["objects"]["document"]),
+    ("objects.schema.json", "/$defs/job/required", lambda c: [k for k in c["objects"]["job"] if k not in ("progress", "finished_at")]),
+    ("objects.schema.json", "/$defs/device/required", lambda c: c["objects"]["device"]),
+    ("objects.schema.json", "/$defs/plugin/required", lambda c: c["objects"]["plugin"]),
+    ("objects.schema.json", "/$defs/session/properties/state/enum", lambda c: [s["state"] for s in c["session_states"]]),
+    ("objects.schema.json", "/$defs/document/properties/disk/enum", lambda c: [s["state"] for s in c["disk_states"]]),
+    ("objects.schema.json", "/$defs/device/properties/state/enum", lambda c: [s["state"] for s in c["device_states"]]),
+    ("objects.schema.json", "/$defs/job/properties/state/enum", lambda c: c["jobs"]["states"]),
+    ("scope.schema.json", "/properties", lambda c: c["scope_file"]["fields"]),
+    ("scope.schema.json", "/properties/effects/items/enum", lambda c: [e["effect"] for e in c["effects"] if e["effect"] != "observe"]),
+    ("scope.schema.json", "/properties/confirm/const", lambda c: c["scope_file"]["confirm_values"]),
+    ("operation.schema.json", "/properties/state/enum", lambda c: c["operation"]["states"]),
+    ("operation.schema.json", "/properties/resolution/properties/outcome/enum", lambda c: c["operation"]["resolve_outcomes"]),
+    ("context.schema.json", "/required", lambda c: c["context_keys"]),
+    ("context.schema.json", "/properties/authorization/properties/status/enum", lambda c: c["scope_statuses"]),
+    ("doctor.schema.json", "/properties/checks/items/properties/status/enum", lambda c: c["doctor"]["statuses"]),
+    ("doctor.schema.json", "/properties/checks/items/properties", lambda c: c["doctor"]["check_keys"]),
+    ("changelog.schema.json", "/properties/entries/items/properties/changes/properties", lambda c: c["changelog_groups"]),
+    ("update.schema.json", "/properties", lambda c: c["update"]["data_keys"]),
+    ("update.schema.json", "/properties/status/enum", lambda c: c["update"]["statuses"]),
+    ("update.schema.json", "/properties/provenance_status/enum", lambda c: c["update"]["provenance_statuses"]),
+    ("update.schema.json", "/properties/skill_sync_status/enum", lambda c: c["update"]["skill_sync_statuses"]),
+    ("update.schema.json", "/properties/entry/enum", lambda c: c["update"]["entry_values"]),
+    ("knowledge.schema.json", "/$defs/kind/enum", lambda c: c["knowledge"]["kinds"]),
+    ("knowledge.schema.json", "/$defs/builtin_front_matter/required", lambda c: c["knowledge"]["builtin_fields"]),
+    ("knowledge.schema.json", "/$defs/builtin_front_matter/properties", lambda c: c["knowledge"]["builtin_fields"] + c["knowledge"]["rule_fields"] + c["knowledge"]["resource_fields"]),
+    ("knowledge.schema.json", "/$defs/builtin_front_matter/properties/lang/enum", lambda c: c["knowledge"]["langs"]),
+    ("knowledge.schema.json", "/$defs/builtin_front_matter/properties/severity/enum", lambda c: c["knowledge"]["severities"]),
+    ("knowledge.schema.json", "/$defs/team_entry/properties", lambda c: c["knowledge"]["team_fields"]),
+    ("knowledge.schema.json", "/$defs/team_entry/properties/provider/const", lambda c: [p["provider"] for p in c["knowledge"]["providers"]]),
+    ("knowledge.schema.json", "/$defs/get_team/properties/reader/const", lambda c: [p["reader"] for p in c["knowledge"]["providers"]]),
+    ("host-protocol.schema.json", "/$defs/method/enum", lambda c: c["host_protocol"]["methods"]),
+    ("host-protocol.schema.json", "/$defs/discovery_file/required", lambda c: c["host_protocol"]["discovery_keys"]),
+    ("host-protocol.schema.json", "/$defs/error_response/properties/error/properties/data/properties/code/enum", lambda c: c["host_protocol"]["allowed_error_codes"]),
+    ("host-protocol.schema.json", "/$defs/error_response/properties/error/properties/code/const", lambda c: [c["host_protocol"]["rpc_error_code"]]),
+    ("host-protocol.schema.json", "/$defs/hello_result/required", lambda c: c["host_protocol"]["handshake"]["response_keys"]),
+    ("evidence.schema.json", "/properties/runs/items/properties/matrix_row/enum", lambda c: [r["row"] for r in c["behavior_matrix_rows"]]),
+    ("adapter.schema.json", "/$defs/requests/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
+    ("adapter.schema.json", "/$defs/results/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
+    ("behavior-matrix.schema.json", "/$defs/row/properties/row/enum", lambda c: [r["row"] for r in c["behavior_matrix_rows"]]),
+    ("commands.schema.json", "/$defs/command/properties", lambda c: c["registration_fields"]),
+    ("eval-report.schema.json", "/$defs/question/properties/scenario/enum", lambda c: [x["scenario"] for g in ("general", "driver") for x in c["skill"]["eval_scenarios"][g]]),
+    ("reference.schema.json", "/$defs/command/properties/maturity/enum", lambda c: [m["level"] for m in c["maturity_levels"]]),
+]
 
 
-def prose_errors() -> list[str]:
-    """Tables and enumerations the prose repeats must match the machine contract."""
-    errors = []
-    contract = driver_contract()
-    docs = ROOT / "docs"
-    layering = (docs / "LAYERING.md").read_text(encoding="utf-8")
-    rows = {code: (int(exit_code), retryable == "true")
-            for code, exit_code, retryable in re.findall(r"^\| `(E_[A-Z0-9_]+)` \| (\d+) \| (true|false) \|", layering, re.M)}
-    expected = {code: (entry["exit"], entry["retryable"]) for code, entry in contract["error_codes"]["extensions"].items()}
-    if rows != expected:
-        errors.append("LAYERING.md: the LAY-004 table differs from contract error_codes.extensions")
-    core = (docs / "CORE-SPEC.md").read_text(encoding="utf-8")
-    lists = [("COR-005", contract["error_details"]["problem"]), ("COR-005", contract["error_details"]["conflict_reason"]),
-             ("COR-024", contract["error_details"]["human_action"]), ("COR-016", operation_states()),
-             ("COR-008", contract["effects"]["all"])]
-    for identifier, values in lists:
-        section = clause_text(core, identifier)
-        missing = [value for value in values if f"`{value}`" not in section]
-        if missing:
-            errors.append(f"CORE-SPEC.md {identifier} does not list {', '.join(missing)}")
-    problem_line = next((line for line in clause_text(core, "COR-005").splitlines() if "`problem` 的取值为" in line), "")
-    if set(re.findall(r"`([a-z_]+)`", problem_line)) - {"problem"} != set(contract["error_details"]["problem"]):
-        errors.append("CORE-SPEC.md COR-005 lists exactly the problem values of the contract")
-    return errors
+def _pointer(doc, pointer: str):
+    node = doc
+    for part in pointer.strip("/").split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    return node
 
 
-def example_errors() -> list[str]:
-    failures = []
-    checked = validators()
-    index = load(ROOT / "examples/index.json")
-    if index["spec_version"] != (ROOT / "VERSION").read_text(encoding="utf-8").strip():
-        failures.append("example index version differs from VERSION")
-    seen = set()
-    for item in index["examples"]:
-        relative = item["path"]
-        if relative in seen:
-            failures.append(f"duplicate example {relative}")
-        seen.add(relative)
-        value = load(ROOT / relative)
-        validator = checked[item["schema"]]
-        schema_errors = list(validator.iter_errors(value))
-        semantic = [] if schema_errors else semantic_errors(item["schema"].removesuffix(".schema.json"), value)
-        valid = not schema_errors and not semantic
-        if valid != item["valid"]:
-            reason = [e.message for e in schema_errors] + semantic
-            failures.append(f"{relative}: expected valid={item['valid']}, got {valid}: {reason}")
-    actual = {p.relative_to(ROOT).as_posix() for d in ["valid", "invalid"] for p in (ROOT / "examples" / d).glob("*.json")}
-    if actual != seen:
-        failures.append("example index must enumerate every positive and negative fixture")
-    return failures
+def check_schema_consistency(contract: dict, report: Report) -> None:
+    """Every enumerated value in a schema must equal the contract's list, in the same order."""
+    cache: dict[str, dict] = {}
+    for name, pointer, values in SCHEMA_ENUMS:
+        path = SCHEMA_DIR / name
+        if not path.is_file():
+            continue
+        schema = cache.setdefault(name, json.loads(path.read_text(encoding="utf-8")))
+        try:
+            node = _pointer(schema, pointer)
+        except (KeyError, IndexError, ValueError):
+            report.add(f"{rel(path)}#{pointer}", "missing; the contract expects it")
+            continue
+        got = list(node) if isinstance(node, (list, dict)) else [node]
+        want = list(values(contract))
+        if got != want:
+            report.add(f"{rel(path)}#{pointer}", f"must be {want}, found {got}")
 
 
-def envelope(started: float, failures: list[str]) -> dict:
-    meta = {"duration_ms": round((time.monotonic() - started) * 1000, 3)}
-    if not failures:
-        return {"ok": True, "schema_version": "1.0", "meta": meta,
-                "data": {"scope": "specification_structure_and_static_examples", "errors": [],
-                         "limitations": ["Static checks do not show that any receipt or evidence came from a real tool."]}}
-    return {"ok": False, "schema_version": "1.0", "meta": meta,
-            "error": {"code": "E_VALIDATION", "message": "the specification does not pass its own checks", "retryable": False,
-                      "details": {"errors": failures, "error_count": len(failures),
-                                  "next_action": "fix the listed files and run scripts/check_spec.py again"}}}
-
-
-def main() -> int:
-    started = time.monotonic()
-    failures = []
-    try:
-        failures.extend(base_errors())
-        failures.extend(contract_errors())
-        failures.extend(example_errors())
-        failures.extend(document_errors())
-        failures.extend(prose_errors())
-    except (ValueError, OSError, KeyError, TypeError) as exc:
-        failures.append(f"{type(exc).__name__}: {exc}")
-    text = json.dumps(envelope(started, failures), ensure_ascii=False) + "\n"
-    buffer = getattr(sys.stdout, "buffer", None)
-    if buffer is not None:
-        buffer.write(text.encode("utf-8"))
-        buffer.flush()
+def check_repo_docs(report: Report) -> None:
+    for name in ("README", "AGENTS"):
+        en, zh = ROOT / f"{name}.md", ROOT / f"{name}_zh.md"
+        if not en.is_file() or not zh.is_file():
+            report.add(f"{name}.md", "English and Chinese files are both required")
+            continue
+        a = en.read_text(encoding="utf-8").splitlines()
+        b = zh.read_text(encoding="utf-8").splitlines()
+        if f"English | [中文]({name}_zh.md)" not in a:
+            report.add(rel(en), "missing the language switch line")
+        if f"[English]({name}.md) | 中文" not in b:
+            report.add(rel(zh), "missing the language switch line")
+        ha = [ln for ln in a if ln.startswith("## ")]
+        hb = [ln for ln in b if ln.startswith("## ")]
+        if len(ha) != len(hb):
+            report.add(f"{name}.md <-> {name}_zh.md", f"section count differs: {len(ha)} vs {len(hb)}")
+        for path, lines in ((en, a), (zh, b)):
+            for i, line in enumerate(lines, 1):
+                for pattern in BANNED:
+                    if pattern.search(line):
+                        report.add(f"{rel(path)}:{i}", "banned reference")
+    changelog = ROOT / "CHANGELOG.md"
+    if not changelog.is_file():
+        report.add("CHANGELOG.md", "missing")
     else:
-        sys.stdout.write(text)
-    return 0 if not failures else 2
+        text = changelog.read_text(encoding="utf-8")
+        heads = [ln for ln in text.splitlines() if ln.startswith("## ")]
+        if not heads or heads[0] != "## [Unreleased]":
+            report.add("CHANGELOG.md", "the first section must be '## [Unreleased]'")
+        if CJK.search(text):
+            report.add("CHANGELOG.md", "CHANGELOG is English only")
+    if not (ROOT / "docs" / "OPEN-QUESTIONS.md").is_file():
+        report.add("docs/OPEN-QUESTIONS.md", "missing")
+
+
+def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--doc", action="append", help="check only this specification pair (repeatable)")
+    args = parser.parse_args(argv)
+
+    report = Report()
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    version = check_version(contract, report)
+    docs = contract["spec_documents"]
+    selected = [d for d in docs if not args.doc or d["name"] in args.doc]
+    if args.doc and len(selected) != len(set(args.doc)):
+        report.add("--doc", f"unknown specification in {args.doc}")
+
+    parsed: list[SpecFile] = []
+    for doc in selected:
+        pair = {}
+        for lang, info in LANG.items():
+            path = SPEC_DIR / f"{doc['name']}{info['suffix']}.md"
+            if not path.is_file():
+                report.add(rel(path), "missing")
+                continue
+            spec = parse(path, lang)
+            check_spec_file(spec, doc, version, contract, report)
+            parsed.append(spec)
+            pair[lang] = spec
+        if len(pair) == 2:
+            check_pair(pair["en"], pair["zh"], report)
+
+    all_ids = {c.id for s in parsed for c in s.clauses}
+    checked = {d["prefix"] for d in selected}
+    check_cross_refs(parsed, all_ids, checked, report)
+    if not args.doc:
+        for lang in LANG:
+            check_markers_once(parsed, lang, report)
+        check_test_columns(parsed, report)
+        check_schemas_and_examples(contract, report)
+        check_schema_consistency(contract, report)
+        check_repo_docs(report)
+
+    if report.errors:
+        for error in report.errors:
+            print(error)
+        print(f"\n{len(report.errors)} problem(s) found.")
+        return 1
+    clauses = sum(len(s.clauses) for s in parsed if s.lang == "en")
+    print(f"OK: {len(selected)} specification pair(s), {clauses} clauses.")
+    return 0
 
 
 if __name__ == "__main__":

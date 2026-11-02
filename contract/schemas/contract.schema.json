@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/contract.schema.json",
+  "title": "Driver contract",
+  "description": "Shape of contract/driver-contract.json, the machine-readable part of the specification.",
+  "type": "object",
+  "required": [
+    "name", "version", "schema_version", "spec_documents", "envelope", "error_codes", "exit_codes", "verbs",
+    "banned_verbs", "global_flags", "shared_flags", "target_flags", "duration_suffixes", "target_keys", "reserved_names",
+    "modes", "effects", "tiers", "risk_tiers", "always_dangerous", "preview", "confirm_token", "confirm_review",
+    "direct_review_steps", "conflict_values", "operation", "receipt", "derivation", "batch", "jobs", "human_required_actions",
+    "objects", "session_states", "session_read_deadline", "disk_states", "device_states", "builtin_commands",
+    "context_keys", "scope_statuses", "doctor", "changelog_groups", "standard_commands", "adapter_capabilities", "units",
+    "timing_fields", "scope_file", "state_dir", "update", "host_protocol", "knowledge", "skill", "conformance",
+    "behavior_matrix_rows", "maturity_levels", "evidence_kinds", "evidence_ref_format", "badges", "compatibility_labels", "check_labels",
+    "platforms", "project", "schemas", "bare_numbers", "registration_fields"
+  ],
+  "properties": {
+    "name": {"const": "tool-driver-cli-spec"},
+    "version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"},
+    "schema_version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "spec_documents": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["name", "prefix", "segments"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^DRIVER-[A-Z]+-SPEC$"},
+          "prefix": {"type": "string", "pattern": "^[A-Z]+$"},
+          "segments": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["from", "to", "topic"],
+              "properties": {
+                "from": {"type": "integer", "minimum": 1, "maximum": 999},
+                "to": {"type": "integer", "minimum": 1, "maximum": 999},
+                "topic": {"type": "string", "pattern": "^[a-z_]+$"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "error_codes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "exit", "retryable", "details"],
+        "additionalProperties": false,
+        "properties": {
+          "code": {"type": "string", "pattern": "^E_[A-Z_]+$"},
+          "exit": {"enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 130]},
+          "retryable": {"type": "boolean"},
+          "details": {"type": "array", "items": {"type": "string", "pattern": "^[a-z_]+$"}}
+        }
+      }
+    },
+    "exit_codes": {"type": "array", "items": {"type": "integer"}},
+    "verbs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["verb", "effect"],
+        "properties": {"verb": {"type": "string"}, "effect": {"type": ["string", "null"]}}
+      }
+    },
+    "global_flags": {"$ref": "#/$defs/flag_list"},
+    "shared_flags": {"$ref": "#/$defs/flag_list"},
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["effect", "tier", "risk"],
+        "properties": {
+          "effect": {"type": "string"},
+          "tier": {"anyOf": [{"type": "string"}, {"type": "object"}]},
+          "risk": {"enum": ["T0", "T1", "T2"]}
+        }
+      }
+    },
+    "standard_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "effect", "modes", "tier"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[a-z]+ [a-z-]+$"},
+          "effect": {"type": "string"},
+          "modes": {"type": "array", "items": {"enum": ["file", "session", "device"]}},
+          "tier": {"enum": ["none", "direct", "two_step", "dangerous"]}
+        }
+      }
+    },
+    "schemas": {"type": "array", "items": {"type": "string", "pattern": "^[a-z-]+\\.schema\\.json$"}},
+    "disk_states": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["state", "error"],
+        "additionalProperties": false,
+        "properties": {
+          "state": {"type": "string", "pattern": "^[a-z_]+$"},
+          "error": {"type": ["string", "null"], "pattern": "^E_[A-Z_]+$"},
+          "conflict": {"type": "string", "pattern": "^[a-z_]+$"}
+        },
+        "if": {"properties": {"error": {"const": "E_CONFLICT"}}},
+        "then": {"required": ["conflict"]}
+      }
+    },
+    "bare_numbers": {"const": "rejected"},
+    "registration_fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z_]+$"}}
+  },
+  "$defs": {
+    "flag_list": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["flag", "value"],
+        "properties": {
+          "flag": {"type": "string", "pattern": "^--[a-z][a-z-]*$"},
+          "value": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

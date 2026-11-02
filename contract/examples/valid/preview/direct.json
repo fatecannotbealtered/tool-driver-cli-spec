@@ -1,0 +1,48 @@
+{
+  "preview": {
+    "operation_id": "op_7mq2xk4v",
+    "command": "footprint move",
+    "action": "Move R1 to (12.5 mm, 30 mm).",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+      "kind": "footprint",
+      "label": "R1"
+    },
+    "effects": [
+      "change"
+    ],
+    "tier": "direct",
+    "summary": {
+      "total": 1,
+      "by_origin": {
+        "tool": 1
+      },
+      "by_kind": {
+        "footprint": 1
+      }
+    },
+    "changes": [
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+        "field": "x_mm",
+        "before": 10.0,
+        "after": 12.5
+      }
+    ],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": "rev-7",
+      "dirty": true
+    },
+    "inputs": {
+      "id": "R1",
+      "x": "12.5mm",
+      "y": "30mm"
+    },
+    "can_apply": true
+  }
+}

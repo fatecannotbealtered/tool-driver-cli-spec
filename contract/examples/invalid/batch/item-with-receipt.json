@@ -1,0 +1,62 @@
+{
+  "operation_id": "op_b4t9q2",
+  "items": [
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+      "operation_id": "op_b4t9q2r1",
+      "ok": true,
+      "receipt": {
+        "operation_id": "op_7mq2xk4v",
+        "command": "footprint move",
+        "target": {
+          "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+          "kind": "footprint",
+          "label": "R1"
+        },
+        "effects": [
+          "change"
+        ],
+        "tier": "direct",
+        "outcome": {
+          "execution": "completed",
+          "change": "applied",
+          "delivery": "not_applicable",
+          "persistence": "unchanged",
+          "verification": "passed"
+        },
+        "observed": {
+          "x_mm": 12.5,
+          "y_mm": 30.0
+        },
+        "mismatched": [],
+        "session": {
+          "id": "kicad-1234",
+          "generation": 3
+        },
+        "document": {
+          "id": "doc_1",
+          "revision": "rev-8",
+          "dirty": true
+        }
+      }
+    },
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
+      "operation_id": "op_b4t9q2r2",
+      "ok": false,
+      "code": "E_VALIDATION"
+    },
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R3",
+      "ok": false,
+      "skipped": true
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "succeeded": 1,
+    "failed": 1,
+    "unknown": 0,
+    "skipped": 1
+  }
+}

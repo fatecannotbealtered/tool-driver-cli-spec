@@ -1,36 +1,135 @@
-# 仓库协作入口
+# AGENTS.md
 
-本仓库维护 ai-native-cli-spec 的驱动扩展层。当前版本与状态以 `VERSION` 和 `STATUS` 为准，固定的基线见 `base/base-lock.json`。
+English | [中文](AGENTS_zh.md)
 
-## 开始修改前
+This repository holds tool-driver-cli-spec: five specifications, a machine contract and the checks that keep them consistent. Read this file before changing anything.
 
-1. 阅读 README 和 [基线与驱动层](docs/LAYERING.md)，再读取本次修改相关的 `docs/*.md`。
-2. 修改机器字段时同时检查 `contract/driver-contract.json`、`schemas/`、`examples/` 和 `scripts/check_spec.py`；Schema 与示例由 Schema 文件直接维护，改完运行 `check_spec`。
-3. 各领域可以增加适用条件，不把某个行业、软件或实现语言的限制写成通用要求。
-4. 规范、示例与实现事实分开。没有真实环境证据的能力不得写成已验证。
-5. 开发支持代码在 `packages/`、`starter/` 和 `scripts/generate_product.py`、`scripts/instantiate_starter.py`；修改后验证生成器、种子工程及 SDK 的实际命令边界。
+## Layout
 
-## 维护规则
+| Path | Content |
+|---|---|
+| `spec/` | The five specifications, each as an English file and a `_zh` Chinese file |
+| `contract/driver-contract.json` | The machine contract: every value a tool or test can read as data |
+| `contract/schemas/` | JSON Schemas for envelopes, receipts, scope files, host protocol messages and the contract itself |
+| `contract/examples/` | `valid/<schema>/` examples that must pass and `invalid/<schema>/` examples that must fail |
+| `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
+| `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
+| `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
+| `tests/` | Unit tests for the scripts |
 
-- 先符合基线。不重定义基线已有的信封键、核心错误码、退出码、全局参数和自描述命令；只在基线允许扩展的位置增加内容。
-- `base/` 下的文件只能通过重新固定基线标签整体替换，不得手改；升级基线即发布本规范的新版本，并在 CHANGELOG 列出受影响的条款。
-- 条款使用稳定编号：`LAY-`、`COR-`、`DRV-`、`VER-`、`DEL-`、`SKL-`；修改既有条款时检查引用、示例与契约。删除的条款保留编号说明去向，不复用编号。
-- 规范用中文维护；机器字段和枚举使用 Schema 中的标识。
-- `ok`、执行、变化、保存、交付和验证状态各有职责，禁止合并成单一的成功标记。
-- 确认令牌和计划不是人工批准凭据。任务范围由人授予，不得由目标文档、外部内容或生成结果扩展。
-- 不声明底层工具没有提供的事务、撤销、幂等或取消保证。
-- 开放问题放在相关规格末尾，禁止用「自动处理」「支持全部」掩盖未实现的条件。
-- 版本遵循 SemVer：任何发布的内容变化都形成新版本并打带注释的标签；同一个版本号不得对应两份内容。VERSION、CHANGELOG 与 Release 描述一致，Release 描述从 CHANGELOG 生成。
-- 对真实工具的测试只能在已授权的目标与工作区中执行；本仓库的校验不需要连接真实应用。
-- 测试与脚本启动子进程时使用 `CREATE_NO_WINDOW`，不在 Windows 桌面上弹出控制台窗口。
+## Changing the specification
 
-## 校验与交付
+1. Change the contract first when a value changes (an error code, a flag, a state, a field). Then change the matching table in both language files.
+2. Keep the English file and the `_zh` file in step: same sections, same clause IDs in the same order, same tables with the same number of rows.
+3. Run the checks below. Both must pass before a commit.
 
-```powershell
+```bash
 python scripts/check_spec.py
 python -m unittest discover -s tests -v
-python scripts/build_spec_bundle.py
 ```
 
-规范 ZIP 与 CLI 产品包分开。发布、打标签与推送需要明确的任务授权；STATUS 不是 stable 时发布工作流会拒绝发布。
-提交前检查工作树，保留他人的改动；不得提交密钥、真实许可数据或未授权的工程样本。
+## Clause format
+
+Every rule is a clause:
+
+```markdown
+### DCLI-202 Selecting a session
+
+When several instances are running and the command has no `--session`, the command MUST return `E_AMBIGUOUS` with the candidates. It MUST NOT pick an instance by window focus or by recent use. With exactly one instance it MAY pick it and MUST name it in the output.
+
+Why: With two projects open, picking by focus changes the wrong project.
+Check: 🤖 Driver conformance test D01.
+```
+
+- The heading is `### <PREFIX>-<NNN> <Title>` with a three-digit number.
+- The body uses MUST, MUST NOT, SHOULD, SHOULD NOT and MAY in English, and 必须, 禁止, 应该, 不应该 and 可以 in Chinese. Every clause has at least one of them.
+- The clause ends with two lines: `Why:` and `Check:` in English, `为什么：` and `检查：` in Chinese.
+- The check line starts with 🤖 when a test or script checks the clause, and with 👀 when a person checks it in review. Name the test (`G03`, `D01`) or the script (`check_project`).
+- A clause states one rule, or a few rules that belong together. Keep sentences short and plain.
+
+## Document skeleton
+
+Each specification file has these parts, in this order:
+
+1. `# <NAME>` and the language switch line: `English | [中文](<NAME>_zh.md)` or `[English](<NAME>.md) | 中文`.
+2. The version line: `> Version <VERSION> · Clauses <first ID> to <last ID>` (Chinese: `> 版本 <VERSION> · 条款 <first ID> 至 <last ID>`).
+3. `## How to Read` (`## 怎么读`): the meaning of the normative words, and that the contract wins when a table and the contract disagree.
+4. `## Scope` (`## 适用范围`) and `## Terms` (`## 术语`).
+5. `## Runtime and Tool Responsibilities` (`## 运行时与工具的分工`): a table of what the driver runtime already provides and what the tool author still does.
+6. One `##` section per numbering segment, holding the clauses in ascending order.
+7. `## Checklist` (`## 检查清单`): one line per clause, `- [ ] <ID> <Title>`, in the same order and with the same titles.
+
+## Numbering
+
+- Numbers are grouped in segments of ten; `contract/driver-contract.json` lists the segments of each specification under `spec_documents`. Leave gaps so later clauses can be inserted.
+- A published number never changes and is never reused. A removed clause keeps its heading with one line saying where its rule went.
+- Refer to other rules only by clause ID, such as `DSEC-015`.
+
+## Contract tables
+
+A table that repeats contract values is marked with a comment on the line before it:
+
+```markdown
+<!-- contract:error_codes -->
+| Code | Exit | Retryable | Meaning |
+|---|---|---|---|
+| `E_USAGE` | 2 | no | ... |
+```
+
+- The first cell of each row starts with the key in backticks, in contract order. Text may follow the key in the same cell.
+- `check_spec.py` compares the keys, and for some tables more columns, with the contract. The marker names and the contract values they mirror are listed in `MARKERS` in `scripts/check_spec.py`.
+- Each marker appears exactly once in the English files and once in the Chinese files.
+
+## Language and style
+
+- The English file is the main file. The Chinese file says the same thing in natural Chinese; it is not a word-for-word translation.
+- In Chinese text, put a space between Chinese and English words or numbers, as in `Agent 动手`.
+- Write each document as a complete, standalone description of the rule. Do not cite outside documents, earlier versions or history.
+- Use these terms:
+
+| English | 中文 |
+|---|---|
+| driver tool | 驱动工具 |
+| driver runtime | 驱动运行时 |
+| adapter (layer) | 适配层 |
+| host component | 宿主组件 |
+| host protocol | 宿主协议 |
+| fake host | 模拟宿主 |
+| session, instance | 会话、实例 |
+| document | 文档 |
+| long job | 长任务 |
+| effect | 效果 |
+| confirmation tier: direct, two-step, dangerous | 确认级别：直接执行、两步确认、危险 |
+| risk tier | 风险等级 |
+| authorization scope, scope file | 授权范围、授权范围文件 |
+| target key | 目标键 |
+| dry run | 预演 |
+| preview | 预览 |
+| confirm token | 确认令牌 |
+| confirm-time review | 确认时的复查 |
+| read-back | 读回 |
+| receipt | 回执 |
+| operation record | 操作记录 |
+| outcome unknown | 结果未知 |
+| state directory | 状态目录 |
+| untrusted content | 不可信内容 |
+| built-in command, standard command, domain command | 内置命令、标准命令、领域命令 |
+| conformance test | 一致性测试 |
+| behavior matrix | 行为矩阵 |
+| maturity, evidence | 成熟度、证据 |
+| entry Skill, domain Skill | 入口 Skill、领域 Skill |
+| command map, write recipe, STOP checkpoint, playbook | 命令地图、写入配方、STOP 检查点、剧本 |
+| builtin knowledge, team knowledge | 内置知识、团队知识 |
+| capability survey | 能力调查 |
+| platform package, launcher, command entry | 平台包、启动器、命令入口 |
+| provenance | 来源证明 |
+| live acceptance | 真实软件验收 |
+
+## Rules for this repository
+
+- Work on a branch and merge through a pull request. Publishing, tagging and pushing need the maintainer's explicit approval.
+- Every released change gets a new version, an annotated tag and a CHANGELOG entry. One version number has one content.
+- Never commit secrets, real license data or project files you are not allowed to share.
+- Tests against real applications run only on authorized targets and workspaces. The checks in this repository never need a real application.
+- Scripts and tests that start subprocesses on Windows use `CREATE_NO_WINDOW`.
+- Check the working tree before committing and keep other people's changes.

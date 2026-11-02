@@ -1,0 +1,54 @@
+{
+  "path": "doc close",
+  "summary": "Close a document.",
+  "flags": [
+    {
+      "name": "--session",
+      "summary": "Session ID.",
+      "type": "string"
+    },
+    {
+      "name": "--doc",
+      "summary": "Document ID.",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "--discard",
+      "summary": "Close even with unsaved changes, discarding them.",
+      "type": "boolean"
+    }
+  ],
+  "output_schema": {
+    "type": "object"
+  },
+  "examples": [
+    "kicad-cli doc close --session kicad-1234 --doc doc_1"
+  ],
+  "effects": [
+    "lifecycle"
+  ],
+  "tier": "direct",
+  "tier_when": [
+    {
+      "when": "discard_unsaved_changes",
+      "tier": "dangerous"
+    }
+  ],
+  "maturity": "experimental",
+  "evidence": [
+    "simulated:tests/matrix/doc-close.json"
+  ],
+  "modes": [
+    "session"
+  ],
+  "capabilities": [
+    "close_doc"
+  ],
+  "errors": [
+    "E_NOT_FOUND",
+    "E_BUSY",
+    "E_HUMAN_REQUIRED",
+    "E_CONFLICT"
+  ]
+}

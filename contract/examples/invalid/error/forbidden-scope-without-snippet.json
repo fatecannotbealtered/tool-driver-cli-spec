@@ -1,0 +1,18 @@
+{
+  "code": "E_FORBIDDEN",
+  "message": "The scope does not allow saving board.kicad_pcb.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Ask the user to widen the scope.",
+    "scope": {
+      "missing": {
+        "effects": [
+          "persist"
+        ],
+        "targets": [],
+        "dangerous": false
+      }
+    }
+  }
+}

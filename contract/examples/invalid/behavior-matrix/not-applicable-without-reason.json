@@ -1,0 +1,279 @@
+{
+  "command": "footprint move",
+  "rows": [
+    {
+      "row": "normal",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 0,
+        "summary": "R1 is at (12.5 mm, 30 mm); verification passed."
+      },
+      "actual": {
+        "exit": 0
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#normal"
+    },
+    {
+      "row": "empty",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--ids",
+        "",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#empty"
+    },
+    {
+      "row": "invalid_input",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_USAGE",
+        "summary": "Bare number: the problem lists the accepted units."
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#invalid_input"
+    },
+    {
+      "row": "not_found",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R999",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 3,
+        "code": "E_NOT_FOUND"
+      },
+      "actual": {
+        "exit": 3,
+        "code": "E_NOT_FOUND"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#not_found"
+    },
+    {
+      "row": "ambiguous",
+      "applies": true,
+      "arguments": [
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_AMBIGUOUS",
+        "summary": "Two instances have the board open."
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_AMBIGUOUS"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#ambiguous"
+    },
+    {
+      "row": "conflict",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 6,
+        "code": "E_CONFLICT",
+        "summary": "Another operation holds the lock on R1."
+      },
+      "actual": {
+        "exit": 6,
+        "code": "E_CONFLICT"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#conflict"
+    },
+    {
+      "row": "no_scope",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 4,
+        "code": "E_FORBIDDEN"
+      },
+      "actual": {
+        "exit": 4,
+        "code": "E_FORBIDDEN"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#no_scope"
+    },
+    {
+      "row": "busy",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 7,
+        "code": "E_BUSY"
+      },
+      "actual": {
+        "exit": 7,
+        "code": "E_BUSY"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#busy"
+    },
+    {
+      "row": "dialog",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 9,
+        "code": "E_HUMAN_REQUIRED"
+      }
+    },
+    {
+      "row": "disconnect",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 8,
+        "code": "E_OUTCOME_UNKNOWN",
+        "summary": "The connection closes before the reply."
+      },
+      "actual": {
+        "exit": 8,
+        "code": "E_OUTCOME_UNKNOWN"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#disconnect"
+    },
+    {
+      "row": "unsaved",
+      "applies": false
+    },
+    {
+      "row": "read_back_mismatch",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "kicad-1234",
+        "--doc",
+        "doc_1",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 1,
+        "code": "E_VERIFY_FAILED",
+        "summary": "The fake host stores x 12.0 mm; the tolerance is 0.001 mm."
+      },
+      "actual": {
+        "exit": 1,
+        "code": "E_VERIFY_FAILED"
+      },
+      "evidence": "simulated:tests/matrix/footprint-move.json#read_back_mismatch"
+    }
+  ]
+}
