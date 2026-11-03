@@ -40,9 +40,9 @@
   "tier": {
     "cloud": "direct"
   },
-  "maturity": "experimental",
+  "maturity": "verified",
   "evidence": [
-    "simulated:tests/matrix/footprint-move.json"
+    "live:docs/evidence/2026-11-01-footprint-move.json"
   ],
   "modes": [
     "file",

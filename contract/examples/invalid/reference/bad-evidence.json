@@ -41,7 +41,7 @@
     "file": "two_step",
     "session": "direct"
   },
-  "maturity": "experimental",
+  "maturity": "verified",
   "evidence": [
     "real:docs/evidence/run.json"
   ],

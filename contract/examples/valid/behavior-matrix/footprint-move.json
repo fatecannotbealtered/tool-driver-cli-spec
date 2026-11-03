@@ -6,9 +6,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -23,16 +23,16 @@
       "actual": {
         "exit": 0
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#normal"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#normal"
     },
     {
       "row": "empty",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--ids",
         "",
         "--x",
@@ -48,16 +48,16 @@
         "exit": 2,
         "code": "E_USAGE"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#empty"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#empty"
     },
     {
       "row": "invalid_input",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -74,16 +74,16 @@
         "exit": 2,
         "code": "E_USAGE"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#invalid_input"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#invalid_input"
     },
     {
       "row": "not_found",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R999",
         "--x",
@@ -99,7 +99,7 @@
         "exit": 3,
         "code": "E_NOT_FOUND"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#not_found"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#not_found"
     },
     {
       "row": "ambiguous",
@@ -121,16 +121,16 @@
         "exit": 2,
         "code": "E_AMBIGUOUS"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#ambiguous"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#ambiguous"
     },
     {
       "row": "conflict",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -147,16 +147,16 @@
         "exit": 6,
         "code": "E_CONFLICT"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#conflict"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#conflict"
     },
     {
       "row": "no_scope",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -172,16 +172,16 @@
         "exit": 4,
         "code": "E_FORBIDDEN"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#no_scope"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#no_scope"
     },
     {
       "row": "busy",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -197,16 +197,16 @@
         "exit": 7,
         "code": "E_BUSY"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#busy"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#busy"
     },
     {
       "row": "dialog",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -216,17 +216,23 @@
       ],
       "expected": {
         "exit": 9,
+        "code": "E_HUMAN_REQUIRED",
+        "summary": "The Board Setup dialog is open in KiCad."
+      },
+      "actual": {
+        "exit": 9,
         "code": "E_HUMAN_REQUIRED"
-      }
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#dialog"
     },
     {
       "row": "disconnect",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -239,11 +245,7 @@
         "code": "E_OUTCOME_UNKNOWN",
         "summary": "The connection closes before the reply."
       },
-      "actual": {
-        "exit": 8,
-        "code": "E_OUTCOME_UNKNOWN"
-      },
-      "evidence": "simulated:tests/matrix/footprint-move.json#disconnect"
+      "unrunnable": "The connection to KiCad cannot be cut on demand at the moment of a call; driver tests D06 and D21 cover it."
     },
     {
       "row": "unsaved",
@@ -255,9 +257,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -268,13 +270,13 @@
       "expected": {
         "exit": 1,
         "code": "E_VERIFY_FAILED",
-        "summary": "The fake host stores x 12.0 mm; the tolerance is 0.001 mm."
+        "summary": "With grid snapping on, KiCad stores x as 12.0 mm; the tolerance is 0.001 mm."
       },
       "actual": {
         "exit": 1,
         "code": "E_VERIFY_FAILED"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#read_back_mismatch"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#read_back_mismatch"
     }
   ]
 }

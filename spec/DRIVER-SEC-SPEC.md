@@ -412,7 +412,7 @@ Check: 🤖 Driver conformance test D23; runtime unit tests.
 
 ### DSEC-062 Simulated results
 
-When a device is simulated, every result from it MUST say so: the device object has `simulated: true` (DCLI-230), and so do the receipt and the result of every command run on it. The tool, its Skills and the Agent's report MUST NOT present a simulated result as a real one (DSKL-010). Results from a simulated device count only as simulated evidence (DVER-021).
+When a device is simulated, every result from it MUST say so: the device object has `simulated: true` (DCLI-230), and so do the receipt and the result of every command run on it. The tool, its Skills and the Agent's report MUST NOT present a simulated result as a real one (DSKL-010). Results from a simulated device are simulated results and never count as evidence (DVER-021).
 
 Why: A run on a simulator says nothing about the real machine; reporting it as real would hide the risk.
 Check: 🤖 Driver conformance test D15.

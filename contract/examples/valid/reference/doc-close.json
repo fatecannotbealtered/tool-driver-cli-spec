@@ -35,9 +35,9 @@
       "tier": "dangerous"
     }
   ],
-  "maturity": "experimental",
+  "maturity": "verified",
   "evidence": [
-    "simulated:tests/matrix/doc-close.json"
+    "live:docs/evidence/2026-11-01-doc-close.json"
   ],
   "modes": [
     "session"

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/behavior-matrix.schema.json",
   "title": "Behavior matrix",
-  "description": "The behavior matrix of one command, a data file in tests/ (DVER-030). Every row of the contract appears once. A row that does not apply to the command says why; a row that applies gives the arguments and the expected result, and once run, the actual result and an evidence reference. The normal row is the command's write sample (G00).",
+  "description": "The behavior matrix of one command, a data file in tests/ (DVER-030). Every row of the contract appears once. A row that does not apply to the command says why; a row that applies gives the arguments and the expected result, and once run on the real application, the actual result and a live evidence reference; a row that cannot be caused on demand says why in unrunnable. Arguments may use the sample placeholders of the contract. The normal row is the command's write sample (G00).",
   "type": "object",
   "required": ["command", "rows"],
   "additionalProperties": false,
@@ -41,17 +41,22 @@
         "arguments": {"type": "array", "items": {"type": "string"}},
         "expected": {"$ref": "#/$defs/result"},
         "actual": {"$ref": "#/$defs/result"},
-        "evidence": {"$ref": "reference.schema.json#/$defs/evidence_ref"}
+        "evidence": {"$ref": "reference.schema.json#/$defs/evidence_ref"},
+        "unrunnable": {"description": "Why this row, which applies, cannot be caused on demand on the real application. It then needs no live run (DVER-030).", "type": "string", "minLength": 1}
       },
       "if": {"properties": {"applies": {"const": true}}},
       "then": {
         "required": ["arguments", "expected"],
         "not": {"required": ["reason"]},
-        "dependentRequired": {"actual": ["evidence"], "evidence": ["actual"]}
+        "dependentRequired": {"actual": ["evidence"], "evidence": ["actual"]},
+        "allOf": [
+          {"if": {"required": ["unrunnable"]}, "then": {"not": {"anyOf": [{"required": ["actual"]}, {"required": ["evidence"]}]}}},
+          {"if": {"properties": {"row": {"enum": ["normal", "dialog", "read_back_mismatch"]}}}, "then": {"not": {"required": ["unrunnable"]}}}
+        ]
       },
       "else": {
         "required": ["reason"],
-        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}]}
+        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["unrunnable"]}]}
       }
     },
     "result": {

@@ -12,7 +12,7 @@
     "objects", "session_states", "session_read_deadline", "disk_states", "device_states", "builtin_commands",
     "context_keys", "scope_statuses", "doctor", "changelog_groups", "standard_commands", "adapter_capabilities", "units",
     "timing_fields", "scope_file", "state_dir", "update", "host_protocol", "knowledge", "skill", "conformance",
-    "behavior_matrix_rows", "maturity_levels", "evidence_kinds", "evidence_ref_format", "badges", "compatibility_labels", "check_labels",
+    "sample_placeholders", "behavior_matrix_rows", "maturity_levels", "evidence_kinds", "evidence_ref_format", "badges", "compatibility_labels", "check_labels",
     "platforms", "project", "schemas", "bare_numbers", "registration_fields"
   ],
   "properties": {
@@ -113,6 +113,7 @@
       }
     },
     "bare_numbers": {"const": "rejected"},
+    "sample_placeholders": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^\\{[a-z_]+\\}$"}},
     "registration_fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z_]+$"}}
   },
   "$defs": {

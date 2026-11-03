@@ -14,7 +14,7 @@ The rule words mean:
 - SHOULD and SHOULD NOT: the expected behavior. Depart from it only for a reason you can state.
 - MAY: allowed, not required.
 
-Each clause has a stable ID such as DCLI-202, a title, the rule, a `Why:` line and a `Check:` line. 🤖 means a test or a script checks the clause; 👀 means a person checks it in review. G00 to G10 and R01 to R06 are general conformance tests; D01 to D25 are driver conformance tests. Other rules are referred to by clause ID only, such as DSEC-015.
+Each clause has a stable ID such as DCLI-202, a title, the rule, a `Why:` line and a `Check:` line. 🤖 means a test or a script checks the clause; 👀 means a person checks it in review. G00 to G10 and R01 to R05 are general conformance tests; D01 to D25 are driver conformance tests. Other rules are referred to by clause ID only, such as DSEC-015.
 
 A table marked `<!-- contract:NAME -->` repeats values from the machine contract, `contract/driver-contract.json`. When such a table and the contract disagree, the contract wins.
 
@@ -69,7 +69,7 @@ It does not define what domain commands do, such as how to route a track; it onl
 | state directory | The per-user directory where the tool keeps operation records, locks, caches and adapter state (DSEC-030) |
 | untrusted content | Text from documents, the application or other sources outside the tool; never treated as instructions (DSEC-020) |
 | built-in command, standard command, domain command | Commands the runtime implements for every tool (DCLI-030); commands the runtime implements from adapter capabilities (DCLI-200); commands the tool author writes |
-| conformance test | A test from the runtime's suites: general tests G00 to G10 and R01 to R06, driver tests D01 to D25 |
+| conformance test | A test from the runtime's suites: general tests G00 to G10 and R01 to R05, driver tests D01 to D25 |
 | maturity, evidence | How well a command is proven, and the records that prove it (DVER-040) |
 | platform package, launcher, command entry | The npm package that holds the native program for one platform; the starter script in the main npm package; the file npm puts on PATH to start the tool |
 | provenance | A signed statement that an npm package was built by the tool's release workflow |
@@ -87,7 +87,7 @@ It does not define what domain commands do, such as how to route a track; it onl
 | Self-update | `update`, update notices, command entries, Skill sync | Nothing beyond the npm package name |
 | Adapter state | The adapter state store under `adapter/` in the state directory (DCLI-260) | Keeps there whatever the adapter must remember between calls |
 | Host component | The CLI side of the host protocol; host-side libraries where provided | Writes the host component in a language the application supports |
-| Tests | General and driver conformance suites, fake host | A simulation of each domain command for the fake host, the behavior matrix, and live acceptance on the real application (DVER-030) |
+| Tests | General and driver conformance suites, fake host | The behavior matrix of each command and live acceptance on the real application (DVER-030, DVER-031) |
 
 ## Output
 
@@ -424,7 +424,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `effects` | Its effects (DCLI-051) |
 | `modes` | The modes it supports (DCLI-201) |
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
-| `flags` | Every flag, each with its type, the unit quantity of a physical parameter (DCLI-080), and `secret: true` when it carries a secret (DSEC-040) |
+| `flags` | Every flag, each with its type, the unit quantity of a physical parameter (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true` when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
 | `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
 | `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |
