@@ -83,7 +83,7 @@ The same arguments serve the fake host and the real application. A sample MUST t
 | Placeholder | With the fake host | On the real application |
 |---|---|---|
 | `{session}` | An instance of the fake host | The authorized instance |
-| `{doc}` | A document open in that instance | The authorized document |
+| `{doc}` | A document of the fake host: open in that instance, or a file in file mode | The authorized document or file |
 | `{device}` | The fake host's device | The authorized device |
 | `{dir}` | A new empty temporary directory, for output files | A new empty directory inside an authorized folder |
 
@@ -188,7 +188,7 @@ The tool-driver-cli-spec repository provides the fake host: a small program that
 - long jobs
 - one simulated device, which can be put in each device state (DCLI-230)
 
-The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029) and the call's inputs. The targets are the objects the call selects with `--id`, `--ids` or the `id` of each `--input` item (DCLI-064), in the session, document or device the call names; when the call selects no object, the target is the document it names, or else its session or device. Every other input is a changed field. The fake host treats any object ID as existing unless a test says otherwise. It previews one change per target, applies the change to its memory and reads back the previewed values. For an `artifact` command, the output files start absent and the apply writes them. The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations; make any adapter call fail, hang or read back a different value, for the whole call or for one item of a batch; and read the fake host's state, so they can see whether a change arrived and how often.
+The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029) and the call's inputs. The targets are the objects the call selects with `--id`, `--ids` or the `id` of each `--input` item (DCLI-064), in the session, document or device the call names; when the call selects no object, the target is the document it names, or else its session or device. Every other flag the command registers is a changed field. The fake host treats any object ID as existing unless a test says otherwise. It previews one change per target, applies the change to its memory and reads back the previewed values. For an `artifact` command, the files its `output` flags name start absent, and the apply writes them (DCLI-029). The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations; make any adapter call fail, hang or read back a different value, for the whole call or for one item of a batch; and read the fake host's state, so they can see whether a change arrived and how often.
 
 The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
 
@@ -326,7 +326,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
     },
     {
       "command": "footprint move",
-      "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R2", "--x", "15mm", "--y", "30mm"],
+      "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
       "exit": 7,
       "result": "pass",
       "matrix_row": "busy",

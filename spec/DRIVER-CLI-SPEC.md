@@ -424,7 +424,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `effects` | Its effects (DCLI-051) |
 | `modes` | The modes it supports (DCLI-201) |
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
-| `flags` | Every flag, each with its type, the unit quantity of a physical parameter (DCLI-080), and `secret: true` when it carries a secret (DSEC-040) |
+| `flags` | Every flag, each with its type, the unit quantity of a physical parameter (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true` when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
 | `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
 | `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |

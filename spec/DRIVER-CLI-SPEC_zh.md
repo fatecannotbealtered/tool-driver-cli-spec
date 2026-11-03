@@ -424,7 +424,7 @@
 | `effects` | 命令的效果（DCLI-051） |
 | `modes` | 命令支持的模式（DCLI-201） |
 | `target_kind` | 命令作用的对象类型，也就是目标键里的类型（DCLI-028） |
-| `flags` | 每个参数，各带类型、物理量参数所属的物理量（DCLI-080），以及携带机密时的 `secret: true`（DSEC-040） |
+| `flags` | 每个参数，各带类型、物理量参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`（DCLI-051） |
 | `untrusted_fields` | 存放不可信文字的输出字段（DSEC-021） |
 | `adapter_capabilities` | 命令调用的适配能力（DCLI-260），`reference` 会列出 |
 | `survey_ids` | 命令实现的、能力调查中的能力编号（DREPO-061） |

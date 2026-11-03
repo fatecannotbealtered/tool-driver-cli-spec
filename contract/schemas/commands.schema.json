@@ -212,6 +212,10 @@
         "secret": {
           "type": "boolean"
         },
+        "output": {
+          "description": "The flag names a file the command creates. For an artifact command, the runtime checks whether that file exists to choose the tier (DCLI-051).",
+          "type": "boolean"
+        },
         "coordinate_system": {
           "$ref": "reference.schema.json#/$defs/coordinate_system"
         }
