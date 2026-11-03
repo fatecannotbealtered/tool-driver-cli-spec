@@ -184,6 +184,11 @@
       "example": "file:///D:/proj/board.kicad_pcb#/footprints/R1"
     },
     {"kind": "untitled_document", "format": "untitled:<session-id>/<n>", "example": "untitled:kicad-1234/1"},
+    {
+      "kind": "untitled_object",
+      "format": "untitled:<session-id>/<n>#<domain-path>",
+      "example": "untitled:kicad-1234/1#/footprints/R1"
+    },
     {"kind": "device_part", "format": "device:<device-id>/<part>", "example": "device:cnc-01/axis-x"}
   ],
   "reserved_names": [
@@ -843,6 +848,7 @@
     ]
   },
   "sample_placeholders": ["{session}", "{doc}", "{device}", "{dir}"],
+  "fake_host": {"env": "<PREFIX>_FAKE_HOST", "receipt_key": "simulated"},
   "behavior_matrix_rows": [
     {"row": "normal", "group": "general", "applies_when": ["always"]},
     {"row": "empty", "group": "general", "applies_when": ["always"]},

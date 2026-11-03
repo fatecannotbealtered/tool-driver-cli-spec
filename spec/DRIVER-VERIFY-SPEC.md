@@ -59,7 +59,7 @@ One idea runs through this specification: only what is tested counts. Not run is
 |---|---|---|
 | Conformance suites | Both suites, which run any tool from the command line | Runs both suites in CI on every merge and release, on every shipped platform |
 | Write samples | The G tests that use the samples; samples for built-in and standard commands | The `normal` row of each domain write command's behavior matrix |
-| Fake host | The fake host, with the in-process adapter interface and the host protocol | Nothing to write |
+| Fake host | The fake host, reached through `<PREFIX>_FAKE_HOST` (DVER-023) and the host protocol | Nothing to write |
 | Behavior matrix | The rows and when each applies, the matrix schema and the matrix runner | One matrix file per domain command and per standard command that calls an adapter capability |
 | Maturity and evidence | Maturity and evidence shown by `reference`; `check_project` compares levels with evidence | Declares the level and the evidence of each command and keeps the evidence current |
 | Live acceptance | The schemas of live records and eval reports | Runs on authorized targets; writes `docs/E2E.md` and the records in `docs/evidence/` |
@@ -179,7 +179,7 @@ Check: 👀 Review of the suite code: every test starts the CLI as a process.
 
 ### DVER-020 Fake host
 
-The tool-driver-cli-spec repository provides the fake host: a small program that stands in for the application in tests. It MUST offer both ways a tool reaches an application: the in-process adapter interface (DCLI-260) and the host protocol (DCLI-270 to DCLI-280), with the payloads of `contract/schemas/adapter.schema.json`. It is the reference implementation of that protocol (DCLI-281). It MUST be able to simulate:
+The tool-driver-cli-spec repository provides the fake host: a small program that stands in for the application in tests. It MUST stand in for both ways a tool reaches an application: the adapter inside the CLI (DCLI-260), on the fake host's own address (DVER-023), and a host component, over the host protocol (DCLI-270 to DCLI-280); both use the payloads of `contract/schemas/adapter.schema.json`. It is the reference implementation of that protocol (DCLI-281). It MUST be able to simulate:
 
 - several instances at once
 - documents in memory, with unsaved changes
@@ -188,7 +188,7 @@ The tool-driver-cli-spec repository provides the fake host: a small program that
 - long jobs
 - one simulated device, which can be put in each device state (DCLI-230)
 
-The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029) and the call's inputs. The targets are the objects the call selects with `--id`, `--ids` or the `id` of each `--input` item (DCLI-064), in the session, document or device the call names; when the call selects no object, the target is the document it names, or else its session or device. Every other flag the command registers is a changed field. The fake host treats any object ID as existing unless a test says otherwise. It previews one change per target, applies the change to its memory and reads back the previewed values. For an `artifact` command, the files its `output` flags name start absent, and the apply writes them (DCLI-029). The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations; make any adapter call fail, hang or read back a different value, for the whole call or for one item of a batch; and read the fake host's state, so they can see whether a change arrived and how often.
+The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029) and the call's inputs. The targets are the objects the call selects with `--id`, `--ids` or the `id` of each `--input` item (DCLI-064), in the session, document or device the call names; when the call selects no object, the target is the document it names, or else its device, and a call that names neither has no target. Every other flag the command registers is a changed field. The fake host treats any object ID as existing unless a test says otherwise. It previews one change per target, applies the change to its memory and reads back the previewed values. For an `artifact` command, the files its `output` flags name start absent, and the apply writes them (DCLI-029). The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations; make any adapter call fail, hang or read back a different value, for the whole call or for one item of a batch; and read the fake host's state, so they can see whether a change arrived, how often, and which requests broke the protocol or the payloads.
 
 The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
 
@@ -215,6 +215,19 @@ The tool-driver-cli-spec repository MUST run the driver runtime, the project tem
 
 Why: Every tool copies the runtime unchanged. A fault found here is fixed once instead of in every tool.
 Check: 👀 Review of the tool-driver-cli-spec repository's CI workflow.
+
+### DVER-023 Running a tool on the fake host
+
+When the environment variable `<PREFIX>_FAKE_HOST` holds the address of a fake host, the runtime MUST use the fake host in place of the tool's adapter and of the application:
+
+- It MUST send every adapter capability call (DCLI-260), CLI-side and instance-side, to that address as a request of the same name, with the framing and the handshake of the host protocol (DCLI-272, DCLI-273) and the payloads of `contract/schemas/adapter.schema.json`.
+- For a tool with a host component (DCLI-240), it MUST send the instance-side calls to the instances the fake host lists under `hosts/` in the state directory (DCLI-271), so the suites also test the runtime's own host protocol client.
+- Every receipt MUST carry `simulated: true`, and `context` and `doctor` MUST name the fake host as the application (DVER-021).
+
+The runtime MUST NOT take this address from any file, flag or setting other than the variable.
+
+Why: Black-box suites need one switch that works for a runtime in any language. Marking every receipt keeps a variable left set by mistake from passing simulated results off as real.
+Check: 🤖 Every conformance test (DVER-001) reaches the tool through this variable; runtime unit tests check the marking.
 
 ## Behavior Matrix
 
@@ -372,6 +385,7 @@ Check: 🤖 `check_project` checks that both files exist and that their sections
 - [ ] DVER-020 Fake host
 - [ ] DVER-021 Simulated results are not evidence
 - [ ] DVER-022 Fake host in the specification repository's CI
+- [ ] DVER-023 Running a tool on the fake host
 - [ ] DVER-030 Behavior matrix
 - [ ] DVER-031 Adapter behavior on real software
 - [ ] DVER-040 Maturity levels

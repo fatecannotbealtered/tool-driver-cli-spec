@@ -1,0 +1,61 @@
+"""The fake host: a small program that stands in for the application in tests (DVER-020).
+
+It is also the reference implementation of the host protocol (DCLI-270 to DCLI-281). It uses
+only the Python standard library.
+
+Start it in the test process::
+
+    from fakehost import FakeHost, Client
+
+    with FakeHost(state_dir, commands=registrations) as host:
+        env[f"{PREFIX}_FAKE_HOST"] = host.address      # the tool now talks to the fake host
+        with Client(host.address) as control:
+            control.control("set_session", session="fake-1", state="blocked")
+            ...                                         # run the tool's CLI as a process
+            state = control.control("state")            # what arrived, and how often
+
+or as its own process with ``python -m fakehost --state-dir DIR``.
+
+The world starts with one instance ``fake-1`` holding document ``doc-1``, one file-mode
+document ``file-1`` and one simulated device ``dev-1``; pass ``config`` to change it, and
+``host_component: true`` to serve each instance on its own endpoint with a discovery file.
+
+Control methods, called as ``fake.<name>`` on the main address:
+
+``state``                       everything: instances, documents with objects, devices, jobs,
+                                calls, applied changes, protocol violations, faults
+``reset``                       ``config``, ``commands``: start over
+``fault``                       ``rule``: inject a fault, see below
+``clear_faults``
+``set_session``                 ``session``, ``state`` (ready, busy, blocked, unresponsive, lost,
+                                closed), ``title``, ``action``
+``restart_session``             ``session``: the generation goes up by one
+``add_session``                 ``session``: one more instance, with one document
+``set_device``                  ``device``, ``state``
+``edit``                        ``document``, ``object``, ``field``, ``value``: a person edits
+``set_disk``                    ``document``, ``disk`` (in_sync, changed, missing)
+``set_missing``                 ``document``, ``objects``: these object IDs do not exist
+``set_job``                     ``job``, ``state``, ``action``
+``configure``                   ``protocol_version``, ``plugin``
+``shutdown``
+
+A fault rule matches the next call of ``method``, optionally only for one ``command``,
+``session`` or ``target`` (an object ID, so one item of a batch can fail), ``times`` times
+(default 1; 0 means every time). Its ``action``:
+
+``error``       reply with the host error in ``error`` (``code``, ``dispatch_state``, ...)
+``hang``        never reply
+``close``       close the connection without a reply
+``result``      merge ``result`` into the normal result
+``store``       apply: the application stores ``values`` instead of the requested ones
+``unreadable``  read_back: ``fields`` cannot be read back
+``job``         apply: the work continues as a long job of ``steps`` polls
+
+With ``apply_first: true``, ``error``, ``hang`` and ``close`` happen after the change was
+applied, as when a dialog appears or the connection drops after dispatch.
+"""
+from .client import Client, ConnectionClosed, HostCallError, ProtocolMismatch
+from .server import FakeHost
+from .world import PROTOCOL_VERSION, World
+
+__all__ = ["Client", "ConnectionClosed", "FakeHost", "HostCallError", "PROTOCOL_VERSION", "ProtocolMismatch", "World"]

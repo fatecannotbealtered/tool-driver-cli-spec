@@ -10,4 +10,5 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 - The machine contract `contract/driver-contract.json`, twenty-one JSON Schemas (including the adapter payloads, behavior matrices, evaluation reports and command registrations), and valid and invalid examples for each schema.
 - `scripts/check_spec.py`, which checks clause format, numbering, language pairs, cross-references, contract tables, schema enums, the clauses each conformance test checks, schemas and examples.
 - `scripts/build_spec_bundle.py`, which builds the release ZIP with a manifest and prints release notes from this file.
+- The fake host `conformance/fakehost/`, which stands in for the application in tests and is the reference implementation of the host protocol: a named pipe on Windows and a Unix socket elsewhere, Content-Length framing, the handshake, discovery files, a generic answer to domain commands and injectable faults.
 - Check and release workflows for Windows, macOS and Linux.

@@ -28,9 +28,9 @@
     "tier": {"enum": ["direct", "two_step", "dangerous"]},
     "effect": {"enum": ["observe", "lifecycle", "change", "artifact", "persist", "configure", "deliver", "physical"]},
     "target_key": {
-      "description": "A normalized target key: file:///<absolute-path>, file:///<absolute-path>#<domain-path>, untitled:<session-id>/<n> or device:<device-id>/<part>.",
+      "description": "A normalized target key: file:///<absolute-path>, file:///<absolute-path>#<domain-path>, untitled:<session-id>/<n>, untitled:<session-id>/<n>#<domain-path> or device:<device-id>/<part>.",
       "type": "string",
-      "pattern": "^(file:///.+|untitled:[^/\\s]+/[1-9][0-9]*|device:[^/\\s]+(/.+)?)$"
+      "pattern": "^(file:///.+|untitled:[^/\\s]+/[1-9][0-9]*(#.+)?|device:[^/\\s]+(/.+)?)$"
     },
     "target": {
       "type": "object",

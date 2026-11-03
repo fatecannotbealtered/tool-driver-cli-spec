@@ -43,9 +43,9 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot 
 | Phase | Content | State |
 |---|---|---|
 | 1 | Design | Done |
-| 2 | Specifications, contract, schemas, checks | In review |
-| 3 | Fake host and the two conformance suites | Planned |
-| 4 | Python driver runtime and project template | Planned |
+| 2 | Specifications, contract, schemas, checks | Done |
+| 3 | Fake host, the reference implementation of the host protocol | In progress |
+| 4 | Python driver runtime, the two conformance suites and the project template | Planned |
 | 5 | Skill and knowledge templates, development Skill, onboarding guide | Planned |
 | 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
 
@@ -55,12 +55,13 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot 
 tool-driver-cli-spec/
 ├── spec/        the five specifications, English and Chinese
 ├── contract/    driver-contract.json, schemas/, examples/
+├── conformance/ fakehost/, the fake host (DVER-020)
 ├── scripts/     check_spec.py, build_spec_bundle.py
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       unit tests for the scripts
+└── tests/       unit tests for the scripts and the fake host
 ```
 
-Later phases add `conformance/`, `sdk/`, `template/` and `skills/`.
+Later phases add the conformance suites, `sdk/`, `template/` and `skills/`.
 
 ## Checks
 

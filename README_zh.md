@@ -43,9 +43,9 @@
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 1 | 设计 | 完成 |
-| 2 | 五份规范、契约、Schema、检查脚本 | 评审中 |
-| 3 | 模拟宿主和两组一致性测试 | 计划中 |
-| 4 | Python 驱动运行时和项目模板 | 计划中 |
+| 2 | 五份规范、契约、Schema、检查脚本 | 完成 |
+| 3 | 模拟宿主，也是宿主协议的参考实现 | 进行中 |
+| 4 | Python 驱动运行时、两组一致性测试和项目模板 | 计划中 |
 | 5 | Skill 与知识库模板、开发用 Skill、接入指南 | 计划中 |
 | 6 | 发布 1.0.0-rc.1，然后发布 1.0.0 | 计划中 |
 
@@ -55,12 +55,13 @@
 tool-driver-cli-spec/
 ├── spec/        五份规范，中英文各一份
 ├── contract/    driver-contract.json、schemas/、examples/
+├── conformance/ fakehost/，模拟宿主（DVER-020）
 ├── scripts/     check_spec.py、build_spec_bundle.py
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       脚本的单元测试
+└── tests/       脚本和模拟宿主的单元测试
 ```
 
-后续阶段会加上 `conformance/`、`sdk/`、`template/` 和 `skills/`。
+后续阶段会加上一致性测试、`sdk/`、`template/` 和 `skills/`。
 
 ## 检查
 

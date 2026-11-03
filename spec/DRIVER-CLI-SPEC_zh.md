@@ -405,6 +405,7 @@
 | `file`：整个文件 | `file:///<absolute-path>` | `file:///D:/proj/board.kicad_pcb` |
 | `file_object`：文件里的对象 | `file:///<absolute-path>#<domain-path>` | `file:///D:/proj/board.kicad_pcb#/footprints/R1` |
 | `untitled_document`：未保存的新文档 | `untitled:<session-id>/<n>` | `untitled:kicad-1234/1` |
+| `untitled_object`：新文档里的对象 | `untitled:<session-id>/<n>#<domain-path>` | `untitled:kicad-1234/1#/footprints/R1` |
 | `device_part`：设备的部件 | `device:<device-id>/<part>` | `device:cnc-01/axis-x` |
 
 匹配必须按前缀进行：授权范围文件里写 `file:///D:/proj/`，就覆盖这个文件夹下所有文件里的所有对象；写 `untitled:`，就覆盖所有新文档。比较之前，运行时必须先规范化路径：绝对路径、统一分隔符，Windows 上不区分大小写。前缀必须只在边界上匹配，即满足以下任一条件：目标键与前缀相同；前缀以 `/`、`#` 或 `:` 结尾；目标键在前缀之后紧接着 `/` 或 `#`。所以 `file:///D:/proj` 覆盖 `file:///D:/proj/board.kicad_pcb`，不覆盖 `file:///D:/proj2/board.kicad_pcb`。目标锁使用同样的边界规则（DCLI-060）。
