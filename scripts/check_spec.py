@@ -111,6 +111,7 @@ MARKERS = {
     "knowledge_commands": _knowledge_commands,
     "conformance_general": lambda c: [t["id"] for t in c["conformance"]["general"]],
     "conformance_driver": lambda c: [t["id"] for t in c["conformance"]["driver"]],
+    "sample_placeholders": lambda c: list(c["sample_placeholders"]),
     "behavior_matrix_rows": lambda c: [r["row"] for r in c["behavior_matrix_rows"]],
     "maturity_levels": lambda c: [m["level"] for m in c["maturity_levels"]],
     "evidence_kinds": lambda c: list(c["evidence_kinds"]),

@@ -842,6 +842,7 @@
       {"id": "D25", "title": "halt command while the device is busy", "applies_when": ["halt"]}
     ]
   },
+  "sample_placeholders": ["{session}", "{doc}", "{device}", "{dir}"],
   "behavior_matrix_rows": [
     {"row": "normal", "group": "general", "applies_when": ["always"]},
     {"row": "empty", "group": "general", "applies_when": ["always"]},

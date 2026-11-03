@@ -6,9 +6,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -30,9 +30,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--ids",
         "",
         "--x",
@@ -55,9 +55,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -81,9 +81,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R999",
         "--x",
@@ -128,9 +128,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -154,9 +154,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -179,9 +179,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -204,9 +204,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -216,17 +216,23 @@
       ],
       "expected": {
         "exit": 9,
+        "code": "E_HUMAN_REQUIRED",
+        "summary": "The Board Setup dialog is open in KiCad."
+      },
+      "actual": {
+        "exit": 9,
         "code": "E_HUMAN_REQUIRED"
-      }
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#dialog"
     },
     {
       "row": "disconnect",
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -239,11 +245,7 @@
         "code": "E_OUTCOME_UNKNOWN",
         "summary": "The connection closes before the reply."
       },
-      "actual": {
-        "exit": 8,
-        "code": "E_OUTCOME_UNKNOWN"
-      },
-      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#disconnect"
+      "unrunnable": "The connection to KiCad cannot be cut on demand at the moment of a call; driver tests D06 and D21 cover it."
     },
     {
       "row": "unsaved",
@@ -255,9 +257,9 @@
       "applies": true,
       "arguments": [
         "--session",
-        "kicad-1234",
+        "{session}",
         "--doc",
-        "doc_1",
+        "{doc}",
         "--id",
         "R1",
         "--x",
@@ -268,7 +270,7 @@
       "expected": {
         "exit": 1,
         "code": "E_VERIFY_FAILED",
-        "summary": "The fake host stores x 12.0 mm; the tolerance is 0.001 mm."
+        "summary": "With grid snapping on, KiCad stores x as 12.0 mm; the tolerance is 0.001 mm."
       },
       "actual": {
         "exit": 1,

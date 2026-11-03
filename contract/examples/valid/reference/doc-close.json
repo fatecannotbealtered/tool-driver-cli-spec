@@ -37,7 +37,7 @@
   ],
   "maturity": "verified",
   "evidence": [
-    "live:docs/evidence/2026-11-01-doc-close.json#normal"
+    "live:docs/evidence/2026-11-01-doc-close.json"
   ],
   "modes": [
     "session"

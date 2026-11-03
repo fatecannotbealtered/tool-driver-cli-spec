@@ -43,7 +43,7 @@
   },
   "maturity": "verified",
   "evidence": [
-    "live:docs/evidence/2026-11-01-footprint-move.json#normal"
+    "live:docs/evidence/2026-11-01-footprint-move.json"
   ],
   "modes": [
     "file",

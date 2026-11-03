@@ -77,6 +77,16 @@ Check: 👀 Review of the CI workflow: both suites run on every shipped platform
 
 The tool MUST supply one valid sample for each domain write command, as the arguments of the `normal` row of its behavior matrix (DVER-030). A sample is the arguments of one call that the command accepts and that, run with `--dry-run`, returns a valid preview (G02). The general suite runs the samples in its write tests against the fake host (DVER-020). Samples for built-in and standard commands come with the suites. A command at maturity `draft` still needs its sample (DVER-040).
 
+The same arguments serve the fake host and the real application. A sample MUST therefore name its session, document, device and output directory only through these placeholders, which the suites fill from the fake host and the matrix runner fills from the authorized targets (DVER-050). Every row of a behavior matrix MAY use them.
+
+<!-- contract:sample_placeholders -->
+| Placeholder | With the fake host | On the real application |
+|---|---|---|
+| `{session}` | An instance of the fake host | The authorized instance |
+| `{doc}` | A document open in that instance | The authorized document |
+| `{device}` | The fake host's device | The authorized device |
+| `{dir}` | A new empty temporary directory, for output files | A new empty directory inside an authorized folder |
+
 Why: The suite cannot guess valid arguments for a domain command. Without a sample, the confirmation tests cannot run on it, and keeping it in the matrix leaves one place to update.
 Check: 🤖 General conformance test G00.
 
@@ -178,7 +188,7 @@ The tool-driver-cli-spec repository provides the fake host: a small program that
 - long jobs
 - one simulated device, which can be put in each device state (DCLI-230)
 
-The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029): it previews one change for each target the inputs name, with the other inputs as the changed fields; it applies that change to its memory; and it reads back the previewed values. The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations, make any adapter call fail, hang or read back a different value, and read its state, so they can see whether a change arrived and how often.
+The fake host implements the standard adapter capabilities itself. For a domain command it answers in place of the tool's adapter, from the command's registration (DCLI-029) and the call's inputs. The targets are the objects the call selects with `--id`, `--ids` or the `id` of each `--input` item (DCLI-064), in the session, document or device the call names; when the call selects no object, the target is the document it names, or else its session or device. Every other input is a changed field. The fake host treats any object ID as existing unless a test says otherwise. It previews one change per target, applies the change to its memory and reads back the previewed values. For an `artifact` command, the output files start absent and the apply writes them. The tool author writes nothing for it. Tests MUST be able to put the fake host into each of these situations; make any adapter call fail, hang or read back a different value, for the whole call or for one item of a batch; and read the fake host's state, so they can see whether a change arrived and how often.
 
 The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
 
@@ -232,17 +242,19 @@ The file lists each row of the table below once; each row is one situation. A ro
 
 A row whose condition does not hold MUST be marked as not applying. A row whose condition holds but that cannot happen for the command MUST also stay in the file, marked as not applying, with the reason.
 
-The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner, which comes with the runtime, runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run, and a row that has not been run MUST NOT count as passed. A row that cannot be caused on demand on the real application, such as `disconnect`, MAY stay unrun; the driver suite covers how the runtime handles it (DVER-010).
+The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner, which comes with the runtime, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
+
+A row that applies but cannot be caused on demand on the real application, such as `disconnect`, MAY be marked `unrunnable`, with the reason. It then needs no live run, and the driver suite covers how the runtime handles it (DVER-010). The `normal`, `dialog` and `read_back_mismatch` rows MUST NOT be marked `unrunnable` (DVER-031).
 
 Why: Agents meet these situations every day. A command whose behavior in them is unknown fails at the worst moment. A data file with every row lets a script see at once which row is missing or was never run.
-Check: 🤖 `check_project` validates every matrix file and compares each row's `applies` with the contract's conditions; 👀 review of the reasons given for rows that cannot happen.
+Check: 🤖 `check_project` validates every matrix file, compares each row's `applies` with the contract's conditions and each actual result with the expected one; 👀 review of the reasons given for rows that cannot happen or cannot be caused on demand.
 
 ### DVER-031 Adapter behavior on real software
 
 The fake host cannot show how the real adapter behaves with the real application: whether it recognizes the application's real dialogs, and whether its read-back returns the values the application really holds. Only a live run exercises the real adapter. These MUST be checked by running the behavior matrix on the real application, on authorized targets (DVER-050). A claim about them MUST cite live evidence, never a simulated result (DVER-021).
 
 Why: A fake dialog is whatever the test says it is. Only the real application shows whether the adapter sees its dialogs and reads its values correctly.
-Check: 🤖 `check_project`: in the matrix of every `verified` command, the `normal` row and, where they apply, the `dialog` and `read_back_mismatch` rows cite `live:` evidence.
+Check: 🤖 `check_project`: in the matrix of every `verified` command, the `normal` row and, where they apply, the `dialog` and `read_back_mismatch` rows passed with `live:` evidence, and none of them is marked `unrunnable`.
 
 ## Maturity and Evidence
 
@@ -254,10 +266,10 @@ Every command MUST declare a maturity level and the evidence references behind i
 | Level | Meaning | Evidence needed |
 |---|---|---|
 | `draft` | Declared; not yet shown on the real application, and the interface may still change | None; a write command still needs its sample (G00) |
-| `verified` | Run on the real application, with the real adapter and a record | Current `live:` evidence for the `normal` row and, where they apply, the `dialog` and `read_back_mismatch` rows (DVER-031, DVER-043) |
+| `verified` | Run on the real application, with the real adapter and a record | Current `live:` evidence that every row of the behavior matrix that applies passed, except rows marked `unrunnable` (DVER-030, DVER-043) |
 | `stable` | Also passed evaluation, with no open severe defect | Plus a current `eval:` report (DSKL-043) |
 
-When evidence stops counting, the level MUST drop to the highest level the remaining evidence supports. A severe defect is one that makes a command report success for a wrong result, change something outside its target or scope, or lose the user's data.
+Only a run that passed counts as evidence (DVER-030). When evidence stops counting, the level MUST drop to the highest level the remaining evidence supports. A severe defect is one that makes a command report success for a wrong result, change something outside its target or scope, or lose the user's data.
 
 Why: Maturity tells an Agent and a person how far to trust a command. A level above its evidence is a false promise.
 Check: 🤖 `check_project`: the level of every command in `reference` is backed by the evidence that level needs.
@@ -289,7 +301,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
 - `os`: the operating system
 - `recorded_at`: the time of the run, in UTC
 - `targets`: the authorized targets the run used (DVER-050)
-- `runs`: one entry per command, with the command path, its arguments, the exit code and `result`
+- `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code and `result`
 
 `result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`), its SHA-256 (`envelope_sha256`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
 
