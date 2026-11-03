@@ -281,7 +281,7 @@
           "required": ["observed"],
           "additionalProperties": false,
           "properties": {
-            "observed": {"type": "object"},
+            "observed": {"description": "Each target key mapped to the fields read back, named as in the preview's changes.", "type": "object", "additionalProperties": {"type": "object"}},
             "exists": {"description": "Whether the target object exists, for create and delete.", "type": "boolean"},
             "unreadable": {"description": "Fields that could not be read back.", "type": "array", "items": {"type": "string", "minLength": 1}}
           }
@@ -333,7 +333,7 @@
       "properties": {"deadline_ms": {"$ref": "#/$defs/deadline_ms"}}
     },
     "command_call": {
-      "description": "A domain command for read, preview, apply and read_back: its path and its inputs, already parsed and converted to canonical units by the runtime. Each use closes the object with unevaluatedProperties.",
+      "description": "A domain command for read, preview, apply and read_back: its path and its inputs, already parsed and converted to the standard units by the runtime. inputs has one key for each flag of the command that the call gives: the flag name without the leading --, with - replaced by _ and, for a physical parameter, the unit suffix of DCLI-080 (--x 100mil gives x_mm: 2.54). --ids gives ids as a list and --input gives its object as it is. The target flags --session, --doc and --device go to session, document and device instead. Each use closes the object with unevaluatedProperties.",
       "type": "object",
       "required": ["command", "inputs"],
       "properties": {

@@ -12,10 +12,11 @@
 | `contract/driver-contract.json` | 机器契约：工具或测试能当作数据读取的每一个值 |
 | `contract/schemas/` | 信封、回执、授权范围文件、宿主协议报文和契约本身的 JSON Schema |
 | `contract/examples/` | `valid/<schema>/` 是必须通过的示例，`invalid/<schema>/` 是必须不通过的示例 |
+| `conformance/fakehost/` | 模拟宿主，也是宿主协议的参考实现；只用 Python 标准库 |
 | `scripts/check_spec.py` | 检查条款格式、编号、中英文对应、契约表格、Schema 和示例 |
 | `scripts/build_spec_bundle.py` | 生成发布用的 ZIP 和它的 SHA-256 文件 |
 | `docs/OPEN-QUESTIONS.md` | 开放问题；规范正文里不放开放问题 |
-| `tests/` | 脚本的单元测试 |
+| `tests/` | 脚本和模拟宿主的单元测试 |
 
 ## 修改规范
 

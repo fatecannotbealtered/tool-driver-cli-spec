@@ -843,6 +843,7 @@
     ]
   },
   "sample_placeholders": ["{session}", "{doc}", "{device}", "{dir}"],
+  "fake_host": {"env": "<PREFIX>_FAKE_HOST", "receipt_key": "simulated"},
   "behavior_matrix_rows": [
     {"row": "normal", "group": "general", "applies_when": ["always"]},
     {"row": "empty", "group": "general", "applies_when": ["always"]},

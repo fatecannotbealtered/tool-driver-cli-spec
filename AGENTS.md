@@ -12,10 +12,11 @@ This repository holds tool-driver-cli-spec: five specifications, a machine contr
 | `contract/driver-contract.json` | The machine contract: every value a tool or test can read as data |
 | `contract/schemas/` | JSON Schemas for envelopes, receipts, scope files, host protocol messages and the contract itself |
 | `contract/examples/` | `valid/<schema>/` examples that must pass and `invalid/<schema>/` examples that must fail |
+| `conformance/fakehost/` | The fake host and reference implementation of the host protocol; Python standard library only |
 | `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
 | `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
 | `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
-| `tests/` | Unit tests for the scripts |
+| `tests/` | Unit tests for the scripts and the fake host |
 
 ## Changing the specification
 

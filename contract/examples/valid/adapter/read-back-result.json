@@ -2,8 +2,10 @@
   "result": {
     "read_back": {
       "observed": {
-        "x_mm": 12.5,
-        "y_mm": 30.0
+        "file:///D:/proj/board.kicad_pcb#/footprints/R1": {
+          "x_mm": 12.5,
+          "y_mm": 30.0
+        }
       },
       "exists": true
     }
