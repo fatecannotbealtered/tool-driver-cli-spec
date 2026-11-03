@@ -13,6 +13,7 @@ import re
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -66,21 +67,42 @@ class StateDir:
 
 
 def write_json(path: Path, data: Any) -> None:
-    """Write a JSON file atomically: a temporary file in the same directory, then a rename."""
+    """Write a JSON file atomically: a temporary file in the same directory, then a rename.
+    On Windows a rename fails while another process reads the file, so it is retried."""
+    tmp = None
     try:
         fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(data, handle, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
+        for attempt in range(50):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 49:
+                    raise
+                time.sleep(0.02)
     except OSError as exc:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
         raise DriverError("E_IO", f"Cannot write {path}: {exc.strerror}.") from None
 
 
 def read_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
+    """Read a JSON file, or ``None`` when it does not exist; retried while it is being replaced."""
+    for attempt in range(50):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except PermissionError:
+            if attempt == 49:
+                raise
+            time.sleep(0.02)
+    return None
 
 
 class AdapterStore:

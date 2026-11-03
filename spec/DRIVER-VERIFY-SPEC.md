@@ -100,18 +100,18 @@ The general suite MUST contain the tests below, and every tool MUST pass all of 
 | `G00` | Looks up the sample of every write command: the `normal` row of its behavior matrix, or the suites' own sample for built-in and standard commands | Every write command has a sample | DVER-002 |
 | `G01` | Runs the sample of each two-step command without flags | Exit code 5 with `E_CONFIRMATION_REQUIRED`; `details` hold `preview`, `confirm_token` and `expires_at`; nothing written | DCLI-014, DCLI-050, DCLI-051, DCLI-053, DSEC-003 |
 | `G02` | Runs each sample with `--dry-run` | Exit code 0; the preview is valid; nothing written | DCLI-054 |
-| `G03` | Gets a token for a sample, then confirms with one argument changed, one removed or one added | `E_CONFLICT` with `token_mismatch`, naming the argument; nothing written | DCLI-055, DCLI-056 |
+| `G03` | Gets a token for a sample, then confirms with each argument changed, each optional argument removed, one argument added, and the sample pointed at another document or device | `E_CONFLICT` with `token_mismatch`, naming the argument; nothing written | DCLI-055, DCLI-056 |
 | `G04` | Confirms with the same arguments, then confirms again with the same token | The first call succeeds; the second gets `E_CONFLICT` with `token_used`; the change is written once | DCLI-055, DCLI-056, DSEC-033 |
 | `G05` | Confirms with tampered tokens | Every attempt is refused with `E_CONFLICT` `token_invalid`; nothing written | DCLI-055, DSEC-033 |
 | `G06` | Runs the sample of a two-step command with `--format text` and no token | Exit code 5; nothing written | DCLI-014, DCLI-053 |
-| `G07` | Dry-runs and confirms with no scope file | `E_FORBIDDEN` with `details.scope` naming what is missing; nothing written | DCLI-050, DSEC-015 |
+| `G07` | Dry-runs and confirms with no scope file; then runs each sample under a scope that lacks its effects, its targets or, for a dangerous sample, the dangerous permission | `E_FORBIDDEN` with `details.scope` naming what is missing; nothing written | DCLI-050, DSEC-014, DSEC-015 |
 | `G08` | Makes `operations/` in the state directory unwritable, then runs the write samples and a read | Every write gets `E_IO` and nothing is written; the read still works | DCLI-059, DSEC-033 |
-| `G09` | Confirms the token of each dangerous command without `--dangerous` | Exit code 5; nothing written | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
-| `G10` | Changes the scope file between the dry run and the confirm | `E_CONFLICT` with `scope_changed`; nothing written | DCLI-056, DSEC-015 |
+| `G09` | Confirms the token of each dangerous command without `--dangerous`, then with it | Exit code 5 and nothing written; then the same token runs the write | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
+| `G10` | Changes the scope file's ID, or its content under the same ID, between the dry run and the confirm | `E_CONFLICT` with `scope_changed`; nothing written | DCLI-056, DSEC-015 |
 | `R01` | Validates `reference` (the index), `reference --command` and `reference --all --output` | Valid structure; the index is at most 8000 characters and one command at most 6000; every command shows its tier per mode; every example parses | DCLI-030, DCLI-031, DCLI-051, DCLI-201 |
 | `R02` | Walks the command tree | Follows DCLI-020 to DCLI-024; every command has a summary, an output schema and examples | DCLI-020, DCLI-021, DCLI-022, DCLI-024, DCLI-031 |
 | `R03` | Sends an unknown command, an unknown flag and an extra argument | `E_USAGE` with `problem` and the suggested correct form | DCLI-011, DCLI-012, DCLI-013 |
-| `R04` | Validates every envelope the suites see | Matches the contract; keys are snake_case; `*_at` values are UTC; within the size limits | DCLI-001, DCLI-003, DCLI-004, DCLI-005, DCLI-006, DCLI-008, DCLI-010, DCLI-011, DCLI-012, DCLI-013, DCLI-014, DCLI-061 |
+| `R04` | Validates every envelope both suites see, after all other tests | Matches the contract, and its data matches its schema, such as the receipt's; keys are snake_case; `*_at` values are UTC; within the size limits | DCLI-001, DCLI-003, DCLI-004, DCLI-005, DCLI-006, DCLI-008, DCLI-010, DCLI-011, DCLI-012, DCLI-013, DCLI-014, DCLI-061 |
 | `R05` | Runs `context`, `doctor` and `operation list` on an empty state directory | Valid output; `doctor` lists every fixed check | DCLI-030, DCLI-032, DCLI-033, DCLI-035, DSEC-016, DSKL-125 |
 
 Why: These tests cover the write safety and the self-description that all tools share, so an Agent can trust every tool in the same way.
@@ -141,17 +141,17 @@ The runtime, not the tool author, decides from the command registration (DCLI-02
 |---|---|---|---|---|
 | `D01` | `session` | Several instances; the command has no `--session` | `E_AMBIGUOUS` listing the candidates, each with its session summary | DCLI-202 |
 | `D02` | `session` | The instance reconnects or restarts after the dry run | The confirm is refused with `E_CONFLICT` `session_changed` | DCLI-056, DCLI-203 |
-| `D03` | `documents` | The document changes after the dry run | The confirm is refused with `E_CONFLICT` `document_changed` | DCLI-056, DCLI-210 |
-| `D04` | `session`, `device` | The application or the device is busy | `E_BUSY`, retryable, with `retry_after_ms`; `dispatch_state` is `not_started` | DCLI-057, DCLI-204, DCLI-276 |
+| `D03` | `documents` | The document, open in an instance or a file in file mode, changes after the dry run | The confirm is refused with `E_CONFLICT` `document_changed` | DCLI-056, DCLI-210 |
+| `D04` | `session`, `device` | The application or the device is busy, before the call or between the dry run and the confirm | `E_BUSY`, retryable, with `retry_after_ms`; `dispatch_state` is `not_started`; once it is ready, the same token runs the write | DCLI-055, DCLI-057, DCLI-204, DCLI-276 |
 | `D05` | `session` | A dialog blocks the application before dispatch; separately, the change itself opens a dialog after dispatch | Before dispatch: `E_HUMAN_REQUIRED` with `action` and a `resume` command that runs the call again. After dispatch: the operation is outcome unknown, the target stays locked and `resume` is the lookup, never the write | DCLI-066, DCLI-204 |
-| `D06` | `session`, `device` | The connection drops after dispatch | `E_OUTCOME_UNKNOWN` whose `lookup` names `operation resolve`; the target stays locked until the outcome is resolved | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-275 |
+| `D06` | `session`, `device` | The connection drops after dispatch, for a single write and for one object of a batch | `E_OUTCOME_UNKNOWN` whose `lookup` names `operation resolve`; the target stays locked until the outcome is resolved. For the batch, `lookup` is `operation list --state unknown --batch <id>` and that object stays locked | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-064, DCLI-275 |
 | `D07` | `writes` | A change is applied but cannot be read back | `E_VERIFY_INCOMPLETE`, with the receipt | DCLI-057, DCLI-062 |
-| `D08` | `writes` | The read-back differs from the preview's `after` value by more than the declared tolerance | `E_VERIFY_FAILED`, with the mismatched fields | DCLI-057, DCLI-062 |
+| `D08` | `writes` | The read-back differs from the preview's `after` value by more than the declared tolerance, for each write sample and for one object of a batch | `E_VERIFY_FAILED`, with the mismatched fields; in the batch, that object's item has `E_VERIFY_FAILED` | DCLI-057, DCLI-062, DCLI-064 |
 | `D09` | `session` | A change in session mode | Persistence is `unchanged` and `dirty` is `true`; after `doc save`, persistence is `saved` | DCLI-058, DCLI-061 |
 | `D10` | `session` | Closing a document with unsaved changes | Refused with `E_CONFLICT` `unsaved_changes`; with `--discard` it is dangerous and refused without `--dangerous` | DCLI-212 |
-| `D11` | `jobs` | Cancelling a long job | `cancel_requested` is reported first; the job's `state` becomes `cancelled` only after the application confirms it stopped | DCLI-065, DCLI-220, DCLI-221 |
+| `D11` | `jobs` | Cancelling a long job | `cancel_requested` is reported first; while the application still reports the job running, `job get` does not report it cancelled; the job's `state` becomes `cancelled` only after the application confirms it stopped | DCLI-065, DCLI-220, DCLI-221 |
 | `D12` | `host_component` | The host component on disk differs from the loaded version | The `plugin` check of `doctor` fails; write commands are refused with `E_HUMAN_REQUIRED`, action `restart_application` | DCLI-240, DSEC-053 |
-| `D13` | `always` | A call gives a physical parameter of a domain command, and the `--wait` duration of `job get`, as a bare number | `E_USAGE` whose `problem` lists the accepted units | DCLI-082 |
+| `D13` | `always` | A bare number for a physical parameter of a domain command; separately, for `job get --wait` | `E_USAGE` whose `problem` lists the accepted units | DCLI-026, DCLI-082 |
 | `D14` | `physical` | A physical effect without `--dangerous`, or with a scope that does not allow `physical` | Refused; nothing is dispatched | DSEC-014, DSEC-060 |
 | `D15` | `device` | A simulated device | The device object and the result of every command on it carry `simulated: true` | DCLI-230, DSEC-062 |
 | `D16` | `session` | A direct change in session mode | Done in one call, with an operation record, read-back and a full receipt; refused like any write when there is no scope | DCLI-050, DCLI-052, DSEC-015 |
@@ -161,7 +161,7 @@ The runtime, not the tool author, decides from the command registration (DCLI-02
 | `D20` | `host_component` | The host component's protocol major version differs from the CLI's | The handshake fails with `E_PROTOCOL`; no change is sent | DCLI-273, DCLI-280, DSEC-054 |
 | `D21` | `host_component` | The host closes the connection before it replies | To a write: the write is recorded as outcome unknown and its target stays locked. To a read: `E_BUSY`, and the session is reported `unresponsive` | DCLI-063, DCLI-204, DCLI-275, DCLI-278 |
 | `D22` | `session` | One of two instances does not respond | `session list` returns both within 5 s; the silent one has `state` `unresponsive` | DCLI-204, DCLI-205 |
-| `D23` | `device` | The device is in `emergency_stop` or `fault` when a command other than a halt command acts on it | `E_HUMAN_REQUIRED` with action `confirm_on_device`; `dispatch_state` is `not_started`; nothing is dispatched | DCLI-230, DSEC-061 |
+| `D23` | `device` | The device is in `emergency_stop` or `fault` when a command other than a halt command acts on it, before the call or between the dry run and the confirm | `E_HUMAN_REQUIRED` with action `confirm_on_device`; `dispatch_state` is `not_started`; nothing is dispatched; once the device is ready, the same token runs the write | DCLI-055, DCLI-230, DSEC-061 |
 | `D24` | `writes` | A batch in which one object fails | `E_PARTIAL` with `details.batch`: the failed item carries its error code, and the other objects are applied and reported as succeeded | DCLI-064 |
 | `D25` | `halt` | The device, or the instance, is `busy` when a halt command acts on it; the scope sets `confirm: always` and covers the target but not the `lifecycle` effect | The command runs at once, with no `E_BUSY` and no confirmation, and returns a receipt | DCLI-230, DSEC-018 |
 

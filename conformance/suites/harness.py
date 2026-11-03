@@ -26,6 +26,24 @@ sys.path.insert(0, str(HERE.parent))
 from fakehost import Client, FakeHost  # noqa: E402
 
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+TIERS = ["none", "direct", "two_step", "dangerous"]
+DEVICE = {"model": "FakeDevice", "firmware": "1.0.0", "state": "ready", "simulated": True}
+# A world with a second document and a second device, to confirm a token against another target.
+SECOND = {
+    "instances": [{"id": "fake-1", "documents": [{"id": "doc-1", "name": "doc-1.fake"}, {"id": "doc-2", "name": "doc-2.fake"}]}],
+    "files": [{"id": "file-1", "name": "file-1.fake"}, {"id": "file-2", "name": "file-2.fake"}],
+    "devices": [{"id": "dev-1", **DEVICE}, {"id": "dev-2", **DEVICE}],
+}
+
+
+def isolated_env(base: str) -> dict[str, str]:
+    """The environment for a call outside any test case: no state directory, scope or fake
+    host of the user's, and a home directory of its own (DSEC-034)."""
+    env = {k: v for k, v in os.environ.items() if not k.endswith(("_STATE_DIR", "_SCOPE_FILE", "_FAKE_HOST"))}
+    for name in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+                 "XDG_CACHE_HOME"):
+        env[name] = base
+    return env
 
 
 class Failure(AssertionError):
@@ -81,7 +99,7 @@ class Subject:
     def __post_init__(self) -> None:
         base = tempfile.mkdtemp(prefix="drv-ref-")
         try:
-            env = {k: v for k, v in os.environ.items() if not k.endswith(("_STATE_DIR", "_SCOPE_FILE", "_FAKE_HOST"))}
+            env = isolated_env(base)
             out = Path(base) / "reference.json"
             index = self._raw(["reference"], env, base)
             self.name = index["data"]["tool"]
@@ -116,24 +134,41 @@ class Subject:
         return [p for p, r in self.registrations.items() if r["effects"] != ["observe"]]
 
     def tier(self, path: str, mode: str | None = None) -> str:
-        tier = self.commands[path]["tier"]
-        if isinstance(tier, dict):
-            return tier.get(mode or "", max(tier.values(), key=["none", "direct", "two_step", "dangerous"].index))
-        return tier
+        """The tier the rules give, from the registration and the contract, never from the
+        tool's own claim (DCLI-051, DCLI-052)."""
+        from .schemas import contract
+
+        c = contract()
+        reg = self.registrations.get(path)
+        if reg is None:
+            std = next((s for s in c["standard_commands"] if s["path"] == path), None)
+            return std["tier"] if std else "none"
+        if reg["effects"] == ["observe"]:
+            return "none"
+        if reg["halt"]:
+            return "direct"
+        effects = {e["effect"]: e for e in c["effects"]}
+        modes = [mode] if mode else reg["modes"]
+        found = []
+        for m in modes:
+            tiers = [effects[e]["tier"][m] if isinstance(effects[e]["tier"], dict) else effects[e]["tier"] for e in reg["effects"]]
+            if reg["irreversible"]:
+                tiers.append("dangerous")
+            found.append(max(tiers, key=TIERS.index))
+        return max(found, key=TIERS.index)
 
     def facts(self) -> dict[str, bool]:
         """The conditions of DVER-010, decided from the registration and reference only."""
         regs = self.registrations.values()
         writes = [r for r in regs if r["effects"] != ["observe"]]
-        tiers = [self.commands[r["path"]]["tier"] for r in writes]
-        flat = [t for tier in tiers for t in (tier.values() if isinstance(tier, dict) else [tier])]
-        when = [w["tier"] for r in writes for w in self.commands[r["path"]].get("tier_when", [])]
+        tiers = [self.tier(r["path"], m) for r in writes for m in r["modes"]]
+        direct = [r for r in writes if not r["halt"] and any(self.tier(r["path"], m) == "direct" for m in r["modes"])]
         return {
             "always": True,
             "writes": bool(writes),
-            "direct_writes": "direct" in flat,
+            "direct_writes": bool(direct) or "session" in self.modes,
             "documents": any(m in self.modes for m in ("file", "session")),
-            "dangerous": "dangerous" in flat + when,
+            "dangerous": "dangerous" in tiers,
             "jobs": any("job_status" in r["adapter_capabilities"] for r in regs),
             "session": "session" in self.modes,
             "device": "device" in self.modes,
@@ -177,8 +212,14 @@ class Case:
     def __enter__(self) -> Case:
         return self
 
-    def __exit__(self, *exc: object) -> None:
-        self.close()
+    def __exit__(self, kind: object, *exc: object) -> None:
+        try:
+            if kind is None:
+                st = self.state()
+                bad = st["violations"] + [f"fake host fault: {e}" for e in st["internal_errors"]]
+                check(not bad, f"the tool broke the host protocol or the adapter payloads: {bad[:5]}")
+        finally:
+            self.close()
 
     # Scope -----------------------------------------------------------------------------
 
@@ -207,6 +248,9 @@ class Case:
 
     def applied(self) -> list[dict[str, Any]]:
         return self.state()["applied"]
+
+    def calls(self, method: str) -> list[dict[str, Any]]:
+        return [c for c in self.state()["calls"] if c["method"] == method]
 
     def doc_path(self, doc_id: str) -> str:
         for doc in self.state()["documents"]:
@@ -283,7 +327,7 @@ class Recorder:
 
     def env(self) -> dict[str, str]:
         return {"HTTP_PROXY": self.url, "HTTPS_PROXY": self.url, "ALL_PROXY": self.url, "http_proxy": self.url,
-                "https_proxy": self.url, "npm_config_registry": "https://registry.npmjs.org/"}
+                "https_proxy": self.url, "NO_PROXY": "", "no_proxy": "", "npm_config_registry": "https://registry.npmjs.org/"}
 
     def close(self) -> None:
         self._stop = True

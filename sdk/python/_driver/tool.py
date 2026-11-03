@@ -128,11 +128,15 @@ class Tool:
                 if not call.command.writes:
                     result = _fields(result, call)
         except DriverError as exc:
-            error = exc
+            error = _after_dispatch(run, exc) if run and run.dispatching else exc
         except KeyboardInterrupt:
-            error = DriverError("E_INTERRUPTED", "The call was interrupted.", dispatch_state="unknown" if call and call.command.writes else "not_started")
+            error = DriverError("E_INTERRUPTED", "The call was interrupted before anything was sent.")
+            if run and run.dispatching:
+                error = _after_dispatch(run, error)
         except Exception as exc:  # noqa: BLE001 - every failure still prints one envelope
             error = DriverError("E_UNKNOWN", f"Internal error: {type(exc).__name__}: {exc}")
+            if run and run.dispatching:
+                error = _after_dispatch(run, error)
         finally:
             notices = run.notices if run else []
             if run is not None:
@@ -160,6 +164,25 @@ class Tool:
             out.write(text)
             out.flush()
         return self.envelopes.exit_code(env_out)
+
+
+def _after_dispatch(run: Run, cause: DriverError) -> DriverError:
+    """A failure while a change may be in flight is an unknown outcome: the record says so
+    and the target stays locked until ``operation resolve`` (DCLI-063)."""
+    operation_id = run.dispatching
+    assert operation_id is not None
+    try:
+        record = run.records.load(operation_id)
+        if record is not None:
+            record["state"] = "unknown"
+            run.records.save(record)
+            run.locks.hold_as(operation_id, "unknown", record.get("_keys", []))
+    except Exception:  # noqa: BLE001 - the error below still tells the Agent to look the outcome up
+        pass
+    lookup = run.cmd("operation resolve", [("--id", operation_id)])
+    return DriverError("E_OUTCOME_UNKNOWN", f"The call stopped after the change was sent ({cause.message}); whether it took effect is not known.",
+                       dispatch_state="unknown", lookup=lookup,
+                       next_action=f"Run `{lookup}` before anything else; never send the write again.")
 
 
 def _domain_handler(command: Command) -> Any:

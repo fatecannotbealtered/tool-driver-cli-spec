@@ -175,7 +175,7 @@ A command with no target object, such as `session open`, `doc create`, `plugin i
 In a batch, every object MUST be covered; one object that is not covered blocks the whole batch (DCLI-064). The runtime MUST NOT widen a prefix, guess a target or match by object name.
 
 Why: The three conditions bound the change only together; any one alone leaves a gap, such as the right effect on the wrong file.
-Check: 🤖 Runtime unit tests; driver conformance test D14.
+Check: 🤖 Runtime unit tests; general conformance test G07; driver conformance test D14.
 
 ### DSEC-015 Refusing writes
 
@@ -353,7 +353,7 @@ Check: 👀 Review of the network code in the runtime and the adapter.
 
 ### DSEC-050 Installing host components
 
-A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
+A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). `plugin remove` removes every installed version that no running instance has loaded; a loaded version stays on disk until no instance has it loaded (DSEC-051). An instance keeps the version it loaded, and while no version is on disk, DSEC-053 does not refuse its writes. `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
 
 Why: A host component runs inside the person's application with the application's full rights; putting it there changes the environment, which the person must allow and see. A host that wrote its discovery file elsewhere would be invisible to the CLI.
 Check: 🤖 Runtime unit tests; 👀 review that `update` and the npm packages install no host component.

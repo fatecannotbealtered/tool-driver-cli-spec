@@ -52,7 +52,9 @@ class CapabilityError(Exception):
         super().__init__(message)
         self.data = data
         self.code = data.get("code", "E_NATIVE_FAILURE")
-        self.dispatch_state = data.get("dispatch_state", "not_started")
+        # A reply that does not say whether the change began cannot count as "not started" (DCLI-275).
+        state = data.get("dispatch_state")
+        self.dispatch_state = state if state in ("not_started", "dispatched", "unknown") else "unknown"
 
 
 class Unanswered(Exception):
@@ -66,8 +68,14 @@ class Unanswered(Exception):
         self.sent = sent  # False when the request never left the CLI
 
 
+class BadReply(Unanswered):
+    """The request was sent, but its reply cannot be understood: for a write the outcome is
+    unknown, for a read it is a protocol error."""
+
+
 class BadProtocol(Exception):
-    """The host speaks another major protocol version, or broke the protocol (DCLI-273)."""
+    """The host speaks another major protocol version, or broke the handshake (DCLI-273);
+    nothing was sent."""
 
 
 class Lost(Exception):
@@ -104,6 +112,8 @@ class Backend:
             except (Lost, Unanswered, BadProtocol):
                 return True  # the call itself reports what is wrong
             return conn is None or cap in (conn.hello or {}).get("methods", [])
+        if self.fake:
+            return cap in self.caps  # the fake host answers every capability in place of the adapter (DVER-020)
         return self.adapter_has(cap)
 
     # ------------------------------------------------------------------ calls
@@ -135,7 +145,7 @@ class Backend:
             raise Unanswered(str(exc), exc.timed_out) from None
         except ProtocolError as exc:
             self._forget(host)
-            raise BadProtocol(str(exc)) from None
+            raise BadReply(f"the reply to {cap} cannot be understood: {exc}") from None
 
     def _forget(self, host: str | None) -> None:
         with self._lock:
@@ -237,10 +247,11 @@ class Backend:
 def session_id(prefix: str, pid: int) -> str:
     """A session ID from the process ID and its start time, stable for the life of the
     process and never reused by a later one (DCLI-203). Adapters call this in ``sessions``."""
-    return f"{prefix}-{pid}-{_start_time(pid):x}"
+    return f"{prefix}-{pid}-{start_time(pid):x}"
 
 
-def _start_time(pid: int) -> int:
+def start_time(pid: int) -> int:
+    """When a process started, in seconds, or 0 when it cannot be told."""
     try:
         if WINDOWS:
             import ctypes

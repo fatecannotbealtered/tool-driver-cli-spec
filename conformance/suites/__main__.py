@@ -38,7 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     only = {x.strip() for x in options.only.split(",") if x.strip()}
     results = []
     failed = 0
-    for test_id, test in list(general.TESTS.items()) + list(driver.TESTS.items()):
+    # R04 runs last, so it checks the envelopes of both suites.
+    for test_id, test in list(general.TESTS.items()) + list(driver.TESTS.items()) + list(general.LAST.items()):
         if only and test_id not in only:
             continue
         when = applies.get(test_id, ["always"])

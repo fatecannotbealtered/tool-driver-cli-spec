@@ -63,7 +63,7 @@
       ]
     },
     "document": {
-      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key in `key`, whose number only the adapter knows.",
+      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key `untitled:<session-id>/<n>` in `key`, whose number only the adapter knows; a document with a path has no `key`.",
       "type": "object",
       "required": ["id", "path", "revision", "dirty", "readonly"],
       "properties": {
@@ -83,7 +83,11 @@
           "then": {"required": ["disk"]},
           "else": {"not": {"required": ["disk"]}}
         },
-        {"if": {"required": ["path"], "properties": {"path": {"type": "null"}}}, "then": {"required": ["key"]}}
+        {
+          "if": {"required": ["path"], "properties": {"path": {"type": "null"}}},
+          "then": {"required": ["key"], "properties": {"key": {"pattern": "^untitled:"}}},
+          "else": {"not": {"required": ["key"]}}
+        }
       ],
       "unevaluatedProperties": false
     },
@@ -122,7 +126,7 @@
       },
       "allOf": [
         {
-          "if": {"required": ["state"], "properties": {"state": {"enum": ["completed", "failed", "partial", "cancelled"]}}},
+          "if": {"required": ["state"], "properties": {"state": {"enum": ["completed", "failed", "partial", "unknown", "cancelled"]}}},
           "then": {"required": ["finished_at", "receipt", "ok"]}
         },
         {

@@ -199,8 +199,18 @@
           "type": "string"
         },
         "type": {
-          "type": "string",
-          "minLength": 1
+          "description": "The shared flags of DCLI-026 use list, input and duration.",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "quantity",
+            "path",
+            "list",
+            "input",
+            "duration"
+          ]
         },
         "required": {
           "type": "boolean"
@@ -241,6 +251,7 @@
           }
         },
         {
+          "description": "Only a quantity flag names a quantity.",
           "if": {
             "required": [
               "quantity"

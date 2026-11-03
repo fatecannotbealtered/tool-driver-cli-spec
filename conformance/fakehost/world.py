@@ -92,10 +92,12 @@ class Document:
 
     def view(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "id": self.id, "path": self.path, "key": self.key(), "session": self.session,
+            "id": self.id, "path": self.path, "session": self.session,
             "revision": f"r{self.revision}", "dirty": self.dirty, "readonly": self.readonly,
         }
-        if self.path is not None:
+        if self.path is None:
+            out["key"] = self.key()  # only the application knows the number of an untitled document
+        else:
             out["disk"] = self.disk
         return out
 
@@ -316,7 +318,7 @@ class World:
             if params.get("session", endpoint) != endpoint:
                 raise Refused(f"session {params['session']} sent to the host of {endpoint}")
             params = {**params, "session": endpoint}
-        elif self.host_component and method in self.instance_side:
+        elif self.host_component and method in self.instance_side and params.get("session"):
             self.violations.append(f"{method}: an instance-side call on the main address; with a host component it goes to the instance (DVER-023)")
         missing = [k for k in self.required.get(method, []) if k not in params]
         if missing:

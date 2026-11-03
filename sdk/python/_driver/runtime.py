@@ -12,7 +12,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
-from .adapter import AdapterStore, Backend, BadProtocol, CapabilityError, Lost, Unanswered
+from .adapter import AdapterStore, Backend, BadProtocol, BadReply, CapabilityError, Lost, Unanswered
 from .args import Call, command_line
 from .errors import DriverError, usage
 from .records import Locks, Mutex, Records, utc_now
@@ -49,6 +49,7 @@ class Inputs:
     selected: list[str]  # the object IDs selected with --id, --ids or --input items
     batch: bool
     items: list[dict[str, Any]] | None = None
+    secrets: dict[str, str] | None = None  # secret inputs, bound to the token by a salted hash only
 
 
 class Run:
@@ -67,6 +68,7 @@ class Run:
         self.fake = env.get(f"{prefix}_FAKE_HOST") or None
         self.notices: list[dict[str, str]] = []
         self.resolved: dict[str, str] = {}  # target flags filled in by the runtime, for generated commands
+        self.dispatching: str | None = None  # the operation whose change may be in flight
         self._sessions: dict[str, Any] | None = None
         self._devices: list[dict[str, Any]] | None = None
 
@@ -105,6 +107,9 @@ class Run:
             if name in ("--session", "--doc", "--device", "--job") or name in drop:
                 continue
             flag = call.command.flag(name)
+            if flag is not None and flag.secret:
+                args.append((name, "<secret>"))  # a secret never goes into a generated command (DSEC-040)
+                continue
             args.append((name, True if flag and flag.type == "boolean" and call.values[name] else call.raw[name]))
         if confirm:
             args.append(("--confirm", confirm))
@@ -122,6 +127,8 @@ class Run:
             return self.backend.call(cap, request, deadline_ms)
         except CapabilityError as exc:
             raise self.host_error(exc, "not_started") from None
+        except BadReply as exc:
+            raise DriverError("E_PROTOCOL", f"The reply of the application cannot be understood: {exc}") from None
         except Unanswered as exc:
             if exc.crashed:
                 raise DriverError("E_UNKNOWN", f"The adapter failed: {exc}") from None
@@ -153,6 +160,7 @@ class Run:
             action = data.get("action")
             extra["action"] = action if action in self.contract["human_required_actions"] else "other"
             extra["resume"] = self.again(confirm=self.call.confirm, dangerous=self.call.dangerous) if self.call else self.tool.name
+            untrusted.append("details.resume")
             if isinstance(data.get("title"), str):
                 extra["title"] = data["title"]
                 untrusted.append("details.title")
@@ -183,7 +191,7 @@ class Run:
         return self._sessions
 
     def has_sessions(self) -> bool:
-        return "session" in self.tool.modes and self.backend.adapter_has("sessions")
+        return "session" in self.tool.modes and self.backend.has("sessions")
 
     def summary(self, session: dict[str, Any]) -> dict[str, Any]:
         out = {"id": session["id"], "state": session["state"], "documents": session.get("documents", [])}
@@ -213,7 +221,7 @@ class Run:
             return items[0]
         if not items:
             hint = (f"Start one with `{self.tool.name} session open`, or ask the user to start the application."
-                    if self.backend.adapter_has("open_session") else "Ask the user to start the application.")
+                    if self.backend.has("open_session") else "Ask the user to start the application.")
             raise DriverError("E_BACKEND_UNAVAILABLE", "No instance of the application is running.", next_action=hint)
         raise self.ambiguous_sessions(items, f"{len(items)} instances are running")
 
@@ -238,17 +246,18 @@ class Run:
                 action=blocker.get("action", "other"), title=blocker.get("title", ""),
                 resume=self.again(confirm=self.call.confirm if self.call else None,
                                   dangerous=bool(self.call and self.call.dangerous)),
-                untrusted=["details.title"],
+                untrusted=["details.title", "details.resume"],
             )
 
     # ------------------------------------------------------------------ documents
 
     def doc_key(self, doc: dict[str, Any]) -> str:
-        if doc.get("key"):
-            return doc["key"]
+        """``file:///<path>``, or the ``untitled:`` key only the adapter knows (DCLI-210)."""
         if doc.get("path"):
             return file_key(doc["path"])
-        raise DriverError("E_PROTOCOL", f"The adapter gave no target key for the untitled document {doc.get('id')}.")
+        if isinstance(doc.get("key"), str) and doc["key"].startswith("untitled:"):
+            return doc["key"]
+        raise DriverError("E_PROTOCOL", f"The adapter gave no untitled: key for the untitled document {doc.get('id')}.")
 
     def documents(self, session_id: str | None = None, path: str | None = None,
                   deadline_ms: int = SESSION_DEADLINE_MS) -> list[dict[str, Any]]:
@@ -310,7 +319,11 @@ class Run:
         if not need and not ref:
             return None
         if session["state"] != "ready" and not ref:
-            return None  # the state gate decides; the session summary may be stale
+            # The state gate refuses the call; name the document in its resume command (DCLI-011).
+            summary = session.get("documents", [])
+            if len(summary) == 1:
+                self.resolved["--doc"] = summary[0]["id"]
+            return None
         docs = self.documents(session["id"]) if session["state"] == "ready" else session.get("documents", [])
         if ref:
             for doc in docs:
@@ -395,6 +408,7 @@ class Run:
                 "E_HUMAN_REQUIRED", f"Device {did} {what}; a person must check it on site. Nothing was sent.",
                 action="confirm_on_device",
                 resume=self.again(confirm=self.call.confirm if self.call else None, dangerous=bool(self.call and self.call.dangerous)),
+                untrusted=["details.resume"],
             )
 
     def fresh_device(self, device_id: str) -> dict[str, Any]:
@@ -440,19 +454,21 @@ class Run:
             raise usage(f"{command.path} changes only the properties given, and none is given.", None)
         bound = dict(adapter)
         echo = dict(adapter)
+        secrets: dict[str, str] = {}
         for flag in flags.values():
             key = self.key(flag)
             if key not in adapter:
                 continue
             if flag.secret:
-                bound[key] = {"sha256": hashlib.sha256(str(adapter[key]).encode()).hexdigest()}
+                secrets[key] = str(adapter[key])
+                bound[key] = {"secret": True}  # the value is bound by a salted hash in the token (DSEC-040)
                 echo[key] = self.contract["preview"]["masked_value"]
             elif flag.type == "path" and not flag.output:
                 digest = _file_digest(adapter[key], flag.name)
                 bound[key] = {"path": adapter[key], **digest}
                 echo[key] = digest
         batch = "ids" in adapter or items is not None
-        return Inputs(adapter, bound, echo, selected, batch, items)
+        return Inputs(adapter, bound, echo, selected, batch, items, secrets)
 
     def key(self, flag: Any) -> str:
         if flag.name == "--input":

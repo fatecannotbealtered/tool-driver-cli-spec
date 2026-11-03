@@ -20,7 +20,7 @@ from .output import Result, page
 from .records import parse_utc, public, utc_now
 from .registry import Command, Flag
 from .runtime import Run
-from .writes import read_back
+from .writes import read_back, same
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -495,11 +495,12 @@ def operation_resolve(run: Run) -> Result:
         raise DriverError("E_FORBIDDEN", f"Resolving {operation_id} needs a scope that covers its effects and targets ({run.scope.status}).",
                           scope=missing,
                           next_action="Pass `details.scope.snippet` to the person; only the person edits the scope file.")
-    changes = [c for c in (record.get("preview") or {}).get("changes", []) if c.get("origin", "tool") == "tool" and "field" in c]
-    readable = bool(record.get("_request") and changes and run.backend.has("read_back", record["_request"].get("session")))
+    found, observed, why = _read_outcome(run, record)
     outcome = call.values.get("--outcome")
+    by_hand = (f"`{run.tool.name} operation resolve --id {operation_id} --outcome applied|not_applied|partial "
+               f"--evidence '<how you found it>'`")
     if outcome:
-        if readable:
+        if found is not None:
             raise DriverError("E_VALIDATION", f"The target of {operation_id} can be read back; run the command without --outcome.",
                               next_action=f"Run `{run.tool.name} operation resolve --id {operation_id}`.")
         evidence = call.values.get("--evidence")
@@ -509,34 +510,55 @@ def operation_resolve(run: Run) -> Result:
     else:
         if call.has("--evidence"):
             raise usage("--evidence goes with --outcome.", "--evidence")
-        if not readable:
-            raise DriverError("E_UNSUPPORTED", f"The target of {operation_id} cannot be read back.",
-                              next_action=f"Find the outcome in the application, then run `{run.tool.name} operation resolve --id {operation_id} "
-                                          f"--outcome applied|not_applied|partial --evidence \"<how you found it>\"`.")
-        request = {**record["_request"], "operation_id": operation_id, "targets": sorted({c["target"] for c in changes}),
-                   "fields": sorted({c["field"] for c in changes})}
-        after = read_back(run, request, changes, record.get("_tolerances", {}))
-        if after.status == "incomplete":
-            raise DriverError("E_BUSY", f"The target of {operation_id} could not be read back yet: {'; '.join(after.notes)}",
-                              retry_after_ms=2000)
-        before_changes = [{**c, "after": c.get("before")} for c in changes]
-        before = read_back(run, request, before_changes, record.get("_tolerances", {}))
-        applied = len(changes) - len(after.mismatched)
-        if after.status == "passed":
-            found = "applied"
-        elif before.status == "passed":
-            found = "not_applied"
-        elif applied:
-            found = "partial"
-        else:
-            found = "not_applied"
-        resolution = {"outcome": found, "resolved_by": "read_back", "observed": after.observed, "resolved_at": utc_now()}
+        if found is None:
+            if why == "busy":
+                raise DriverError("E_BUSY", f"The target of {operation_id} could not be read back now; nothing changed.",
+                                  retry_after_ms=2000,
+                                  next_action=f"Try again later; if it keeps failing, find the outcome in the application and run {by_hand}.")
+            raise DriverError("E_UNSUPPORTED", f"The outcome of {operation_id} cannot be settled by reading the target back: {why}.",
+                              next_action=f"Find the outcome in the application, then run {by_hand}.")
+        resolution = {"outcome": found, "resolved_by": "read_back", "observed": observed, "resolved_at": utc_now()}
     record["resolution"] = resolution
     record["state"] = "failed" if resolution["outcome"] == "not_applied" else "completed"
     record["finished_at"] = record.get("finished_at") or utc_now()
     run.records.save(record)
     run.locks.release(operation_id)
     return Result(public(record), _record_untrusted())
+
+
+def _read_outcome(run: Run, record: dict[str, Any]) -> tuple[str | None, dict[str, Any], str]:
+    """Read the target back and compare each change with its values before and after
+    (DCLI-035). Returns the outcome, or ``None`` with the reason it cannot be told."""
+    command = run.tool.commands.get(record["command"])
+    secret = {run.key(f) for f in command.flags if f.secret} if command else set()
+    changes = [c for c in (record.get("preview") or {}).get("changes", [])
+               if c.get("origin", "tool") == "tool" and "field" in c and c["field"] not in secret]
+    request = record.get("_request")
+    if not request or not changes or not run.backend.has("read_back", request.get("session")):
+        return None, {}, "the operation has no change the adapter can read back"
+    request = {**request, "operation_id": record["operation_id"], "targets": sorted({c["target"] for c in changes}),
+               "fields": sorted({c["field"] for c in changes})}
+    after = read_back(run, request, changes, record.get("_tolerances", {}))
+    if after.call_failed:
+        return None, {}, "busy"
+    tolerances = record.get("_tolerances", {})
+    states = []
+    for change in changes:
+        values = after.observed.get(change["target"])
+        if not isinstance(values, dict) or (change["field"] not in values and change.get("before") is not None):
+            return None, after.observed, f"{change['field']} of {change['target']} cannot be read back"
+        value = values.get(change["field"])
+        if same(change.get("after"), value, tolerances.get(change["field"])):
+            states.append("after")
+        elif same(change.get("before"), value, tolerances.get(change["field"])):
+            states.append("before")
+        else:
+            return None, after.observed, f"{change['field']} of {change['target']} matches neither the value before nor the preview"
+    if all(s == "after" for s in states):
+        return "applied", after.observed, ""
+    if all(s == "before" for s in states):
+        return "not_applied", after.observed, ""
+    return "partial", after.observed, ""
 
 
 def _record_keys(record: dict[str, Any]) -> list[str]:

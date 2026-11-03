@@ -52,10 +52,13 @@ class Meta:
 
 
 def quote(arg: str) -> str:
-    """Quote an argument that holds a space, a quote or starts with ``-`` (DCLI-011)."""
-    if arg and not re.search(r"[\s\"'`$&|;<>()\\]", arg) and not arg.startswith("-"):
+    """Quote an argument that holds anything but plain characters or starts with ``-``
+    (DCLI-011). Single quotes keep ``$(...)`` and backticks literal in bash and PowerShell."""
+    if arg and re.fullmatch(r"[A-Za-z0-9_./:@%+=,#~^-]+", arg) and not arg.startswith("-"):
         return arg
-    return '"' + arg.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if "'" not in arg:
+        return "'" + arg + "'"
+    return '"' + re.sub(r'([\\"$`])', r"\\\1", arg) + '"'
 
 
 def command_line(tool: str, path: str, args: list[tuple[str, Any]]) -> str:
@@ -107,6 +110,8 @@ class Parser:
         for name, value, _ in flags:
             if name in self.contract.global_flags:
                 self._global(g, name, value)
+        if g.get("dry_run") and g.get("confirm"):
+            raise usage("--dry-run changes nothing and --confirm runs the write; give one of them.", "--dry-run")
         fmt = g.get("format", "json")
         if g.get("version"):
             return Meta("version", fmt, g.get("pretty", False))
@@ -208,6 +213,14 @@ class Parser:
     # ------------------------------------------------------------------ values
 
     def convert(self, flag: Flag, value: str | None) -> Any:
+        if not flag.secret:
+            return self._convert(flag, value)
+        try:
+            return self._convert(flag, value)
+        except DriverError:
+            raise usage(f"{flag.name} has a value of the wrong form.", flag.name) from None  # never echo a secret
+
+    def _convert(self, flag: Flag, value: str | None) -> Any:
         name = flag.name
         if flag.type == "boolean":
             if name == "--continue-on-error":

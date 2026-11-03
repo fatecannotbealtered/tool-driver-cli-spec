@@ -100,18 +100,18 @@
 | `G00` | 为每个写命令找样例：它行为矩阵的 `normal` 行；内置命令和标准命令用测试套件自带的样例 | 每个写命令都有样例 | DVER-002 |
 | `G01` | 不带任何参数开关，运行每个两步确认级命令的样例 | 退出码 5，`E_CONFIRMATION_REQUIRED`；`details` 带 `preview`、`confirm_token` 和 `expires_at`；没有写入 | DCLI-014, DCLI-050, DCLI-051, DCLI-053, DSEC-003 |
 | `G02` | 带 `--dry-run` 运行每个样例 | 退出码 0；预览有效；没有写入 | DCLI-054 |
-| `G03` | 为一个样例拿到令牌，然后改一个参数、去掉一个参数或加一个参数再确认 | `E_CONFLICT`，`token_mismatch`，并指出是哪个参数；没有写入 | DCLI-055, DCLI-056 |
+| `G03` | 为一个样例拿到令牌，然后分别改动每个参数、去掉每个可选参数、加一个参数、把样例指向另一个文档或设备，再确认 | `E_CONFLICT`，`token_mismatch`，并指出是哪个参数；没有写入 | DCLI-055, DCLI-056 |
 | `G04` | 原样确认，再用同一个令牌确认一次 | 第一次成功；第二次返回 `E_CONFLICT`，`token_used`；修改只写入一次 | DCLI-055, DCLI-056, DSEC-033 |
 | `G05` | 用篡改过的令牌确认 | 每次都被拒绝，`E_CONFLICT` `token_invalid`；没有写入 | DCLI-055, DSEC-033 |
 | `G06` | 不带令牌，以 `--format text` 运行一个两步确认级命令的样例 | 退出码 5；没有写入 | DCLI-014, DCLI-053 |
-| `G07` | 没有授权范围文件时预演和确认 | `E_FORBIDDEN`，`details.scope` 写明缺什么；没有写入 | DCLI-050, DSEC-015 |
+| `G07` | 没有授权范围文件时预演和确认；再分别在缺少样例的效果、缺少样例的目标、以及（危险级样例）缺少危险许可的授权范围下运行每个样例 | `E_FORBIDDEN`，`details.scope` 写明缺什么；没有写入 | DCLI-050, DSEC-014, DSEC-015 |
 | `G08` | 让状态目录里的 `operations/` 不可写，然后运行写命令样例和一次读取 | 每个写操作都返回 `E_IO`，没有写入；读取照常 | DCLI-059, DSEC-033 |
-| `G09` | 不带 `--dangerous` 确认每个危险级命令的令牌 | 退出码 5；没有写入 | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
-| `G10` | 在预演和确认之间修改授权范围文件 | `E_CONFLICT`，`scope_changed`；没有写入 | DCLI-056, DSEC-015 |
+| `G09` | 不带 `--dangerous` 确认每个危险级命令的令牌，再带上它确认 | 第一次退出码 5，没有写入；之后同一令牌可以执行写入 | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
+| `G10` | 在预演和确认之间修改授权范围文件的 ID，或在 ID 不变时修改它的内容 | `E_CONFLICT`，`scope_changed`；没有写入 | DCLI-056, DSEC-015 |
 | `R01` | 校验 `reference`（索引）、`reference --command` 和 `reference --all --output` | 结构有效；索引不超过 8000 个字符，单条命令不超过 6000 个字符；每条命令都按模式写明确认级别；每个示例都能解析 | DCLI-030, DCLI-031, DCLI-051, DCLI-201 |
 | `R02` | 遍历命令树 | 符合 DCLI-020 至 DCLI-024；每个命令都有摘要、输出 Schema 和示例 | DCLI-020, DCLI-021, DCLI-022, DCLI-024, DCLI-031 |
 | `R03` | 发送未知命令、未知参数和多余的参数 | `E_USAGE`，带 `problem` 和建议的正确写法 | DCLI-011, DCLI-012, DCLI-013 |
-| `R04` | 校验测试中见到的每一个信封 | 符合契约；键为 snake_case；`*_at` 的值为 UTC 时间；不超过大小上限 | DCLI-001, DCLI-003, DCLI-004, DCLI-005, DCLI-006, DCLI-008, DCLI-010, DCLI-011, DCLI-012, DCLI-013, DCLI-014, DCLI-061 |
+| `R04` | 在其他测试都跑完后，校验两组测试中见到的每一个信封 | 符合契约，`data` 符合它的 Schema（如回执的 Schema）；键为 snake_case；`*_at` 的值为 UTC 时间；不超过大小上限 | DCLI-001, DCLI-003, DCLI-004, DCLI-005, DCLI-006, DCLI-008, DCLI-010, DCLI-011, DCLI-012, DCLI-013, DCLI-014, DCLI-061 |
 | `R05` | 在空的状态目录下运行 `context`、`doctor` 和 `operation list` | 输出有效；`doctor` 列出全部固定检查项 | DCLI-030, DCLI-032, DCLI-033, DCLI-035, DSEC-016, DSKL-125 |
 
 为什么：这些测试覆盖所有工具共有的写入安全和自我描述，让 Agent 可以用同样的方式信任每个工具。
@@ -141,17 +141,17 @@
 |---|---|---|---|---|
 | `D01` | `session` | 有多个实例，命令没有指定 `--session` | `E_AMBIGUOUS`，列出候选，每个候选带会话摘要 | DCLI-202 |
 | `D02` | `session` | 预演之后，实例重连或重启 | 确认被拒绝，`E_CONFLICT` `session_changed` | DCLI-056, DCLI-203 |
-| `D03` | `documents` | 预演之后，文档被修改 | 确认被拒绝，`E_CONFLICT` `document_changed` | DCLI-056, DCLI-210 |
-| `D04` | `session`, `device` | 软件或设备忙 | `E_BUSY`，可重试，带 `retry_after_ms`；`dispatch_state` 为 `not_started` | DCLI-057, DCLI-204, DCLI-276 |
+| `D03` | `documents` | 预演之后，文档（实例中打开的文档，或文件模式下的文件）被修改 | 确认被拒绝，`E_CONFLICT` `document_changed` | DCLI-056, DCLI-210 |
+| `D04` | `session`, `device` | 软件或设备忙：在调用之前，或在预演和确认之间 | `E_BUSY`，可重试，带 `retry_after_ms`；`dispatch_state` 为 `not_started`；恢复后，同一令牌可以执行写入 | DCLI-055, DCLI-057, DCLI-204, DCLI-276 |
 | `D05` | `session` | 派发之前弹窗挡住了软件；另外，修改本身在派发之后弹出了弹窗 | 派发之前：`E_HUMAN_REQUIRED`，带 `action` 和重新运行这次调用的 `resume` 命令。派发之后：操作的结果未知，目标保持锁定，`resume` 是查询命令，绝不是再写一次 | DCLI-066, DCLI-204 |
-| `D06` | `session`, `device` | 派发之后连接断开 | `E_OUTCOME_UNKNOWN`，`lookup` 指向 `operation resolve`；目标保持锁定，直到查明结果 | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-275 |
+| `D06` | `session`, `device` | 派发之后连接断开：单次写入，以及批量中的一个对象 | `E_OUTCOME_UNKNOWN`，`lookup` 指向 `operation resolve`；目标保持锁定，直到查明结果。批量时，`lookup` 为 `operation list --state unknown --batch <id>`，该对象保持锁定 | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-064, DCLI-275 |
 | `D07` | `writes` | 修改已生效，但没能读回 | `E_VERIFY_INCOMPLETE`，附回执 | DCLI-057, DCLI-062 |
-| `D08` | `writes` | 读回的值与预览中 `after` 的差超出登记的容差 | `E_VERIFY_FAILED`，列出不符的字段 | DCLI-057, DCLI-062 |
+| `D08` | `writes` | 读回的值与预览中 `after` 的差超出登记的容差：每个写命令的样例，以及批量中的一个对象 | `E_VERIFY_FAILED`，列出不符的字段；批量时，该对象的条目为 `E_VERIFY_FAILED` | DCLI-057, DCLI-062, DCLI-064 |
 | `D09` | `session` | 会话模式下做一次修改 | 保存维度为 `unchanged`，`dirty` 为 `true`；`doc save` 之后保存维度为 `saved` | DCLI-058, DCLI-061 |
 | `D10` | `session` | 关闭有未保存修改的文档 | 被拒绝，`E_CONFLICT` `unsaved_changes`；带 `--discard` 时属于危险级，没有 `--dangerous` 也被拒绝 | DCLI-212 |
-| `D11` | `jobs` | 取消长任务 | 先报告 `cancel_requested`；软件确认已停止后，任务的 `state` 才变为 `cancelled` | DCLI-065, DCLI-220, DCLI-221 |
+| `D11` | `jobs` | 取消长任务 | 先报告 `cancel_requested`；软件仍报告任务在运行时，`job get` 不报告它已取消；软件确认已停止后，任务的 `state` 才变为 `cancelled` | DCLI-065, DCLI-220, DCLI-221 |
 | `D12` | `host_component` | 宿主组件的磁盘版本与已加载版本不一致 | `doctor` 的 `plugin` 检查失败；写命令被拒绝，返回 `E_HUMAN_REQUIRED`，`action` 为 `restart_application` | DCLI-240, DSEC-053 |
-| `D13` | `always` | 调用时给领域命令的物理量参数、以及 `job get` 的 `--wait` 时长，传一个不带单位的数 | `E_USAGE`，`problem` 列出可用的单位 | DCLI-082 |
+| `D13` | `always` | 给领域命令的物理量参数传不带单位的数；另外，给 `job get --wait` 传不带单位的数 | `E_USAGE`，`problem` 列出可用的单位 | DCLI-026, DCLI-082 |
 | `D14` | `physical` | 物理动作没有带 `--dangerous`，或授权范围没有允许 `physical` | 被拒绝；什么都没派发 | DSEC-014, DSEC-060 |
 | `D15` | `device` | 使用模拟设备 | 设备对象和在它上面运行的每条命令的结果都带 `simulated: true` | DCLI-230, DSEC-062 |
 | `D16` | `session` | 会话模式下直接执行一次修改 | 一次调用完成，有操作记录、读回和完整回执；没有授权范围时和其他写操作一样被拒绝 | DCLI-050, DCLI-052, DSEC-015 |
@@ -161,7 +161,7 @@
 | `D20` | `host_component` | 宿主组件的协议主版本与 CLI 不同 | 握手失败，`E_PROTOCOL`；不发出任何修改 | DCLI-273, DCLI-280, DSEC-054 |
 | `D21` | `host_component` | 宿主在回复之前关闭了连接 | 写操作：记为结果未知，目标保持锁定。读操作：`E_BUSY`，会话报告为 `unresponsive` | DCLI-063, DCLI-204, DCLI-275, DCLI-278 |
 | `D22` | `session` | 两个实例中有一个不回应 | `session list` 在 5 秒内返回两个实例，不回应的那个实例 `state` 为 `unresponsive` | DCLI-204, DCLI-205 |
-| `D23` | `device` | 中止命令以外的命令作用于设备时，设备处于 `emergency_stop` 或 `fault` | `E_HUMAN_REQUIRED`，`action` 为 `confirm_on_device`；`dispatch_state` 为 `not_started`；什么都没派发 | DCLI-230, DSEC-061 |
+| `D23` | `device` | 中止命令以外的命令作用于设备时，设备处于 `emergency_stop` 或 `fault`：在调用之前，或在预演和确认之间 | `E_HUMAN_REQUIRED`，`action` 为 `confirm_on_device`；`dispatch_state` 为 `not_started`；什么都没派发；设备恢复后，同一令牌可以执行写入 | DCLI-055, DCLI-230, DSEC-061 |
 | `D24` | `writes` | 批量操作中有一个对象失败 | `E_PARTIAL`，带 `details.batch`：失败的那一项写明错误码，其他对象已生效并报告为成功 | DCLI-064 |
 | `D25` | `halt` | 中止命令作用于设备或实例时，它处于 `busy`；授权范围设了 `confirm: always`，覆盖目标但不含 `lifecycle` 效果 | 命令立即执行，不返回 `E_BUSY`，也不需要确认，并返回回执 | DCLI-230, DSEC-018 |
 

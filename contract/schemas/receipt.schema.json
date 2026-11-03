@@ -43,10 +43,15 @@
         "tier": {"$ref": "preview.schema.json#/$defs/tier"},
         "outcome": {"$ref": "#/$defs/outcome"},
         "observed": {
-          "description": "The values read back, keyed by target key, or by the object, such as session, for a command with no target object; each produced file under its file key, with path, bytes and sha256.",
-          "type": "object"
+          "description": "The values read back, one object per key: a target key, a produced file under its file key with path, bytes and sha256, or for a command with no target object the object's name, such as session.",
+          "type": "object",
+          "additionalProperties": {"type": "object"}
         },
-        "mismatched": {"description": "The fields that do not match, each written <field>@<key>.", "type": "array", "items": {"type": "string"}},
+        "mismatched": {
+          "description": "The fields that do not match, each written <field>@<key>, where <key> is its key in observed.",
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*@.+$"}
+        },
         "session": {"$ref": "preview.schema.json#/$defs/session_ref"},
         "document": {"$ref": "preview.schema.json#/$defs/document_ref"},
         "failed_stage": {"enum": ["apply", "deliver", "persist", "verify"]},

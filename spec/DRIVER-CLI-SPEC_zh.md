@@ -145,7 +145,7 @@
 
 ### DCLI-005 命名与取值
 
-- 表示字段名的键必须用 snake_case，`data` 和 `details` 里的键也一样。本身就是取值的键，如回执 `observed` 里的目标键（DCLI-061），按取值原样写。
+- 所有键必须用 snake_case，`data` 和 `details` 里的键也一样。只有两类键保持原样：回执 `observed` 的键，它们是目标键或对象名（DCLI-061）；作为数据携带的 JSON Schema 的关键字，如 `reference` 里的 `output_schema`（DCLI-031）。
 - ID 必须是字符串。
 - 时间必须是带 `Z` 后缀的 ISO 8601 UTC 时间，放在以 `_at` 结尾的键下；不带时刻的日期必须放在以 `_on` 结尾的键下。
 - 枚举值必须用小写 snake_case。
@@ -373,10 +373,10 @@
 | `--output` | `<path>` | 把结果或完整的预览写到本地文件，响应里只给摘要（DCLI-008、DCLI-054） |
 | `--input` | `<path\|->` | 从文件或 stdin 读入全部参数，格式为一个 JSON 对象；`{"items": [...]}` 为批量中的每个对象各给一组值（DCLI-064） |
 
-时长必须写作 `<n>ms`、`<n>s`、`<n>min` 或 `<n>h`。带单位的物理量参数见 DCLI-082。
+时长属于 `time` 物理量：必须写作 `<n>ms`、`<n>s`、`<n>min` 或 `<n>h`，不带单位的数按 DCLI-082 拒绝。其他物理量参数见 DCLI-082。
 
 为什么：同一功能在每个工具里都用同一个参数，Agent 不用再查。
-检查：👀 评审 `reference` 里每个命令的参数。
+检查：🤖 驱动一致性测试 D13 检查时长；👀 评审 `reference` 里每个命令的参数。
 
 ### DCLI-027 目标参数
 
@@ -425,7 +425,7 @@
 | `effects` | 命令的效果（DCLI-051） |
 | `modes` | 命令支持的模式（DCLI-201） |
 | `target_kind` | 命令作用的对象类型，也就是目标键里的类型（DCLI-028） |
-| `flags` | 每个参数，各带类型、物理量参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`（DCLI-051） |
+| `flags` | 每个参数，各带类型（`string`、`integer`、`number`、`boolean`、`quantity` 或 `path`；DCLI-026 的共享参数还有 `list`、`input` 和 `duration`），`quantity` 类型参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`，此时类型为 `path`（DCLI-051） |
 | `untrusted_fields` | 存放不可信文字的输出字段（DSEC-021） |
 | `adapter_capabilities` | 命令调用的适配能力（DCLI-260），`reference` 会列出 |
 | `survey_ids` | 命令实现的、能力调查中的能力编号（DREPO-061） |
@@ -668,7 +668,7 @@
 - 全局参数（DCLI-025），如 `--dangerous`、`--format`、`--quiet`，不属于输入，不绑定。
 
 为什么：令牌绑定了预览里的一切，就不能被挪用到另一次改动上；什么都没改的拒绝，也不会逼 Agent 从头再来。
-检查：🤖 通用一致性测试 G03、G04 和 G05。
+检查：🤖 通用一致性测试 G03、G04 和 G05；驱动一致性测试 D04 和 D23。
 
 ### DCLI-056 确认时的复查
 
@@ -756,7 +756,8 @@
 
 - `operation_id`、`command`、`target`（没有目标对象的命令没有这一项，DCLI-054）、`effects`、`tier`；
 - `outcome`，即下表的五个维度；
-- `observed` 和 `mismatched`：读回的值，与适配层的读回一样以目标键为键（DCLI-260），没有目标对象的命令以对象为键，如 `session`，其中包括生成的每个文件的路径、大小和 SHA-256；以及不一致的字段，每项写成 `<field>@<key>`；
+- `observed`：读回的值，每个键一项：适配层 `read_back` 报告的每个目标键（DCLI-260）；生成的每个文件，键为 `file:///<path>`，带 `path`、`bytes` 和 `sha256`；没有目标对象的命令，键为对象名，如 `session`、`document` 或 `plugin`；
+- `mismatched`：每个不一致的字段，写成 `<field>@<key>`，`<key>` 是它在 `observed` 里的键；
 - `session` `{id, generation}` 和 `document` `{id, revision, dirty}`；
 - `failed_stage`：失败或中断时所在的阶段：`apply`、`deliver`、`persist` 或 `verify`；
 - `notes`：补充说明；
@@ -827,7 +828,7 @@
 - 同一类操作经常要对多个对象做时（如移动器件、改属性、删除），工具应该提供批量形式。
 
 为什么：一次调用处理多个对象能省调用；逐个对象报告结果，部分失败时报告也是实话；软件不再响应时整批立刻停下，而不是一个对象一个对象地失败。
-检查：🤖 驱动一致性测试 D24；运行时单元测试。
+检查：🤖 驱动一致性测试 D06、D08 和 D24；运行时单元测试。
 
 ### DCLI-065 长任务
 
@@ -835,7 +836,7 @@
 
 - 提交长任务是一次普通的写操作（DCLI-050），通常是动词为 `run` 的命令（DCLI-022）。它的回执报告 `execution: completed` 和 `change: not_applicable`，因为它做的只是启动任务。`data.result.job` 必须为 `{id, state, poll}`，`poll` 是查询这个任务的确切命令，如 `job get --job 7 --wait 60s`。
 - 任务结束之前，目标一直锁着（DCLI-060）。
-- 任务进入终态时，运行时必须为这个任务的操作记录补上完整的回执：读回产出，任务生成的每个文件都记下大小和 SHA-256（DCLI-057）。之后 `job get` 返回这份 `receipt`、`result`，以及由回执推导出的 `ok`（DCLI-062）。
+- 任务进入终态时，运行时必须为这个任务的操作记录补上完整的回执：读回产出，任务生成的每个文件都记下大小和 SHA-256（DCLI-057）。之后 `job get` 按 DCLI-220 返回这个任务。
 - 以 `unknown` 结束的任务，与其他结果未知的写操作一样，用 `operation resolve` 查清（DCLI-063）。
 
 为什么：一次调用挂上几分钟，在 Agent 看来就和工具死掉一样；长任务的真实结果，也要和其他写操作一样认真报告。
@@ -1181,7 +1182,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 - `id`；
 - `path`：文件路径；从未保存过的新文档为 `null`；
-- `key`：文档的目标键（DCLI-028）。没有路径的文档，适配层必须给出，因为 `untitled:<session-id>/<n>` 里的 `<n>` 只有适配层知道；其他文档可以给出；
+- `key`：只用于没有路径的文档，即它的目标键 `untitled:<session-id>/<n>`（DCLI-028）。适配层必须给出，因为 `<n>` 只有适配层知道。有路径的文档没有 `key`，目标键就是 `file:///<path>`；
 - `session`：文档所在的会话；文件模式下为 `null`；
 - `revision`：由适配层给出的不透明字符串，每次修改和每次保存都会变；文件模式下是文件内容的哈希；
 - `dirty`：有没有未保存的修改；
@@ -1234,7 +1235,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 长任务至少必须有以下字段：`id`、`operation_id`、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
 
-`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。
+`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态（`completed`、`failed`、`partial`、`unknown` 或 `cancelled`）时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。这些都是 `data` 里的字段：`job get` 本身是成功的，DCLI-062 所说的 `error.details.receipt` 属于写操作，不属于 `job get`。
 
 `job list` 列出所有会话的长任务。`job get --job <id> --wait <duration>` 必须在任务结束或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
 
@@ -1243,7 +1244,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-221 取消长任务
 
-`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。
+`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。按请求取消的任务，执行维度记为 `interrupted`，原因码为 `E_INTERRUPTED`（DCLI-062）。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。
 
 为什么：软件还没停就报告「已取消」，旧任务还在跑，Agent 就可能开始新的工作。
 检查：🤖 驱动一致性测试 D11。
@@ -1300,13 +1301,13 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `read` | 实例端 | 必需 | 必需 | 必需 | 执行只读命令 |
 | `preview` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 生成预览，带软件将会存下的值 |
 | `apply` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 执行修改，并报告发生了什么 |
-| `read_back` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 读回被改的字段 |
+| `read_back` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 按目标键读回被改的字段 |
 | `job_status` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 查询长任务的状态 |
 | `cancel` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 取消长任务 |
 | `devices` | CLI 端 | — | — | 必需 | 列出设备及其状态 |
 | `plugin_status` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 报告宿主组件的版本 |
 | `plugin_install` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 安装宿主组件 |
-| `plugin_remove` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 移除宿主组件 |
+| `plugin_remove` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 卸载宿主组件 |
 
 - 标为「必需」的能力，支持该模式的每个工具都必须实现。「有写命令时」表示工具有写命令时必需；「有长任务时」「有宿主组件时」同理。「可选」的能力可以不实现。「—」表示该模式用不到这项能力。
 - CLI 端的能力在 CLI 进程里运行。实例端的能力在适配层里运行，或作为宿主方法在宿主组件里运行（DCLI-262、DCLI-274）。

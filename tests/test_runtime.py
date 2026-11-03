@@ -240,8 +240,10 @@ class Parsing(unittest.TestCase):
 
     def test_quote(self):
         self.assertEqual(quote("R1"), "R1")
-        self.assertEqual(quote("-5mm"), '"-5mm"')
-        self.assertEqual(quote("two words"), '"two words"')
+        self.assertEqual(quote("-5mm"), "'-5mm'")
+        self.assertEqual(quote("two words"), "'two words'")
+        self.assertEqual(quote("$(touch x)"), "'$(touch x)'")
+        self.assertEqual(quote("it's $x"), '"it' + "'" + 's \\$x"')
 
 
 class Envelope(unittest.TestCase):
@@ -292,6 +294,7 @@ class StateAndLocks(unittest.TestCase):
         finally:
             child.kill()
             child.wait()
+            child.stdout.close()
         # The holder died before dispatch: its lock is stale and goes away.
         locks.acquire("op_parent", ["file:///D:/proj/b.pcb#/R1"])
 

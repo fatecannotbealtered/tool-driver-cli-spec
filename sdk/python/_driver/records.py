@@ -84,7 +84,7 @@ class Records:
                     continue
                 if isinstance(record, dict) and "operation_id" in record:
                     out.append(record)
-        out.sort(key=lambda r: (r.get("planned_at", ""), r.get("_seq", 0)), reverse=True)
+        out.sort(key=lambda r: (r.get("_seq", 0), r.get("planned_at", "")), reverse=True)
         return out
 
     def purge(self) -> None:
@@ -164,6 +164,12 @@ def _unlock(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def process_start(pid: int) -> int:
+    from .adapter import start_time
+
+    return start_time(pid)
+
+
 def pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -209,6 +215,7 @@ class Locks:
         return self.state.sub("locks")
 
     def entries(self) -> list[dict[str, Any]]:
+        """Every lock entry. A lock file that cannot be read counts as held: locks fail closed."""
         out = []
         folder = self.state.path / "locks"
         if folder.is_dir():
@@ -216,56 +223,86 @@ class Locks:
                 try:
                     entry = read_json(path)
                 except (OSError, ValueError):
-                    continue
-                if isinstance(entry, dict):
+                    entry = None
+                if isinstance(entry, dict) and isinstance(entry.get("keys"), list):
                     out.append(entry)
+                elif path.exists():
+                    out.append({"operation_id": path.stem, "keys": [], "holder": "unreadable"})
         return out
 
-    def _settle_stale(self, entry: dict[str, Any]) -> bool:
-        """Drop the lock of a process that died before dispatch; a death after dispatch
-        leaves the write outcome unknown and the lock in place (DCLI-063)."""
-        if entry.get("holder") != "process" or pid_alive(int(entry.get("pid", 0))):
+    def _stale(self, entry: dict[str, Any]) -> bool:
+        """A lock held by a process that is gone (its PID ended or now names a later process)."""
+        if entry.get("holder") != "process":
             return False
+        pid = int(entry.get("pid", 0))
+        return not pid_alive(pid) or (entry.get("started") is not None and process_start(pid) != entry["started"])
+
+    def _settle(self, entry: dict[str, Any]) -> bool:
+        """Under the mutex: drop the lock of a process that died before dispatch. A death
+        after dispatch leaves the write outcome unknown and the lock in place (DCLI-063)."""
         record = self.records.load(entry["operation_id"])
         if record is not None and record.get("state") == "dispatched":
             record["state"] = "unknown"
             self.records.save(record)
-            entry["holder"] = "unknown"
-            write_json(self._dir() / f"{entry['operation_id']}.json", entry)
+            write_json(self._dir() / f"{entry['operation_id']}.json", {**entry, "holder": "unknown", "pid": 0})
             return False
-        self.release(entry["operation_id"], locked=True)
+        self._remove(entry["operation_id"])
         return True
 
-    def holders(self, keys: list[str], exclude: str | None = None) -> list[dict[str, Any]]:
-        """The lock entries that conflict with any of ``keys``."""
+    def holders(self, keys: list[str], exclude: str | None = None, settle: bool = False) -> list[dict[str, Any]]:
+        """The lock entries that conflict with any of ``keys``. Only a caller that holds the
+        mutex may ``settle`` stale entries; others just skip a stale lock taken before dispatch."""
         found = []
         for entry in self.entries():
-            if entry["operation_id"] == exclude or self._settle_stale(entry):
+            if entry["operation_id"] == exclude:
                 continue
+            if entry["holder"] == "unreadable":
+                found.append(entry)
+                continue
+            if self._stale(entry):
+                if settle:
+                    if self._settle(entry):
+                        continue
+                else:
+                    record = self.records.load(entry["operation_id"])
+                    if record is None or record.get("state") == "planned":
+                        continue
             if any(conflict(a, b) for a in keys for b in entry.get("keys", [])):
                 found.append(entry)
         return found
 
-    def acquire(self, operation_id: str, keys: list[str], ignore: list[str] | None = None) -> None:
-        """Lock ``keys`` for one operation, in sorted order, or fail with ``target_locked``."""
+    def acquire_held(self, operation_id: str, keys: list[str]) -> None:
+        """With the mutex held: lock ``keys`` for one operation, or fail with ``target_locked``."""
+        busy = self.holders(keys, exclude=operation_id, settle=True)
+        if busy:
+            raise conflict_locked(busy[0], self.tool)
+        entry = {"operation_id": operation_id, "keys": sorted(keys), "holder": "process", "pid": os.getpid(),
+                 "started": process_start(os.getpid()), "locked_at": utc_now()}
+        write_json(self._dir() / f"{operation_id}.json", entry)
+
+    def acquire(self, operation_id: str, keys: list[str]) -> None:
         with self.mutex.hold():
-            busy = [e for e in self.holders(keys, exclude=operation_id) if e["operation_id"] not in (ignore or [])]
-            if busy:
-                raise conflict_locked(busy[0], self.tool)
-            entry = {"operation_id": operation_id, "keys": sorted(keys), "holder": "process", "pid": os.getpid(),
-                     "locked_at": utc_now()}
-            write_json(self._dir() / f"{operation_id}.json", entry)
+            self.acquire_held(operation_id, keys)
 
-    def hold_as(self, operation_id: str, holder: str, keys: list[str] | None = None) -> None:
+    def hold_as(self, operation_id: str, holder: str, keys: list[str]) -> None:
         """Keep a lock after the process ends: for a long job, or an outcome-unknown write."""
-        entry = {"operation_id": operation_id, "keys": sorted(keys or []), "holder": holder, "pid": 0, "locked_at": utc_now()}
-        path = self._dir() / f"{operation_id}.json"
-        old = read_json(path) if path.exists() else None
-        if keys is None and isinstance(old, dict):
-            entry["keys"] = old.get("keys", [])
-        write_json(path, entry)
+        with self.mutex.hold():
+            write_json(self._dir() / f"{operation_id}.json",
+                       {"operation_id": operation_id, "keys": sorted(keys), "holder": holder, "pid": 0, "locked_at": utc_now()})
 
-    def release(self, operation_id: str, locked: bool = False) -> None:
+    def replace(self, operation_id: str, held: list[tuple[str, list[str]]]) -> None:
+        """Release one lock and keep others in its place, with no gap between (DCLI-064)."""
+        with self.mutex.hold():
+            for child, keys in held:
+                write_json(self._dir() / f"{child}.json",
+                           {"operation_id": child, "keys": sorted(keys), "holder": "unknown", "pid": 0, "locked_at": utc_now()})
+            self._remove(operation_id)
+
+    def release(self, operation_id: str) -> None:
+        with self.mutex.hold():
+            self._remove(operation_id)
+
+    def _remove(self, operation_id: str) -> None:
         path = self.state.path / "locks" / f"{operation_id}.json"
         try:
             path.unlink()
@@ -278,6 +315,8 @@ class Locks:
 def conflict_locked(entry: dict[str, Any], tool: str) -> DriverError:
     holder = entry.get("holder")
     op = entry["operation_id"]
+    if holder == "unreadable":
+        return DriverError("E_BUSY", f"The lock file of {op} cannot be read; nothing was sent.", retry_after_ms=1000)
     if holder == "unknown":
         action = f"Settle it first with `{tool} operation resolve --id {op}`."
     elif holder == "job":

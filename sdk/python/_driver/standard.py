@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 from .errors import DriverError, usage
 from .output import Result, page
-from .records import public, utc_now
+from .records import utc_now
 from .registry import Command, Flag
 from .runtime import READ_DEADLINE_MS, SESSION_DEADLINE_MS, Run, Where, parallel
 from .targets import file_key
-from .writes import Engine, Verification, WriteSpec, dispatch, read_back, verify_files
+from .writes import Engine, Verification, WriteSpec, dispatch, read_back, record_state, verify_files
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -157,7 +157,6 @@ def add_target_flags(tool: Tool, command: Command) -> None:
     command.flags = extra + command.flags
     if command.writes and "--output" not in names:
         command.flags.append(Flag("--output", "path", "Write the full preview, with every change, to this file."))
-        command.runtime_output = True  # type: ignore[attr-defined]
     if "artifact" in command.effects and any(f.output for f in command.flags):
         command.tier_when = [{"when": "target_exists", "tier": "two_step"}]
     tiers = tool.tiers
@@ -357,10 +356,10 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
     cause = "E_INTERRUPTED" if state == "cancelled" else None
     ok, code = _Engine(run).derive(receipt, cause)
     job.update(ok=ok, code=code, finished_at=utc_now(), result=status.get("result", {}))
-    record["state"] = "unknown" if execution == "unknown" else ("completed" if execution == "completed" else "failed")
+    record["state"] = record_state(receipt, code)
     record["finished_at"] = job["finished_at"]
     if record["state"] == "unknown":
-        run.locks.hold_as(record["operation_id"], "unknown")
+        run.locks.hold_as(record["operation_id"], "unknown", record.get("_keys", []))
     else:
         run.locks.release(record["operation_id"])
 
@@ -393,7 +392,7 @@ def job_get(run: Run) -> Result:
     view = job_view(record)
     if view["state"] not in FINAL_JOB_STATES:
         view["poll_after_ms"] = POLL_AFTER_MS
-    return Result(view, [".receipt.notes", ".receipt.target.label"])
+    return Result(view, [".receipt.notes", ".receipt.target.label", ".receipt.observed", ".result"])
 
 
 # ------------------------------------------------------------------ standard writes
@@ -613,7 +612,14 @@ class DocSave(_OnDocument):
         """The saved file is read again and the changed fields are found in it (DCLI-057)."""
         fields = [c for c in changes if c.get("field")]
         if not fields:
-            return Verification("passed", notes=["The save held no field change to compare."])
+            # Nothing to find in the file: check instead that the document is saved and clean.
+            docs = self.run.documents(self.where.session["id"])
+            doc = next((d for d in docs if d.get("id") == self.where.document["id"]), None)
+            observed = {"document": {"id": self.where.document["id"], "dirty": (doc or {}).get("dirty"),
+                                     "disk": (doc or {}).get("disk")}}
+            if doc is not None and doc.get("dirty") is False and doc.get("disk", "in_sync") == "in_sync":
+                return Verification("passed", observed, notes=["The save held no field change; the document is clean."])
+            return Verification("incomplete", observed, notes=["The document is not reported clean after the save."])
         request = {"command": "doc save", "inputs": {}, "session": self.where.session["id"], "document": self.where.document["id"],
                    "operation_id": operation_id, "targets": sorted({c["target"] for c in fields}),
                    "fields": sorted({c["field"] for c in fields})}
@@ -694,13 +700,10 @@ class DocUndo(_OnDocument):
     def prepare(self) -> None:
         super().prepare()
         doc = self.where.document
-        self.last = None
-        for record in self.run.records.all():
-            receipt = record.get("receipt") or {}
-            if (receipt.get("document", {}).get("id") == doc["id"] and record.get("state") == "completed"
-                    and record.get("_request") and not record.get("_undone_by") and record["command"] != "doc undo"):
-                self.last = record
-                break
+        candidates = [r for r in self.run.records.all()
+                      if (r.get("receipt") or {}).get("document", {}).get("id") == doc["id"] and r.get("state") == "completed"
+                      and r.get("_request") and not r.get("_undone_by") and r["command"] not in ("doc undo", "doc save")]
+        self.last = max(candidates, key=lambda r: r.get("_finished", 0), default=None)
         self.action = f"Undo {self.last['command']} ({self.last['operation_id']}) on document {doc['id']}." if self.last else "Undo."
 
     def targets(self) -> list[dict[str, Any]]:
@@ -847,5 +850,3 @@ class PluginRemove(PluginInstall):
         return Verification("passed", observed)
 
 
-def public_record(record: dict[str, Any]) -> dict[str, Any]:
-    return public(record)

@@ -16,12 +16,13 @@ import hashlib
 import json
 import os
 import secrets
+import time
 from typing import Any
 
 from .adapter import BadProtocol, CapabilityError, Lost, Unanswered
 from .errors import DriverError
 from .output import Result
-from .records import conflict_locked, expired, expiry, public, utc_now
+from .records import conflict_locked, expired, expiry, utc_now
 from .registry import Command, Tiers
 from .runtime import READ_DEADLINE_MS, WRITE_DEADLINE_MS, Inputs, Run, Where
 from .targets import covers, file_key, kind_of, path_of
@@ -36,6 +37,7 @@ class Verification:
         self.observed = observed or {}
         self.mismatched = mismatched or []
         self.notes = notes or []
+        self.call_failed = False  # the read-back itself failed, rather than a field being unreadable
 
 
 class WriteSpec:
@@ -52,6 +54,7 @@ class WriteSpec:
         self.selected: list[str] = []
         self.batch = False
         self.items: list[dict[str, Any]] | None = None
+        self.secrets: dict[str, str] = {}  # secret inputs, never stored in clear
 
     # The parts a write fills in --------------------------------------------------------
 
@@ -78,6 +81,10 @@ class WriteSpec:
     def stored_request(self, child: int | None = None) -> dict[str, Any] | None:
         """The adapter request ``operation resolve`` and ``doc undo`` replay to read the target back."""
         return None
+
+    def outputs(self) -> list[str]:
+        """The files the call names with its ``output`` flags."""
+        return []
 
     def refresh(self) -> None:
         """Read the session, document and device again, for the review before dispatch."""
@@ -137,13 +144,12 @@ class DomainWrite(WriteSpec):
         self.where = run.where(self.command)
         self.inputs = run.inputs(self.command)
         self.selected, self.batch, self.items = self.inputs.selected, self.inputs.batch, self.inputs.items
+        self.secrets = self.inputs.secrets or {}
         self.bound = {"inputs": self.inputs.bound, "document": (self.where.document or {}).get("id"),
                       "device": (self.where.device or {}).get("id")}
         self.echo = self.inputs.echo
-        if "artifact" in self.command.effects:
-            outputs = [self.inputs.adapter[run.key(f)] for f in self.command.flags if f.output and run.key(f) in self.inputs.adapter]
-            if any(os.path.exists(p) for p in outputs):
-                self.conditions.append("target_exists")
+        if "artifact" in self.command.effects and any(os.path.exists(p) for p in self.outputs()):
+            self.conditions.append("target_exists")
         self.gates()
 
     def request(self, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -156,6 +162,11 @@ class DomainWrite(WriteSpec):
         if self.where.device:
             req["device"] = self.where.device["id"]
         return req
+
+    def outputs(self) -> list[str]:
+        assert self.inputs is not None
+        return [self.inputs.adapter[self.run.key(f)] for f in self.command.flags
+                if f.output and self.run.key(f) in self.inputs.adapter]
 
     def child_inputs(self, index: int) -> dict[str, Any]:
         assert self.inputs is not None
@@ -181,7 +192,7 @@ class DomainWrite(WriteSpec):
             return verify_files(facts, changes)
         tool_changes = [c for c in changes if c.get("origin", "tool") == "tool"]
         if not tool_changes:
-            return Verification("passed", notes=["The preview held no change to compare."])
+            return Verification("incomplete", notes=["The preview held no change to read back, so nothing was verified."])
         inputs = self.child_inputs(child) if child is not None else None
         request = {**self.request(inputs), "operation_id": operation_id,
                    "targets": sorted({c["target"] for c in tool_changes}),
@@ -219,16 +230,22 @@ def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]], 
     try:
         result = run.backend.call("read_back", request, READ_DEADLINE_MS)
     except (CapabilityError, Unanswered, Lost, BadProtocol) as exc:
-        return Verification("incomplete", notes=[f"The read-back failed: {exc}"])
-    observed = result.get("observed", {}) if isinstance(result, dict) else {}
-    unreadable = set(result.get("unreadable", [])) if isinstance(result, dict) else set()
+        failed = Verification("incomplete", notes=[f"The read-back failed: {exc}"])
+        failed.call_failed = True
+        return failed
+    observed = result.get("observed") if isinstance(result, dict) else None
+    unreadable = result.get("unreadable", []) if isinstance(result, dict) else None
+    if not isinstance(observed, dict) or not all(isinstance(v, dict) for v in observed.values()) \
+            or not isinstance(unreadable, list):
+        return Verification("incomplete", notes=["The read-back reply is not keyed by target key, so nothing was verified."])
+    unreadable = set(map(str, unreadable))
     mismatched, missing = [], []
     for change in changes:
         field = change.get("field")
         values = observed.get(change["target"], {})
         if field is None:
-            continue
-        if field in unreadable or field not in values:
+            missing.append(f"(no field)@{change['target']}")
+        elif field in unreadable or field not in values:
             missing.append(f"{field}@{change['target']}")
         elif not same(change["after"], values[field], tolerances.get(field)):
             mismatched.append(f"{field}@{change['target']}")
@@ -341,13 +358,30 @@ class Engine:
         for condition in spec.conditions:
             if condition in raises:
                 tier = self.tiers.strictest([tier, raises[condition]])
-        if tier == "direct" and command.kind == "domain":
-            named = [t["key"] for t in targets]
-            if any(not any(covers(k, c["target"]) for k in named) for c in changes):
-                tier = "two_step"  # the preview touches more than the inputs name (DCLI-052)
+        if tier == "direct" and command.kind == "domain" and self.touches_more(spec, targets, changes):
+            tier = "two_step"  # the preview touches more than the inputs name (DCLI-052)
         if self.run.scope.confirm_always and tier == "direct":
             tier = "two_step"
         return tier
+
+    def touches_more(self, spec: WriteSpec, targets: list[dict[str, Any]], changes: list[dict[str, Any]]) -> bool:
+        """Whether a preview reaches past the objects the inputs name: more targets than
+        selected objects, or a change outside them. Without selected objects the inputs name
+        the document or the device."""
+        outputs = [file_key(p) for p in spec.outputs()]
+        if spec.selected:
+            if len(targets) > len(spec.selected) + len(outputs):
+                return True
+            named = [t["key"] for t in targets[:len(spec.selected)]]
+        elif spec.where.document is not None:
+            named = [self.run.doc_key(spec.where.document)]
+        elif spec.where.device is not None:
+            named = [f"device:{spec.where.device['id']}"]
+        else:
+            named = []
+        named += outputs  # the files an artifact command creates are named by its inputs
+        keys = [t["key"] for t in targets] + [c["target"] for c in changes]
+        return any(not any(covers(n, k) for n in named) for k in keys)
 
     def check_scope(self, command: Command, dangerous: bool, keys: list[str], halt: bool) -> None:
         scope = self.run.scope
@@ -445,7 +479,7 @@ class Engine:
 
     @staticmethod
     def preview_untrusted(prefix: str, preview: dict[str, Any]) -> list[str]:
-        paths = [f"{prefix}.action", f"{prefix}.changes[*].before", f"{prefix}.changes[*].after"]
+        paths = [f"{prefix}.action", f"{prefix}.changes[*].before", f"{prefix}.changes[*].after", f"{prefix}.blocked_by"]
         target = preview.get("target")
         paths.append(f"{prefix}.target[*].label" if isinstance(target, list) else f"{prefix}.target.label")
         return paths
@@ -481,6 +515,7 @@ class Engine:
             record["target"] = targets if spec.batch or len(targets) > 1 else targets[0]
         record.update(effects=list(spec.command.effects), tier=tier, scope_id=self.run.scope.scope_id or "",
                       state="planned", preview=preview, planned_at=utc_now())
+        record["_seq"] = time.time_ns()  # newest first, also within one second (DCLI-035)
         record["_call"] = {"session": (spec.where.session or {}).get("id"), "document": (spec.where.document or {}).get("id"),
                            "device": (spec.where.device or {}).get("id"), "mode": spec.where.mode}
         request = spec.stored_request()
@@ -499,6 +534,7 @@ class Engine:
             "document_revision": doc["revision"] if doc else None, "document_dirty": doc["dirty"] if doc else None,
             "plugin_version": session.get("plugin_loaded") if session else None,
             "scope_id": scope.scope_id or None, "scope_hash": scope.hash,
+            "secrets": _secret_digests(spec.secrets, secrets.token_hex(16)),
         }
 
     # ------------------------------------------------------------------ confirm-time review
@@ -530,6 +566,11 @@ class Engine:
             raise conflict("token_mismatch", f"The token was issued for {old['command']}, not {binds['command']}; nothing was sent.",
                            "Run the command again without --confirm to get a new preview and token.")
         differs = _differs(old["inputs"], binds["inputs"], spec.command)
+        stored = old.get("secrets") or {"salt": "", "digests": {}}
+        if differs is None and _secret_digests(spec.secrets, stored["salt"])["digests"] != stored["digests"]:
+            differs = next((_flag_for(k, spec.command) for k in sorted(set(spec.secrets) | set(stored["digests"]))
+                            if _secret_digests({k: spec.secrets.get(k, "")}, stored["salt"])["digests"].get(k)
+                            != stored["digests"].get(k)), "--input")
         if differs:
             raise conflict("token_mismatch", f"{differs} differs from the previewed call; nothing was sent.",
                            "Confirm with exactly the previewed arguments, or run the command again without --confirm.",
@@ -571,6 +612,9 @@ class Engine:
         if old["plugin_version"] is not None and session is not None and session.get("plugin_loaded") != old["plugin_version"]:
             raise conflict("plugin_changed", "The host component changed after the preview; nothing was sent.",
                            "Run the command again without --confirm to preview it again.")
+        if operation_id is not None and sorted(keys) != old["target"]:
+            raise conflict("token_mismatch", "The call now reaches other targets than the previewed one; nothing was sent.",
+                           "Run the command again without --confirm to preview it again.")
         if not pv.get("can_apply", True):
             raise conflict("blocked", f"The change can no longer be applied: {'; '.join(pv.get('blocked_by', []))}.",
                            "Resolve what blocks it, then run the command again without --confirm.", untrusted=["message"])
@@ -581,23 +625,27 @@ class Engine:
                  changes: list[dict[str, Any]], keys: list[str]) -> Result:
         run = self.run
         operation_id = record["operation_id"]
-        if not spec.halt:  # a halt command is never blocked by the lock of the work it stops (DCLI-060)
-            run.locks.acquire(operation_id, keys)
-        try:
-            with run.mutex.hold():
-                fresh = run.records.load(operation_id) or record
-                if fresh.get("_token", {}).get("spent") or fresh.get("state") != "planned":
-                    raise conflict("token_used", "The confirm token has already been used; nothing was sent.",
-                                   f"Check the result with `{run.tool.name} operation get --id {operation_id}` before anything else.")
-                record = fresh
-                if "_token" in record:
-                    record["_token"]["spent"] = True
-                record["state"] = "dispatched"
-                record["dispatched_at"] = utc_now()
+        with run.mutex.hold():
+            # The token is spent and the targets locked in one step, so two confirms of one
+            # token cannot both dispatch (DCLI-055, DCLI-060, DSEC-033).
+            fresh = run.records.load(operation_id)
+            if fresh is None:
+                raise DriverError("E_IO", f"The record of {operation_id} cannot be read; nothing was sent.")
+            if fresh.get("_token", {}).get("spent") or fresh.get("state") != "planned":
+                raise conflict("token_used", "The confirm token has already been used; nothing was sent.",
+                               f"Check the result with `{run.tool.name} operation get --id {operation_id}` before anything else.")
+            if not spec.halt:  # a halt command is never blocked by the lock of the work it stops (DCLI-060)
+                run.locks.acquire_held(operation_id, keys)
+            record = fresh
+            if "_token" in record:
+                record["_token"]["spent"] = True
+            record.update(state="dispatched", dispatched_at=utc_now(), _keys=sorted(keys))
+            try:
                 run.records.save(record)
-        except DriverError:
-            run.locks.release(operation_id)
-            raise
+            except DriverError:
+                run.locks._remove(operation_id)
+                raise
+        run.dispatching = operation_id
         if spec.batch:
             return self.run_batch(spec, record, targets, changes)
         outcome = self.one(spec, record, targets[0] if targets else None, changes, None)
@@ -664,7 +712,10 @@ class Engine:
         lasting = change == "applied" or delivery == "delivered" or persistence == "saved"
         verification = Verification("not_applicable")
         if execution == "completed" and (lasting or change == "partial" or persistence == "partial"):
-            verification = spec.verify(operation_id, facts, changes, child)
+            try:
+                verification = spec.verify(operation_id, facts, changes, child)
+            except Exception as exc:  # noqa: BLE001 - after dispatch, a failure to verify is not a known outcome
+                verification = Verification("incomplete", notes=[f"The read-back could not be done: {type(exc).__name__}: {exc}"])
         receipt["outcome"] = _outcome(execution, change, delivery, persistence, verification.status)
         receipt.update(observed=self.mask_observed(spec, verification.observed), mismatched=verification.mismatched)
         if verification.notes:
@@ -738,6 +789,7 @@ class Engine:
                 record.update(state="failed", receipt=receipt, finished_at=utc_now())
             run.records.save(record)
             run.locks.release(operation_id)
+            run.dispatching = None
             raise error
         record["receipt"] = receipt
         if out["job"]:
@@ -745,7 +797,8 @@ class Engine:
             record["_job"] = {"id": job["id"], "state": job.get("state", "running"), "started_at": utc_now(),
                               "cancel_requested": False}
             run.records.save(record)
-            run.locks.hold_as(operation_id, "job")
+            run.locks.hold_as(operation_id, "job", record["_keys"])
+            run.dispatching = None
             result = spec.result(out["facts"], Verification("not_applicable"))
             result = dict(result) if isinstance(result, dict) else {"value": result}
             result["job"] = {"id": job["id"], "state": job.get("state", "running"),
@@ -754,13 +807,14 @@ class Engine:
                           self._receipt_untrusted(".receipt") + spec.untrusted_result())
         cause = error.code if error is not None else None
         ok, code = self.derive(receipt, cause)
-        record["state"] = _record_state(receipt)
-        record["finished_at"] = utc_now()
+        record["state"] = record_state(receipt, code)
+        record.update(finished_at=utc_now(), _finished=time.time_ns())
         run.records.save(record)
-        if receipt["outcome"]["execution"] == "unknown" or code == "E_OUTCOME_UNKNOWN":
-            run.locks.hold_as(operation_id, "unknown")
+        if record["state"] == "unknown":
+            run.locks.hold_as(operation_id, "unknown", record["_keys"])
         else:
             run.locks.release(operation_id)
+        run.dispatching = None
         if ok:
             result = spec.result(out["facts"], Verification(receipt["outcome"]["verification"], receipt["observed"]))
             if isinstance(result, dict) and (spec.where.device or {}).get("simulated"):
@@ -786,7 +840,7 @@ class Engine:
             )
         if code == "E_OUTCOME_UNKNOWN":
             return DriverError(
-                "E_OUTCOME_UNKNOWN", "The change was sent but no reply came; it may or may not have taken effect. The target stays locked.",
+                "E_OUTCOME_UNKNOWN", "The change was sent, but whether it took effect is not known. The target stays locked.",
                 dispatch_state="unknown", lookup=lookup, receipt=receipt,
                 next_action=f"Run `{lookup}` before anything else; never send the write again.", untrusted=untrusted,
             )
@@ -836,7 +890,7 @@ class Engine:
 
     @staticmethod
     def _receipt_untrusted(prefix: str) -> list[str]:
-        return [f"{prefix}.target.label", f"{prefix}.notes"]
+        return [f"{prefix}.target.label", f"{prefix}.notes", f"{prefix}.observed"]
 
     # ------------------------------------------------------------------ batches
 
@@ -872,10 +926,11 @@ class Engine:
                                  "summary": {"total": len(child_changes), "by_origin": {"tool": len(child_changes)} if child_changes else {},
                                              "by_kind": {target["kind"]: len(child_changes)} if child_changes else {}}},
                      "_call": record.get("_call"), "_request": spec.stored_request(index),
-                     "_tolerances": dict(spec.command.tolerances)}
+                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns()}
             child["preview"].pop("changes_truncated", None)
             run.records.save(child)
             child_keys = _keys([target], child_changes)
+            child["_keys"] = sorted(child_keys)
             out = self.one(spec, child, target, child_changes, index)
             receipt = out["receipt"]
             self._decorate(spec, receipt)
@@ -892,8 +947,9 @@ class Engine:
                 unfinished.append(index)
             else:
                 ok, code = self.derive(receipt, error.code if error else None)
-                child.update(state=_record_state(receipt), finished_at=utc_now())
-                if code == "E_OUTCOME_UNKNOWN":
+                child.update(state=record_state(receipt, code), finished_at=utc_now(), _finished=time.time_ns())
+                if child["state"] == "unknown":
+                    code = "E_OUTCOME_UNKNOWN"
                     unknown_children.append((child_id, child_keys))
             run.records.save(child)
             children.append(child_id)
@@ -915,9 +971,8 @@ class Engine:
         record["finished_at"] = utc_now()
         record["state"] = "unknown" if summary["unknown"] else ("completed" if summary["succeeded"] else "failed")
         run.records.save(record)
-        run.locks.release(batch_id)
-        for child_id, keys in unknown_children:
-            run.locks.hold_as(child_id, "unknown", keys)
+        run.locks.replace(batch_id, unknown_children)
+        run.dispatching = None
         batch = {"operation_id": batch_id, "items": items, "summary": summary}
         if summary["succeeded"] == summary["total"]:
             return Result(batch)
@@ -975,11 +1030,19 @@ def _outcome(execution: str, change: str, delivery: str = "not_applicable", pers
             "verification": verification}
 
 
-def _record_state(receipt: dict[str, Any]) -> str:
-    execution = receipt["outcome"]["execution"]
-    if execution in ("unknown", "running"):
+def record_state(receipt: dict[str, Any], code: str | None) -> str:
+    """The record state follows the derived code: an outcome-unknown write stays ``unknown``
+    until ``operation resolve`` settles it (DCLI-063)."""
+    if code == "E_OUTCOME_UNKNOWN":
         return "unknown"
-    return "completed" if execution == "completed" else "failed"
+    return "completed" if receipt["outcome"]["execution"] == "completed" else "failed"
+
+
+def _secret_digests(values: dict[str, str], salt: str) -> dict[str, Any]:
+    """Secrets are bound to a token by a salted, slow hash, never stored in clear (DSEC-040)."""
+    digests = {k: hashlib.pbkdf2_hmac("sha256", v.encode("utf-8"), bytes.fromhex(salt), 100_000).hex()
+               for k, v in sorted(values.items())} if salt else {}
+    return {"salt": salt, "digests": digests}
 
 
 def _differs(old: dict[str, Any], new: dict[str, Any], command: Command) -> str | None:
@@ -1011,7 +1074,3 @@ def _flag_for(key: str, command: Command) -> str:
 
 def conflict(name: str, message: str, next_action: str, **extra: Any) -> DriverError:
     return DriverError("E_CONFLICT", message, conflict=name, next_action=next_action, **extra)
-
-
-def record_view(record: dict[str, Any]) -> dict[str, Any]:
-    return public(record)
