@@ -87,6 +87,22 @@ class Tool:
         self.parser = Parser(self.contract, self.commands, self.name)
         self.envelopes = Envelopes(self.contract)
 
+    def _hang(self, run: Run, cap: str, deadline_ms: int, out: TextIO, fmt: str, pretty: bool, started: float) -> None:
+        """The watchdog of an in-process adapter call: report what is known, then end the
+        process, because the call on the main thread cannot be interrupted (DCLI-278)."""
+        error = _hang_error(run, cap, deadline_ms)
+        env_out = self.envelopes.failure(error, run.notices, int((time.monotonic() - started) * 1000))
+        text = (render_text(env_out) if fmt == "text" else dumps(env_out, pretty)) + "\n"
+        try:
+            if hasattr(out, "buffer"):
+                out.buffer.write(text.encode("utf-8"))
+                out.buffer.flush()
+            else:
+                out.write(text)
+                out.flush()
+        finally:
+            os._exit(self.envelopes.exit_code(env_out))
+
     def _add(self, command: Command) -> None:
         if command.path in self.commands:
             raise RegistrationError(f"command {command.path!r} is registered twice")
@@ -124,6 +140,7 @@ class Tool:
                 call = parsed
                 fmt, pretty = call.format, call.pretty
                 run = Run(self, call, env)
+                run.on_hang = lambda cap, ms, r=run: self._hang(r, cap, ms, out, fmt, pretty, started)
                 result = call.command.handler(run)
                 if not call.command.writes:
                     result = _fields(result, call)
@@ -166,20 +183,31 @@ class Tool:
         return self.envelopes.exit_code(env_out)
 
 
+def _hang_error(run: Run, cap: str, deadline_ms: int) -> DriverError:
+    cause = DriverError("E_TIMEOUT", f"the adapter did not finish {cap} within {deadline_ms} ms")
+    if run.dispatching:
+        return _after_dispatch(run, cause)
+    return DriverError("E_BUSY", f"The application did not answer {cap} within {deadline_ms} ms; nothing was changed.",
+                       retry_after_ms=2000)
+
+
 def _after_dispatch(run: Run, cause: DriverError) -> DriverError:
     """A failure while a change may be in flight is an unknown outcome: the record says so
     and the target stays locked until ``operation resolve`` (DCLI-063)."""
     operation_id = run.dispatching
     assert operation_id is not None
+    batch = False
     try:
         record = run.records.load(operation_id)
-        if record is not None:
-            record["state"] = "unknown"
-            run.records.save(record)
-            run.locks.hold_as(operation_id, "unknown", record.get("_keys", []))
+        batch = bool(record and record.get("_batch"))
+        with run.mutex.hold():
+            run.locks.abandon(operation_id, (record or {}).get("_keys", []))
     except Exception:  # noqa: BLE001 - the error below still tells the Agent to look the outcome up
         pass
-    lookup = run.cmd("operation resolve", [("--id", operation_id)])
+    if batch:
+        lookup = run.cmd("operation list", [("--state", "unknown"), ("--batch", operation_id)])
+    else:
+        lookup = run.cmd("operation resolve", [("--id", operation_id)])
     return DriverError("E_OUTCOME_UNKNOWN", f"The call stopped after the change was sent ({cause.message}); whether it took effect is not known.",
                        dispatch_state="unknown", lookup=lookup,
                        next_action=f"Run `{lookup}` before anything else; never send the write again.")

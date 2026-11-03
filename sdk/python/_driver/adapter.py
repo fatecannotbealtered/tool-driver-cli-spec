@@ -33,9 +33,11 @@ WINDOWS = sys.platform == "win32"
 class AdapterError(Exception):
     """An adapter's report that the application refused or failed (DCLI-279)."""
 
-    def __init__(self, code: str, message: str, dispatch_state: str = "not_started", **extra: Any) -> None:
+    def __init__(self, code: str, message: str, dispatch_state: str | None = None, **extra: Any) -> None:
+        """``dispatch_state`` says whether the change began. A write capability that leaves it
+        out reports an unknown outcome; say ``not_started`` when nothing was sent (DCLI-275)."""
         super().__init__(message)
-        self.data = {"code": code, "dispatch_state": dispatch_state, **extra}
+        self.data = {"code": code, **({"dispatch_state": dispatch_state} if dispatch_state else {}), **extra}
 
 
 class Adapter:
@@ -94,6 +96,9 @@ class Backend:
         self.protocol_version = protocol_version
         self._main: Connection | None = None
         self._hosts: dict[str, Connection] = {}
+        # Called by the watchdog when an in-process call passes its deadline; it reports the
+        # call and ends the process, which cannot wait for the application any longer.
+        self.on_hang: Any = None
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ availability
@@ -127,13 +132,26 @@ class Backend:
             return self._rpc(conn, cap, request, deadline_ms, host=session)
         if self.fake:
             return self._rpc(self._fake_main(deadline_ms), cap, request, deadline_ms, host=None)
+        return self._in_process(cap, request, deadline_ms)
+
+    def _in_process(self, cap: str, request: dict[str, Any], deadline_ms: int) -> Any:
+        """Run an adapter method on the main thread, where COM and most application APIs
+        expect it. A watchdog ends the call when the deadline passes: a call that hangs is a
+        call with no reply, as over the host protocol (DCLI-278)."""
         method = getattr(self.adapter, cap)
+        timer = threading.Timer(deadline_ms / 1000, self.on_hang, args=(cap, deadline_ms)) if self.on_hang else None
+        if timer is not None:
+            timer.daemon = True
+            timer.start()
         try:
             return method(dict(request))
         except AdapterError as exc:
             raise CapabilityError(str(exc), exc.data) from None
         except Exception as exc:  # noqa: BLE001 - an adapter fault must not look like a known outcome
             raise Unanswered(f"the adapter failed in {cap}: {type(exc).__name__}: {exc}", crashed=True) from None
+        finally:
+            if timer is not None:
+                timer.cancel()
 
     def _rpc(self, conn: Connection, cap: str, request: dict[str, Any], deadline_ms: int, host: str | None) -> Any:
         try:

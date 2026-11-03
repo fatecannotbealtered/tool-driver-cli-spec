@@ -69,6 +69,7 @@ class Run:
         self.notices: list[dict[str, str]] = []
         self.resolved: dict[str, str] = {}  # target flags filled in by the runtime, for generated commands
         self.dispatching: str | None = None  # the operation whose change may be in flight
+        self.on_hang: Any = None  # set by the tool: reports a hung in-process adapter call and exits
         self._sessions: dict[str, Any] | None = None
         self._devices: list[dict[str, Any]] | None = None
 
@@ -77,11 +78,13 @@ class Run:
     @cached_property
     def backend(self) -> Backend:
         store = AdapterStore(self.state)
-        return Backend(
+        backend = Backend(
             self.tool.adapter_class(store), self.contract.capabilities, host_component=self.tool.host_component,
             fake_address=self.fake, hosts_dir=str(self.state.path / "hosts"), cli_version=self.tool.version,
             protocol_version=self.contract["host_protocol"]["version"],
         )
+        backend.on_hang = self.on_hang
+        return backend
 
     @cached_property
     def scope(self) -> Scope:
@@ -422,7 +425,7 @@ class Run:
         """The inputs of a domain command, converted to standard units (DCLI-082, adapter.schema.json)."""
         call = self.call
         assert call is not None
-        flags = {f.name: f for f in command.flags if f.name not in ("--session", "--doc", "--device")}
+        flags = {f.name: f for f in command.flags if f.name not in ("--session", "--doc", "--device") and not f.runtime}
         given = [n for n in call.given if n in flags]
         adapter: dict[str, Any] = {}
         items = None

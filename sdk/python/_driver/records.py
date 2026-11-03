@@ -231,54 +231,67 @@ class Locks:
         return out
 
     def _stale(self, entry: dict[str, Any]) -> bool:
-        """A lock held by a process that is gone (its PID ended or now names a later process)."""
-        if entry.get("holder") != "process":
-            return False
-        pid = int(entry.get("pid", 0))
-        return not pid_alive(pid) or (entry.get("started") is not None and process_start(pid) != entry["started"])
+        """A lock whose holder is gone: a process that ended (or whose PID now names a later
+        process), or a job or unknown outcome whose record has since been settled."""
+        holder = entry.get("holder")
+        if holder == "process":
+            pid = int(entry.get("pid", 0))
+            return not pid_alive(pid) or (entry.get("started") is not None and process_start(pid) != entry["started"])
+        if holder in ("job", "unknown"):
+            record = self.records.load(entry["operation_id"])
+            return record is not None and record.get("state") in ("completed", "failed")
+        return False
 
-    def _settle(self, entry: dict[str, Any]) -> bool:
-        """Under the mutex: drop the lock of a process that died before dispatch. A death
-        after dispatch leaves the write outcome unknown and the lock in place (DCLI-063)."""
-        record = self.records.load(entry["operation_id"])
-        if record is not None and record.get("state") == "dispatched":
-            record["state"] = "unknown"
-            self.records.save(record)
-            write_json(self._dir() / f"{entry['operation_id']}.json", {**entry, "holder": "unknown", "pid": 0})
-            return False
-        self._remove(entry["operation_id"])
-        return True
+    def abandon(self, operation_id: str, keys: list[str]) -> None:
+        """With the mutex held: settle the lock of a write whose process is gone. Before
+        dispatch nothing was sent, so the lock goes. After dispatch the outcome is unknown:
+        the record says so and the targets stay locked until ``operation resolve`` (DCLI-063);
+        for a batch, that holds for each object in flight, and the rest is released."""
+        record = self.records.load(operation_id)
+        if record is not None and record.get("_batch"):
+            held = []
+            for child in self.records.all():
+                if child.get("batch") == operation_id and child.get("state") == "dispatched":
+                    child["state"] = "unknown"
+                    self.records.save(child)
+                    held.append((child["operation_id"], child.get("_keys", [])))
+            if record.get("state") == "dispatched":
+                record["state"] = "unknown" if held else "failed"
+                self.records.save(record)
+            for child, child_keys in held:
+                write_json(self._dir() / f"{child}.json", _entry(child, child_keys, "unknown"))
+            self._remove(operation_id)
+        elif record is not None and record.get("state") in ("dispatched", "unknown"):
+            if record["state"] == "dispatched":
+                record["state"] = "unknown"
+                self.records.save(record)
+            write_json(self._dir() / f"{operation_id}.json", _entry(operation_id, record.get("_keys", keys), "unknown"))
+        else:
+            self._remove(operation_id)
 
-    def holders(self, keys: list[str], exclude: str | None = None, settle: bool = False) -> list[dict[str, Any]]:
-        """The lock entries that conflict with any of ``keys``. Only a caller that holds the
-        mutex may ``settle`` stale entries; others just skip a stale lock taken before dispatch."""
+    def holders(self, keys: list[str], exclude: str | None = None, locked: bool = False) -> list[dict[str, Any]]:
+        """The lock entries that conflict with any of ``keys``, after settling stale ones
+        under the mutex (``locked`` when the caller holds it already)."""
+        if not locked:
+            with self.mutex.hold():
+                return self.holders(keys, exclude, locked=True)
+        for entry in self.entries():
+            if entry["holder"] != "unreadable" and entry["operation_id"] != exclude and self._stale(entry):
+                self.abandon(entry["operation_id"], entry.get("keys", []))
         found = []
         for entry in self.entries():
             if entry["operation_id"] == exclude:
                 continue
-            if entry["holder"] == "unreadable":
-                found.append(entry)
-                continue
-            if self._stale(entry):
-                if settle:
-                    if self._settle(entry):
-                        continue
-                else:
-                    record = self.records.load(entry["operation_id"])
-                    if record is None or record.get("state") == "planned":
-                        continue
-            if any(conflict(a, b) for a in keys for b in entry.get("keys", [])):
+            if entry["holder"] == "unreadable" or any(conflict(a, b) for a in keys for b in entry.get("keys", [])):
                 found.append(entry)
         return found
 
     def acquire_held(self, operation_id: str, keys: list[str]) -> None:
         """With the mutex held: lock ``keys`` for one operation, or fail with ``target_locked``."""
-        busy = self.holders(keys, exclude=operation_id, settle=True)
+        busy = self.holders(keys, exclude=operation_id, locked=True)
         if busy:
             raise conflict_locked(busy[0], self.tool)
-        entry = {"operation_id": operation_id, "keys": sorted(keys), "holder": "process", "pid": os.getpid(),
-                 "started": process_start(os.getpid()), "locked_at": utc_now()}
-        write_json(self._dir() / f"{operation_id}.json", entry)
+        write_json(self._dir() / f"{operation_id}.json", _entry(operation_id, keys, "process"))
 
     def acquire(self, operation_id: str, keys: list[str]) -> None:
         with self.mutex.hold():
@@ -287,15 +300,13 @@ class Locks:
     def hold_as(self, operation_id: str, holder: str, keys: list[str]) -> None:
         """Keep a lock after the process ends: for a long job, or an outcome-unknown write."""
         with self.mutex.hold():
-            write_json(self._dir() / f"{operation_id}.json",
-                       {"operation_id": operation_id, "keys": sorted(keys), "holder": holder, "pid": 0, "locked_at": utc_now()})
+            write_json(self._dir() / f"{operation_id}.json", _entry(operation_id, keys, holder))
 
     def replace(self, operation_id: str, held: list[tuple[str, list[str]]]) -> None:
         """Release one lock and keep others in its place, with no gap between (DCLI-064)."""
         with self.mutex.hold():
             for child, keys in held:
-                write_json(self._dir() / f"{child}.json",
-                           {"operation_id": child, "keys": sorted(keys), "holder": "unknown", "pid": 0, "locked_at": utc_now()})
+                write_json(self._dir() / f"{child}.json", _entry(child, keys, "unknown"))
             self._remove(operation_id)
 
     def release(self, operation_id: str) -> None:
@@ -303,13 +314,27 @@ class Locks:
             self._remove(operation_id)
 
     def _remove(self, operation_id: str) -> None:
+        """Delete a lock file; on Windows a reader can hold it open for a moment, so retry."""
         path = self.state.path / "locks" / f"{operation_id}.json"
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            raise DriverError("E_IO", f"Cannot release the lock of {operation_id}: {exc.strerror}.") from None
+        for attempt in range(50):
+            try:
+                path.unlink()
+                return
+            except FileNotFoundError:
+                return
+            except PermissionError as exc:
+                if attempt == 49:
+                    raise DriverError("E_IO", f"Cannot release the lock of {operation_id}: {exc.strerror}.") from None
+                time.sleep(0.02)
+            except OSError as exc:
+                raise DriverError("E_IO", f"Cannot release the lock of {operation_id}: {exc.strerror}.") from None
+
+
+def _entry(operation_id: str, keys: list[str], holder: str) -> dict[str, Any]:
+    entry = {"operation_id": operation_id, "keys": sorted(keys), "holder": holder, "pid": 0, "locked_at": utc_now()}
+    if holder == "process":
+        entry.update(pid=os.getpid(), started=process_start(os.getpid()))
+    return entry
 
 
 def conflict_locked(entry: dict[str, Any], tool: str) -> DriverError:

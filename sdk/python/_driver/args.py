@@ -56,9 +56,9 @@ def quote(arg: str) -> str:
     (DCLI-011). Single quotes keep ``$(...)`` and backticks literal in bash and PowerShell."""
     if arg and re.fullmatch(r"[A-Za-z0-9_./:@%+=,#~^-]+", arg) and not arg.startswith("-"):
         return arg
-    if "'" not in arg:
-        return "'" + arg + "'"
-    return '"' + re.sub(r'([\\"$`])', r"\\\1", arg) + '"'
+    # A quote inside is closed, given in double quotes, and reopened: '"'"' keeps every part
+    # literal in bash and in PowerShell, so a generated command never runs embedded code.
+    return "'" + arg.replace("'", "'\"'\"'") + "'"
 
 
 def command_line(tool: str, path: str, args: list[tuple[str, Any]]) -> str:

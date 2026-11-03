@@ -258,6 +258,7 @@
       "command",
       "inputs",
       "target",
+      "changes",
       "session_id",
       "session_generation",
       "document_revision",
@@ -287,7 +288,7 @@
     {"step": 5, "check": "session_unchanged", "conflicts": ["session_changed"], "error": "E_CONFLICT"},
     {"step": 6, "check": "document_unchanged", "conflicts": ["document_changed"], "error": "E_CONFLICT"},
     {"step": 7, "check": "plugin_unchanged", "conflicts": ["plugin_changed"], "error": "E_CONFLICT"},
-    {"step": 8, "check": "preview_still_applies", "conflicts": ["blocked"], "error": "E_CONFLICT"}
+    {"step": 8, "check": "preview_unchanged_and_applies", "conflicts": ["preview_changed", "blocked"], "error": "E_CONFLICT"}
   ],
   "direct_review_steps": [3, 4, 5, 6, 7, 8],
   "conflict_values": [
@@ -300,6 +301,7 @@
     "session_changed",
     "document_changed",
     "plugin_changed",
+    "preview_changed",
     "blocked",
     "file_changed_on_disk",
     "file_missing",

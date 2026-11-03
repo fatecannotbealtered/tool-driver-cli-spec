@@ -261,7 +261,7 @@ class Case:
     def fill(self, args: list[str], file_mode: bool = False) -> list[str]:
         """Fill the sample placeholders with the fake host's values (DVER-002)."""
         values = {"{session}": "fake-1", "{doc}": self.doc_path("file-1") if file_mode else "doc-1",
-                  "{device}": "dev-1", "{dir}": str(self.dir)}
+                  "{device}": "dev-1", "{dir}": str(self.dir), "{file}": self.doc_path("file-1")}
         out = []
         for arg in args:
             for key, value in values.items():
@@ -283,6 +283,14 @@ class Case:
                            "jobs": st["jobs"], "plugin": st["plugin"]}, sort_keys=True, default=str) + repr(files) + repr(knowledge)
 
     # Running the tool ------------------------------------------------------------------
+
+    def run_line(self, line: str) -> Outcome:
+        """Run a command the tool generated, such as a resume or lookup, exactly as given."""
+        import shlex
+
+        words = shlex.split(line, posix=True)
+        check(words and words[0] == self.subject.name, f"the generated command {line!r} does not start with the tool name")
+        return self.run(*words[1:])
 
     def run(self, *args: str, env: dict[str, str] | None = None, timeout: float = 90) -> Outcome:
         argv = self.subject.argv + list(args)

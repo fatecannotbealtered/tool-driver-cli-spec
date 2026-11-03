@@ -243,7 +243,7 @@ class Parsing(unittest.TestCase):
         self.assertEqual(quote("-5mm"), "'-5mm'")
         self.assertEqual(quote("two words"), "'two words'")
         self.assertEqual(quote("$(touch x)"), "'$(touch x)'")
-        self.assertEqual(quote("it's $x"), '"it' + "'" + 's \\$x"')
+        self.assertEqual(quote("it's $x"), "'it'" + '"' + "'" + '"' + "'s $x'")
 
 
 class Envelope(unittest.TestCase):

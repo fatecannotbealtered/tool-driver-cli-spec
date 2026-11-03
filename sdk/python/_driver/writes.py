@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 from .adapter import BadProtocol, CapabilityError, Lost, Unanswered
+from .args import quote
 from .errors import DriverError
 from .output import Result
 from .records import conflict_locked, expired, expiry, utc_now
@@ -55,6 +56,8 @@ class WriteSpec:
         self.batch = False
         self.items: list[dict[str, Any]] | None = None
         self.secrets: dict[str, str] = {}  # secret inputs, never stored in clear
+        self.pending_changes: list[dict[str, Any]] | None = None  # the changes of the current preview
+        self.strict_facts = False  # apply must report change, delivery and persistence
 
     # The parts a write fills in --------------------------------------------------------
 
@@ -138,6 +141,7 @@ class DomainWrite(WriteSpec):
     def __init__(self, run: Run, command: Command) -> None:
         super().__init__(run, command)
         self.inputs: Inputs | None = None
+        self.strict_facts = True
 
     def prepare(self) -> None:
         run = self.run
@@ -308,7 +312,7 @@ class Engine:
         pv = spec.preview()
         targets = self._targets(spec, pv)
         changes = self._changes(pv)
-        keys = _keys(targets, changes)
+        keys = _keys(targets, changes) or self.named_keys(spec)
         tier = self.tier(spec, targets, changes)
         dangerous = tier == "dangerous"
         if command.needs_scope:
@@ -325,6 +329,7 @@ class Engine:
             raise DriverError("E_CONFLICT", f"The change cannot be applied: {'; '.join(pv.get('blocked_by', []))}.",
                               conflict="blocked", untrusted=["message"],
                               next_action="Resolve what blocks it, then run the command again.")
+        spec.pending_changes = changes
         binds = self.binds(spec, keys)
         if token_record is not None:
             record = self.review_token(spec, token_record, binds, keys, pv)
@@ -398,6 +403,14 @@ class Engine:
 
     # ------------------------------------------------------------------ preview
 
+    def named_keys(self, spec: WriteSpec) -> list[str]:
+        """The keys a call names itself, for a preview that lists no target (DSEC-014, DCLI-060)."""
+        if spec.where.document is not None:
+            return [self.run.doc_key(spec.where.document)]
+        if spec.where.device is not None:
+            return [f"device:{spec.where.device['id']}"]
+        return []
+
     @staticmethod
     def _targets(spec: WriteSpec, pv: dict[str, Any]) -> list[dict[str, Any]]:
         out = []
@@ -408,6 +421,8 @@ class Engine:
             out.append(entry)
         if spec.batch and len(out) != len(spec.selected):
             raise DriverError("E_PROTOCOL", "The adapter's preview of a batch must list one target per selected object, in order.")
+        if spec.selected and len(out) < len(spec.selected):
+            raise DriverError("E_PROTOCOL", "The adapter's preview lists no target for the selected object; nothing was sent.")
         return out
 
     @staticmethod
@@ -421,6 +436,7 @@ class Engine:
 
     def build_preview(self, operation_id: str, spec: WriteSpec, pv: dict[str, Any], targets: list[dict[str, Any]],
                       changes: list[dict[str, Any]], tier: str) -> dict[str, Any]:
+        self._all_changes = changes
         command = spec.command
         limit = self.contract["preview"]["max_changes"]
         by_origin: dict[str, int] = {}
@@ -522,6 +538,8 @@ class Engine:
         if request is not None:
             record["_request"] = request
             record["_tolerances"] = dict(spec.command.tolerances)
+        record["_changes"] = self.mask(spec, [copy.deepcopy(c) for c in self._all_changes
+                                              if c.get("origin", "tool") == "tool"])
         return record
 
     def binds(self, spec: WriteSpec, keys: list[str]) -> dict[str, Any]:
@@ -535,6 +553,7 @@ class Engine:
             "plugin_version": session.get("plugin_loaded") if session else None,
             "scope_id": scope.scope_id or None, "scope_hash": scope.hash,
             "secrets": _secret_digests(spec.secrets, secrets.token_hex(16)),
+            "changes": changes_digest(spec.pending_changes),
         }
 
     # ------------------------------------------------------------------ confirm-time review
@@ -612,6 +631,9 @@ class Engine:
         if old["plugin_version"] is not None and session is not None and session.get("plugin_loaded") != old["plugin_version"]:
             raise conflict("plugin_changed", "The host component changed after the preview; nothing was sent.",
                            "Run the command again without --confirm to preview it again.")
+        if old.get("changes") is not None and changes_digest(self._changes(pv)) != old["changes"]:
+            raise conflict("preview_changed", "The change would now differ from the previewed one; nothing was sent.",
+                           "Run the command again without --confirm to see the new preview.")
         if operation_id is not None and sorted(keys) != old["target"]:
             raise conflict("token_mismatch", "The call now reaches other targets than the previewed one; nothing was sent.",
                            "Run the command again without --confirm to preview it again.")
@@ -639,7 +661,7 @@ class Engine:
             record = fresh
             if "_token" in record:
                 record["_token"]["spent"] = True
-            record.update(state="dispatched", dispatched_at=utc_now(), _keys=sorted(keys))
+            record.update(state="dispatched", dispatched_at=utc_now(), _keys=sorted(keys), _batch=spec.batch)
             try:
                 run.records.save(record)
             except DriverError:
@@ -695,6 +717,7 @@ class Engine:
         if not isinstance(facts, dict) or facts.get("dispatch_state") not in ("not_started", "dispatched", "unknown"):
             receipt["outcome"] = _outcome("unknown", "unknown", "unknown", "unknown", "not_run")
             receipt.update(observed={}, mismatched=[], notes=["The adapter's reply has no valid dispatch_state."])
+            out["stop"] = True
             return out
         out["facts"] = facts
         if facts.get("job"):
@@ -705,13 +728,17 @@ class Engine:
             receipt.update(observed={}, mismatched=[], notes=[f"The work continues as long job {job['id']}."])
             return out
         ds = facts["dispatch_state"]
-        execution = "unknown" if ds == "unknown" else "completed"
-        change = facts.get("change", "not_applicable")
-        delivery = facts.get("delivery", "not_applicable")
-        persistence = facts.get("persistence", "not_applicable")
+        execution = {"unknown": "unknown", "not_started": "not_started"}.get(ds, "completed")
+        dims = self.contract["receipt"]["dimensions"]
+        # A dimension named wrongly is not known (DCLI-062). Only apply must report all three;
+        # the other write capabilities report what applies to them (adapter.schema.json).
+        missing = "unknown" if spec.strict_facts else "not_applicable"
+        change, delivery, persistence = (missing if d not in facts else facts[d] if facts[d] in dims[d] else "unknown"
+                                         for d in ("change", "delivery", "persistence"))
         lasting = change == "applied" or delivery == "delivered" or persistence == "saved"
         verification = Verification("not_applicable")
-        if execution == "completed" and (lasting or change == "partial" or persistence == "partial"):
+        expects = any(c.get("origin", "tool") == "tool" for c in changes)
+        if execution == "completed" and (lasting or change == "partial" or persistence == "partial" or expects):
             try:
                 verification = spec.verify(operation_id, facts, changes, child)
             except Exception as exc:  # noqa: BLE001 - after dispatch, a failure to verify is not a known outcome
@@ -787,8 +814,9 @@ class Engine:
                 record["_token"]["spent"] = False
             else:
                 record.update(state="failed", receipt=receipt, finished_at=utc_now())
-            run.records.save(record)
-            run.locks.release(operation_id)
+            with run.mutex.hold():  # the token comes back and the lock goes in one step
+                run.records.save(record)
+                run.locks._remove(operation_id)
             run.dispatching = None
             raise error
         record["receipt"] = receipt
@@ -797,9 +825,9 @@ class Engine:
             record["_job"] = {"id": job["id"], "state": job.get("state", "running"), "started_at": utc_now(),
                               "cancel_requested": False}
             run.records.save(record)
-            run.locks.hold_as(operation_id, "job", record["_keys"])
             run.dispatching = None
-            result = spec.result(out["facts"], Verification("not_applicable"))
+            run.locks.hold_as(operation_id, "job", record["_keys"])
+            result = self.safe_result(spec, out["facts"], Verification("not_applicable"), receipt)
             result = dict(result) if isinstance(result, dict) else {"value": result}
             result["job"] = {"id": job["id"], "state": job.get("state", "running"),
                              "poll": run.cmd("job get", [("--job", job["id"]), ("--wait", "60s")])}
@@ -809,19 +837,30 @@ class Engine:
         ok, code = self.derive(receipt, cause)
         record["state"] = record_state(receipt, code)
         record.update(finished_at=utc_now(), _finished=time.time_ns())
+        result = self.safe_result(spec, out["facts"], Verification(receipt["outcome"]["verification"], receipt["observed"]),
+                                  receipt) if ok else None
         run.records.save(record)
+        run.dispatching = None  # the outcome is recorded; nothing below may turn it into an unknown one
         if record["state"] == "unknown":
             run.locks.hold_as(operation_id, "unknown", record["_keys"])
         else:
             run.locks.release(operation_id)
-        run.dispatching = None
         if ok:
-            result = spec.result(out["facts"], Verification(receipt["outcome"]["verification"], receipt["observed"]))
             if isinstance(result, dict) and (spec.where.device or {}).get("simulated"):
                 result = {**result, "simulated": True}  # results from a simulated device say so (DSEC-062)
             return Result({"operation_id": operation_id, "receipt": receipt, "result": result},
                           self._receipt_untrusted(".receipt") + spec.untrusted_result())
         raise self.write_error(spec, record, receipt, code or "E_NATIVE_FAILURE", error, out.get("human"))
+
+    @staticmethod
+    def safe_result(spec: WriteSpec, facts: dict[str, Any], verification: Verification, receipt: dict[str, Any]) -> Any:
+        """The command's own result. A failure to build it is noted in the receipt; it never
+        replaces the outcome of a write that has happened."""
+        try:
+            return spec.result(facts, verification)
+        except Exception as exc:  # noqa: BLE001
+            receipt.setdefault("notes", []).append(f"The result could not be read after the write: {exc}")
+            return {}
 
     def write_error(self, spec: WriteSpec, record: dict[str, Any], receipt: dict[str, Any], code: str,
                     cause: DriverError | None, human: DriverError | None) -> DriverError:
@@ -911,6 +950,7 @@ class Engine:
         unknown_children: list[tuple[str, list[str]]] = []
         unfinished: list[int] = []
         stopped = False
+        human: DriverError | None = None
         for index, target in enumerate(targets):
             if stopped:
                 items.append({"target": target["key"], "ok": False, "skipped": True})
@@ -926,11 +966,12 @@ class Engine:
                                  "summary": {"total": len(child_changes), "by_origin": {"tool": len(child_changes)} if child_changes else {},
                                              "by_kind": {target["kind"]: len(child_changes)} if child_changes else {}}},
                      "_call": record.get("_call"), "_request": spec.stored_request(index),
-                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns()}
+                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns(),
+                     "_changes": self.mask(spec, [copy.deepcopy(c) for c in child_changes if c.get("origin", "tool") == "tool"])}
             child["preview"].pop("changes_truncated", None)
-            run.records.save(child)
             child_keys = _keys([target], child_changes)
-            child["_keys"] = sorted(child_keys)
+            child["_keys"] = sorted(child_keys)  # stored before dispatch, so a crash leaves them locked
+            run.records.save(child)
             out = self.one(spec, child, target, child_changes, index)
             receipt = out["receipt"]
             self._decorate(spec, receipt)
@@ -951,6 +992,8 @@ class Engine:
                 if child["state"] == "unknown":
                     code = "E_OUTCOME_UNKNOWN"
                     unknown_children.append((child_id, child_keys))
+            if out.get("human") is not None and human is None:
+                human = out["human"]
             run.records.save(child)
             children.append(child_id)
             item: dict[str, Any] = {"target": target["key"], "operation_id": child_id, "ok": ok}
@@ -978,9 +1021,17 @@ class Engine:
             return Result(batch)
         lookup = run.cmd("operation list", [("--state", "unknown"), ("--batch", batch_id)])
         if summary["unknown"]:
+            extra_unknown: dict[str, Any] = {}
+            ask = ""
+            if human is not None:
+                # A change opened a dialog: a person must deal with it first (DCLI-066).
+                extra_unknown = {k: human.details.get(k) for k in ("action", "title") if human.details.get(k)}
+                ask = "Ask the person to deal with the dialog in the application first. "
             raise DriverError("E_OUTCOME_UNKNOWN", f"{summary['unknown']} objects of the batch may or may not have changed; they stay locked.",
                               dispatch_state="unknown", lookup=lookup, batch=batch,
-                              next_action=f"Run `{lookup}` and settle each one with operation resolve; never send them again.")
+                              untrusted=["details.title"] if "title" in extra_unknown else [],
+                              next_action=f"{ask}Run `{lookup}` and settle each one with operation resolve; never send them again.",
+                              **extra_unknown)
         outcomes = {i["operation_id"]: (run.records.load(i["operation_id"]) or {}).get("receipt", {}).get("outcome", {})
                     for i in items if i.get("operation_id")}
         took_effect = summary["succeeded"] > 0 or any(
@@ -1009,11 +1060,13 @@ class Engine:
         if spec.items is not None:
             folder = run.state.sub("cache")
             path = folder / f"resume-{secrets.token_hex(6)}.json"
-            data = {k: v for k, v in call.values["--input"].items() if k != "items"}
-            data["items"] = [i for i in call.values["--input"]["items"] if str(i.get("id")) in ids]
+            secret = {f.key for f in spec.command.flags if f.secret} | set(spec.secrets)
+            hide = lambda obj: {k: "<secret>" if k in secret else v for k, v in obj.items()}  # noqa: E731 - DSEC-040
+            data = hide({k: v for k, v in call.values["--input"].items() if k != "items"})
+            data["items"] = [hide(i) for i in call.values["--input"]["items"] if str(i.get("id")) in ids]
             path.write_text(json.dumps(data), encoding="utf-8")
-            return run.again(drop=("--input", "--confirm", "--dry-run")) + f" --input {path}"
-        return run.again(drop=("--ids", "--confirm", "--dry-run")) + " --ids " + ",".join(ids)
+            return run.again(drop=("--input", "--confirm", "--dry-run")) + " --input " + quote(str(path))
+        return run.again(drop=("--ids", "--confirm", "--dry-run")) + " --ids " + quote(",".join(ids))
 
 
 def _keys(targets: list[dict[str, Any]], changes: list[dict[str, Any]]) -> list[str]:
@@ -1036,6 +1089,16 @@ def record_state(receipt: dict[str, Any], code: str | None) -> str:
     if code == "E_OUTCOME_UNKNOWN":
         return "unknown"
     return "completed" if receipt["outcome"]["execution"] == "completed" else "failed"
+
+
+def changes_digest(changes: list[dict[str, Any]] | None) -> str | None:
+    """A digest of the changes a preview showed, before and after, so a token cannot run a
+    change the person did not see (DCLI-055)."""
+    if changes is None:
+        return None
+    rows = sorted(json.dumps([c.get("target"), c.get("field"), c.get("before"), c.get("after"), c.get("origin", "tool")],
+                             sort_keys=True, default=str) for c in changes)
+    return hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()
 
 
 def _secret_digests(values: dict[str, str], salt: str) -> dict[str, Any]:

@@ -197,7 +197,7 @@
 运行时为 Agent 生成的每条命令，无论在 `next_action`、`resume`、`lookup` 还是 `poll` 里，都必须完整：写明它需要的会话、文档和每个 ID（`--session`、`--doc`、`--id`、`--job`），以后原样运行也不会出错。含有空格或以 `-` 开头的参数都必须加引号。嵌有不可信值的生成命令列入 `meta.untrusted`（DCLI-004）。
 
 为什么：出错后 Agent 先要知道有没有发出去，再要知道接下来运行什么；依赖默认实例的命令，以后可能作用到另一个实例上。
-检查：🤖 通用一致性测试 R03 和 R04。
+检查：🤖 通用一致性测试 G01、R03 和 R04。
 
 ### DCLI-012 固定的 details 字段
 
@@ -654,6 +654,7 @@
 | `command` | 命令路径 |
 | `inputs` | 规范化后的全部输入 |
 | `target` | 目标键 |
+| `changes` | 预览列出的修改，每项带修改前后的值 |
 | `session_id` | 会话 ID |
 | `session_generation` | 会话代际（DCLI-203） |
 | `document_revision` | 文档版本（DCLI-210） |
@@ -684,7 +685,7 @@
 | `5` | 会话还在，代际不变 | `session_changed` |
 | `6` | 文档版本和未保存状态不变 | `document_changed` |
 | `7` | 宿主组件版本不变 | `plugin_changed` |
-| `8` | 重新计算预览，仍然可以执行 | `blocked` |
+| `8` | 重新计算预览，修改与原来相同，且仍然可以执行 | `preview_changed`、`blocked` |
 
 直接执行级的命令没有令牌，派发前必须同样做第 3 至 8 项检查，比较的基准是运行时生成预览时记下的状态。对停止命令，第 3 项只要求授权范围覆盖它的目标（DSEC-018），第 4 项不适用（DCLI-060）。
 
@@ -823,7 +824,7 @@
 - 批量操作成功时必须返回 `data` = `{operation_id, items, summary}`。每项是精简的 `{target, operation_id, ok, code}`，被跳过的对象为 `{target, ok: false, skipped: true}`；某一项的完整回执用 `operation get --id <operation_id>` 获取。`summary` 为 `{total, succeeded, failed, unknown, skipped}`。批量没有全部成功时，`error.details.batch` 里放同样的对象。
 - 全部对象成功才算成功。否则：有对象结果未知的，错误码必须为 `E_OUTCOME_UNKNOWN`，`lookup` 为 `operation list --state unknown --batch <operation_id>`；没有结果未知、但有对象已生效的，为 `E_PARTIAL`；都不是时，取第一个失败对象的错误码。
 - `--continue-on-error` 默认必须为 `true`，危险级命令默认必须为 `false`。批量停下后，剩余对象必须报告为已跳过，并计入 `summary.skipped`。
-- 会话变为 `busy`、`unresponsive`、`blocked` 或 `lost`（DCLI-204）时，不论 `--continue-on-error` 怎么设，批量都必须停下，剩余对象记为跳过。只要没有对象结果未知，错误码就是该状态对应的错误码，`details.resume` 给出只覆盖未完成对象的命令。
+- 会话变为 `busy`、`unresponsive`、`blocked` 或 `lost`（DCLI-204）时，不论 `--continue-on-error` 怎么设，批量都必须停下，剩余对象记为跳过。只要没有对象结果未知：已有对象生效时错误码为 `E_PARTIAL`，否则为该状态对应的错误码；`details.resume` 给出只覆盖未完成对象的命令。
 - 工具禁止声称软件没有提供的「要么全成、要么全不成」。
 - 同一类操作经常要对多个对象做时（如移动器件、改属性、删除），工具应该提供批量形式。
 
@@ -1110,7 +1111,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 运行中的实例已经打开了某个文件时，对它的文件模式写入必须被拒绝，返回 `E_CONFLICT`，`conflict` 为 `file_open_in_session`。`reference` 分模式给出确认级别（DCLI-031）。
 
 为什么：模式决定了以哪里的数据为准、保存意味着什么，每次写入因此知道该从哪里读回；同一个文件一边在内存里改、一边在磁盘上改，两边会互相抹掉对方的修改。
-检查：🤖 通用一致性测试 R01 检查 `reference` 里的模式声明。
+检查：🤖 通用一致性测试 R01 检查 `reference` 里的模式声明；驱动一致性测试 D03 检查 `file_open_in_session`。
 
 ### DCLI-202 选定会话
 
@@ -1207,7 +1208,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 对 `readonly: true` 的文档写入，必须被拒绝，返回 `E_VALIDATION`。有未保存的修改（`dirty: true`）本身不拒绝任何操作；关闭或放弃这些修改按 DCLI-212 处理。`doc list` 和 `doc get` 把这些值作为数据报告（DCLI-204）。
 
 为什么：保存绝不能悄悄覆盖别人的修改，也不能悄悄重建已被移走或删除的文件。
-检查：🤖 运行时单元测试。
+检查：🤖 驱动一致性测试 D03；运行时单元测试。
 
 ### DCLI-212 文档命令
 

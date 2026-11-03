@@ -156,7 +156,7 @@ def add_target_flags(tool: Tool, command: Command) -> None:
         extra.append(Flag("--device", "string", "The device ID."))
     command.flags = extra + command.flags
     if command.writes and "--output" not in names:
-        command.flags.append(Flag("--output", "path", "Write the full preview, with every change, to this file."))
+        command.flags.append(Flag("--output", "path", "Write the full preview, with every change, to this file.", runtime=True))
     if "artifact" in command.effects and any(f.output for f in command.flags):
         command.tier_when = [{"when": "target_exists", "tier": "two_step"}]
     tiers = tool.tiers
@@ -308,7 +308,16 @@ def poll_job(run: Run, record: dict[str, Any]) -> dict[str, Any]:
     request: dict[str, Any] = {"job": job["id"]}
     if call_info.get("session"):
         request["session"] = call_info["session"]
-    status = run.capability("job_status", request, READ_DEADLINE_MS)
+    try:
+        status = run.capability("job_status", request, READ_DEADLINE_MS)
+    except DriverError as exc:
+        if exc.code not in ("E_NOT_FOUND", "E_BACKEND_UNAVAILABLE"):
+            raise
+        # The application no longer knows the job, or its instance is gone: the outcome
+        # is unknown and the operation can be resolved (DCLI-063).
+        status = {"state": "unknown", "native_message": exc.message}
+    if status.get("state") not in run.contract["jobs"]["states"]:
+        status = {**status, "state": "unknown"}
     job["state"] = status["state"]
     if status.get("progress"):
         job["progress"] = status["progress"]
@@ -327,9 +336,14 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
     job, state = record["_job"], status["state"]
     execution = {"completed": "completed", "partial": "completed", "failed": "failed", "cancelled": "interrupted",
                  "unknown": "unknown"}[state]
-    change = status.get("change", "unknown" if state == "unknown" else "not_applied")
-    delivery = status.get("delivery", "not_applicable")
-    persistence = status.get("persistence", "not_applicable")
+    dims = run.contract["receipt"]["dimensions"]
+    change, delivery, persistence = (status.get(d) if status.get(d) in dims[d] else "unknown"
+                                     for d in ("change", "delivery", "persistence"))
+    if state == "cancelled" and "change" not in status:
+        change = "not_applied"
+    if state in ("cancelled", "failed"):
+        delivery = delivery if "delivery" in status else "not_applicable"
+        persistence = persistence if "persistence" in status else "not_applicable"
     if state == "partial" and change == "applied":
         change = "partial"
     verification = Verification("not_applicable")
@@ -337,7 +351,7 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
         if status.get("files"):
             verification = verify_files(status, [])
         elif record.get("_request"):
-            changes = [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"]
+            changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
             request = {**record["_request"], "operation_id": record["operation_id"],
                        "targets": sorted({c["target"] for c in changes}) or None,
                        "fields": sorted({c["field"] for c in changes if "field" in c}) or None}
@@ -385,7 +399,13 @@ def job_get(run: Run) -> Result:
     record = _job_record(run, call.values["--job"])
     end = time.monotonic() + wait
     while True:
-        record = poll_job(run, record)
+        try:
+            record = poll_job(run, record)
+        except DriverError as exc:
+            # An observe command reports the state as data (DCLI-204): the last known one.
+            run.notices.append({"type": "job_unanswered", "severity": "warning",
+                                "message": f"The application did not report job {record['_job']['id']} ({exc.code}); this is its last known state."})
+            break
         if record["_job"]["state"] in FINAL_JOB_STATES or time.monotonic() >= end:
             break
         time.sleep(min(0.5, max(0.0, end - time.monotonic())))
@@ -491,6 +511,8 @@ class _OnDocument(_Lifecycle):
     def prepare(self) -> None:
         run = self.run
         self.where = run.where(self.call.command)
+        if self.where.session is not None and self.where.session["state"] != "ready":
+            run.gate_session(self.where.session)  # a blocked or busy instance says so first (DCLI-204)
         if self.where.document is None:
             raise DriverError("E_NOT_FOUND", "No document matches; name it with --doc.")
         self.bound = {"inputs": self.inputs(), "document": self.where.document["id"]}
@@ -700,9 +722,14 @@ class DocUndo(_OnDocument):
     def prepare(self) -> None:
         super().prepare()
         doc = self.where.document
-        candidates = [r for r in self.run.records.all()
+        records = self.run.records.all()
+        states = {r["operation_id"]: r.get("state") for r in records}
+        self.pending = [r["operation_id"] for r in records if r["command"] == "doc undo" and r.get("state") in ("dispatched", "unknown")
+                        and (r.get("_call") or {}).get("document") == doc["id"]]
+        candidates = [r for r in records
                       if (r.get("receipt") or {}).get("document", {}).get("id") == doc["id"] and r.get("state") == "completed"
-                      and r.get("_request") and not r.get("_undone_by") and r["command"] not in ("doc undo", "doc save")]
+                      and r.get("_request") and r["command"] not in ("doc undo", "doc save")
+                      and (not r.get("_undone_by") or states.get(r["_undone_by"]) == "failed")]
         self.last = max(candidates, key=lambda r: r.get("_finished", 0), default=None)
         self.action = f"Undo {self.last['command']} ({self.last['operation_id']}) on document {doc['id']}." if self.last else "Undo."
 
@@ -717,11 +744,21 @@ class DocUndo(_OnDocument):
 
     def preview(self) -> dict[str, Any]:
         pv = super().preview()
-        if not self.last:
+        if self.pending:
+            pv.update(can_apply=False, blocked_by=[f"Undo {op} has an unknown outcome; settle it first with "
+                                                   f"`{self.run.tool.name} operation resolve --id {op}`." for op in self.pending])
+        elif not self.last:
             pv.update(can_apply=False, blocked_by=["This tool has no change on this document to undo."])
         return pv
 
+    def stored_request(self, child: int | None = None) -> dict[str, Any] | None:
+        return self.last.get("_request") if self.last else None
+
     def apply(self, operation_id: str, child: int | None = None) -> dict[str, Any]:
+        # Mark the change as being undone before the undo is sent, so a second undo never
+        # picks it again, whatever this one's outcome (DCLI-067).
+        self.last["_undone_by"] = operation_id
+        self.run.records.save(self.last)
         return dispatch(self.run, "undo", self.request(operation_id))
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
@@ -729,11 +766,7 @@ class DocUndo(_OnDocument):
             return Verification("incomplete", notes=["There was no recorded change to compare."])
         request = {**self.last["_request"], "operation_id": operation_id, "targets": sorted({c["target"] for c in changes}),
                    "fields": sorted({c["field"] for c in changes})}
-        verification = read_back(self.run, request, changes, self.last.get("_tolerances", {}))
-        if verification.status == "passed":
-            self.last["_undone_by"] = operation_id
-            self.run.records.save(self.last)
-        return verification
+        return read_back(self.run, request, changes, self.last.get("_tolerances", {}))
 
 
 class JobCancel(_Lifecycle):

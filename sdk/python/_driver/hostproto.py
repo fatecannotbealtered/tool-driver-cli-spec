@@ -59,14 +59,23 @@ class _Stream:
             self.closed = True
             self._close()
 
-    def read(self) -> Any:
+    def _chunk(self, deadline: float | None) -> bytes:
+        """The next bytes, within what is left of the deadline of the whole reply."""
+        if deadline is not None:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError()
+            self.settimeout(left)
+        return self.recv(65536)
+
+    def read(self, deadline: float | None = None) -> Any:
         while True:
             end = self.buffer.find(b"\r\n\r\n")
             if end != -1:
                 break
             if len(self.buffer) > MAX_HEADER:
                 raise ProtocolError("the header of a reply is too long")
-            chunk = self.recv(65536)
+            chunk = self._chunk(deadline)
             if not chunk:
                 return None
             self.buffer += chunk
@@ -76,7 +85,7 @@ class _Stream:
         size = int(match.group(1))
         self.buffer = self.buffer[end + 4:]
         while len(self.buffer) < size:
-            chunk = self.recv(65536)
+            chunk = self._chunk(deadline)
             if not chunk:
                 return None
             self.buffer += chunk
@@ -167,7 +176,13 @@ def _pipe_connect(address: str, timeout: float) -> _Stream:
         try:
             ov, err = _winapi.WriteFile(handle, data, overlapped=True)
             if err == _winapi.ERROR_IO_PENDING:
-                _winapi.WaitForMultipleObjects([ov.event], False, _winapi.INFINITE)
+                if _winapi.WaitForMultipleObjects([ov.event], False, wait_ms["value"]) == _winapi.WAIT_TIMEOUT:
+                    ov.cancel()
+                    try:
+                        ov.GetOverlappedResult(True)
+                    except OSError:
+                        pass
+                    raise TimeoutError()
             _, err = ov.GetOverlappedResult(True)
         except OSError as exc:
             raise BrokenPipeError(str(exc)) from None
@@ -219,7 +234,7 @@ class Connection:
         self.stream.settimeout(deadline_ms / 1000)
         try:
             self.stream.write(message)
-            reply = self.stream.read()
+            reply = self.stream.read(time.monotonic() + deadline_ms / 1000)
         except TimeoutError:
             self.close()  # a late reply must not answer the next request
             raise NoReply(f"no reply to {method} within {deadline_ms} ms", timed_out=True) from None

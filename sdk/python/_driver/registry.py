@@ -44,6 +44,7 @@ class Flag:
     choices: tuple[str, ...] | None = None  # runtime commands only
     maximum: int | None = None  # runtime commands only
     default: Any = None  # runtime commands only
+    runtime: bool = False  # added by the runtime, never an input of the adapter
 
     @property
     def key(self) -> str:

@@ -197,7 +197,7 @@ Check: 🤖 General conformance test R04.
 Every command the runtime writes for the Agent to run, in `next_action`, `resume`, `lookup` or `poll`, MUST be complete: it names the session, the document and every ID it needs (`--session`, `--doc`, `--id`, `--job`), so that it runs unchanged later. Every argument that contains a space or starts with `-` MUST be quoted. A generated command that embeds an untrusted value is listed in `meta.untrusted` (DCLI-004).
 
 Why: After a failure the Agent's first question is whether anything was sent, and the second is what to run next; a command that relies on a default instance can run against another one later.
-Check: 🤖 General conformance tests R03 and R04.
+Check: 🤖 General conformance tests G01, R03 and R04.
 
 ### DCLI-012 Fixed details fields
 
@@ -654,6 +654,7 @@ The confirm token MUST bind these values. When any of them changes, the token MU
 | `command` | The command path |
 | `inputs` | All inputs, after normalization |
 | `target` | The target key |
+| `changes` | The changes the preview showed, each with its value before and after |
 | `session_id` | The session ID |
 | `session_generation` | The session generation (DCLI-203) |
 | `document_revision` | The document revision (DCLI-210) |
@@ -684,7 +685,7 @@ When a command runs with `--confirm`, the runtime MUST look the token up in the 
 | `5` | The session still exists, with the same generation | `session_changed` |
 | `6` | The document revision and unsaved state are unchanged | `document_changed` |
 | `7` | The host component version is unchanged | `plugin_changed` |
-| `8` | The preview, computed again, can still be applied | `blocked` |
+| `8` | The preview, computed again, shows the same changes and can still be applied | `preview_changed`, `blocked` |
 
 A direct-tier command has no token. It MUST run steps 3 to 8 before dispatch, comparing with the state the runtime captured when it built the preview. For a halt command, step 3 asks only that the scope covers its target (DSEC-018), and step 4 does not apply (DCLI-060).
 
@@ -823,7 +824,7 @@ Check: 🤖 Driver conformance tests D06 and D21.
 - A batch that succeeds MUST return `data` = `{operation_id, items, summary}`. Each item is compact, `{target, operation_id, ok, code}`, and a skipped object is `{target, ok: false, skipped: true}`; the full receipt of an item comes from `operation get --id <operation_id>`. `summary` is `{total, succeeded, failed, unknown, skipped}`. When the batch does not fully succeed, `error.details.batch` holds the same object.
 - The batch succeeds only when every object succeeds. Otherwise the code MUST be `E_OUTCOME_UNKNOWN` when any object is outcome unknown, with `lookup` set to `operation list --state unknown --batch <operation_id>`; else `E_PARTIAL` when any object took effect; else the code of the first failed object.
 - `--continue-on-error` MUST default to `true`, and to `false` for dangerous commands. When the batch stops, the remaining objects MUST be reported as skipped and counted in `summary.skipped`.
-- When the session becomes `busy`, `unresponsive`, `blocked` or `lost` (DCLI-204), the batch MUST stop whatever `--continue-on-error` says, and the remaining objects are skipped. Unless an object's outcome is unknown, the code is the one that state gives, and `details.resume` gives the command that covers only the unfinished objects.
+- When the session becomes `busy`, `unresponsive`, `blocked` or `lost` (DCLI-204), the batch MUST stop whatever `--continue-on-error` says, and the remaining objects are skipped. Unless an object's outcome is unknown, the code is `E_PARTIAL` when an object took effect, and otherwise the one that state gives; `details.resume` gives the command that covers only the unfinished objects.
 - A tool MUST NOT claim an all-or-nothing result that the application does not provide.
 - When the same operation is often needed on several objects, such as moving parts, changing properties or deleting, the tool SHOULD offer a batch form.
 
@@ -1110,7 +1111,7 @@ When a command supports both file and session mode, the runtime MUST choose the 
 A write in file mode to a file that a running instance has open MUST be refused with `E_CONFLICT` and `conflict` `file_open_in_session`. `reference` shows the tier of each mode (DCLI-031).
 
 Why: The mode decides where the truth lives and what saving means, so every write knows where to read back; two writers on one file, one in memory and one on disk, would undo each other.
-Check: 🤖 General conformance test R01 checks the mode declarations in `reference`.
+Check: 🤖 General conformance test R01 checks the mode declarations in `reference`; driver conformance test D03 checks `file_open_in_session`.
 
 ### DCLI-202 Selecting a session
 
@@ -1207,7 +1208,7 @@ Writes MUST react to a document's `disk` value as this table says:
 A write to a document with `readonly: true` MUST be refused with `E_VALIDATION`. Unsaved changes (`dirty: true`) refuse nothing by themselves; closing or discarding them follows DCLI-212. `doc list` and `doc get` report these values as data (DCLI-204).
 
 Why: A save must never silently overwrite someone else's edits or recreate a file that was moved or deleted.
-Check: 🤖 Runtime unit tests.
+Check: 🤖 Driver conformance test D03; runtime unit tests.
 
 ### DCLI-212 Document commands
 

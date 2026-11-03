@@ -27,7 +27,9 @@ class StateDir:
         self.path = Path(path)
 
     def ensure(self) -> Path:
-        """Create the directory with its protection on first use."""
+        """Create the directory with its protection on first use. A directory someone else
+        created first, such as a host component writing its discovery file, gets the
+        protection too, when it belongs to the current user (DSEC-032)."""
         if not self.path.is_dir():
             try:
                 self.path.mkdir(parents=True, mode=0o700)
@@ -35,6 +37,8 @@ class StateDir:
                 pass
             except OSError as exc:
                 raise DriverError("E_IO", f"Cannot create the state directory {self.path}: {exc.strerror}.") from None
+            _protect(self.path)
+        elif self.protection() == "none" and _owned(self.path):
             _protect(self.path)
         return self.path
 
@@ -134,6 +138,12 @@ class AdapterStore:
 
 
 # ------------------------------------------------------------------ protection
+
+
+def _owned(path: Path) -> bool:
+    if WINDOWS:
+        return True  # the ACL is set for the current user, who can only change what they may
+    return path.stat().st_uid == os.getuid()
 
 
 def _protect(path: Path) -> None:

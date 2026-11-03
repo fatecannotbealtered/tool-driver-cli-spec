@@ -521,8 +521,9 @@ def operation_resolve(run: Run) -> Result:
     record["resolution"] = resolution
     record["state"] = "failed" if resolution["outcome"] == "not_applied" else "completed"
     record["finished_at"] = record.get("finished_at") or utc_now()
-    run.records.save(record)
-    run.locks.release(operation_id)
+    with run.mutex.hold():  # the outcome is recorded and the target unlocked in one step
+        run.records.save(record)
+        run.locks._remove(operation_id)
     return Result(public(record), _record_untrusted())
 
 
@@ -531,8 +532,8 @@ def _read_outcome(run: Run, record: dict[str, Any]) -> tuple[str | None, dict[st
     (DCLI-035). Returns the outcome, or ``None`` with the reason it cannot be told."""
     command = run.tool.commands.get(record["command"])
     secret = {run.key(f) for f in command.flags if f.secret} if command else set()
-    changes = [c for c in (record.get("preview") or {}).get("changes", [])
-               if c.get("origin", "tool") == "tool" and "field" in c and c["field"] not in secret]
+    stored = record.get("_changes", (record.get("preview") or {}).get("changes", []))
+    changes = [c for c in stored if c.get("origin", "tool") == "tool" and "field" in c and c["field"] not in secret]
     request = record.get("_request")
     if not request or not changes or not run.backend.has("read_back", request.get("session")):
         return None, {}, "the operation has no change the adapter can read back"
@@ -545,7 +546,8 @@ def _read_outcome(run: Run, record: dict[str, Any]) -> tuple[str | None, dict[st
     states = []
     for change in changes:
         values = after.observed.get(change["target"])
-        if not isinstance(values, dict) or (change["field"] not in values and change.get("before") is not None):
+        if not isinstance(values, dict) or change["field"] not in values:
+            # A field that cannot be read tells nothing; it never counts as "not applied".
             return None, after.observed, f"{change['field']} of {change['target']} cannot be read back"
         value = values.get(change["field"])
         if same(change.get("after"), value, tolerances.get(change["field"])):

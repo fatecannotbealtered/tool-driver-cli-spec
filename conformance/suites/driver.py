@@ -95,6 +95,17 @@ def _token_then(subject: Subject, sample: Sample, change: Any, conflict: str) ->
 
 def d02(subject: Subject) -> None:
     _token_then(subject, _std(subject, "doc save"), lambda case: case.control("restart_session", session="fake-1"), "session_changed")
+    if subject.host_component:
+        def reload(case: Case) -> None:
+            items = []
+            for inst in case.state()["instances"]:
+                view = {k: v for k, v in inst.items() if k != "values"}
+                if view["id"] == "fake-1":
+                    view["plugin_loaded"] = "9.9.9"
+                items.append(view)
+            case.control("fault", rule={"method": "sessions", "action": "result", "result": {"items": items}, "times": 0})
+            case.control("configure", plugin={"version_on_disk": "9.9.9"})  # installed and reloaded: no mismatch, only a change
+        _token_then(subject, _std(subject, "doc save"), reload, "plugin_changed")
 
 
 def d03(subject: Subject) -> list[str]:
@@ -108,6 +119,27 @@ def d03(subject: Subject) -> list[str]:
     for sample, doc in targets:
         _token_then(subject, sample, lambda case, d=doc: case.control("edit", document=d, object="conformance-d03",
                                                                       field="note", value="changed"), "document_changed")
+    if "session" in subject.modes:
+        sample = _session_target(subject)
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            case.control("set_disk", document="doc-1", disk="changed")
+            out = through(case, sample, argv)
+            check(out.code == "E_CONFLICT" and out.details.get("conflict") == "file_changed_on_disk",
+                  f"{sample.path} on a document changed on disk: {out.describe()}")
+            _no_apply(case, sample.path)
+            check(not case.calls("save_doc"), f"{sample.path}: the save was sent")
+    file_only = [s for s in _own(subject, "file") if subject.registrations[s.path]["modes"] == ["file"]]
+    if file_only and "session" in subject.modes:
+        sample = file_only[0]
+        with Case(subject) as case:
+            argv = sample.argv(case)
+            i = argv.index("--doc")
+            argv[i + 1] = case.doc_path("doc-1")
+            out = through(case, sample, argv)
+            check(out.code == "E_CONFLICT" and out.details.get("conflict") == "file_open_in_session",
+                  f"{sample.path} on a file an instance has open: {out.describe()}")
+            _no_apply(case, sample.path)
     return [s.path for s, _ in targets]
 
 
@@ -132,8 +164,14 @@ def _refused_then_usable(subject: Subject, sample: Sample, bad: Any, good: Any, 
         judge(confirm(case, sample, argv, token), f"{sample.path} {what} after the dry run")
         _no_apply(case, f"{sample.path} {what} after the dry run")
         check(not case.calls("save_doc"), f"{sample.path}: the save was sent")
+        refused = confirm(case, sample, argv, token)
         good(case)
-        out = confirm(case, sample, argv, token)
+        resume = refused.details.get("resume")
+        if resume:
+            check(token in resume, f"{sample.path}: resume does not carry the token that is still usable: {resume!r}")
+            out = case.run_line(resume)
+        else:
+            out = confirm(case, sample, argv, token)
         check(out.ok, f"{sample.path}: the token did not stay usable after a refusal that sent nothing: {out.describe()}")
 
 
@@ -269,6 +307,36 @@ def d08(subject: Subject) -> list[str]:
             out = through(case, sample, argv)
             check(out.code == "E_VERIFY_FAILED", f"{sample.path}: {out.describe()}")
             check(out.details.get("receipt", {}).get("mismatched"), f"{sample.path}: the mismatched fields are not listed")
+    for sample in [s for s in _own(subject) if "artifact" in subject.registrations[s.path]["effects"]][:1]:
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            output = next(a for a in argv if str(case.dir) in a)
+            missing = output + ".missing"
+            case.control("fault", rule={"method": "apply", "command": sample.path, "action": "result",
+                                        "result": {"files": [{"path": output}, {"path": missing}]}})
+            out = through(case, sample, argv)
+            mismatched = out.details.get("receipt", {}).get("mismatched", [])
+            check(out.code == "E_VERIFY_FAILED" and any(m.startswith("exists@") for m in mismatched),
+                  f"{sample.path} reported a file that does not exist: {out.describe()}")
+    for sample in samples:
+        tolerances = subject.registrations[sample.path]["tolerances"]
+        if not tolerances:
+            continue
+        for factor, ok in ((2.0, False), (0.5, True)):
+            with Case(subject) as case:
+                argv = sample.prepare(case)
+                dry = call(case, sample, "--dry-run", argv=argv)
+                values = {c["field"]: c["after"] + factor * tolerances[c["field"]] for c in dry.data["preview"]["changes"]
+                          if c.get("field") in tolerances and isinstance(c.get("after"), (int, float))}
+                if not values:
+                    continue
+                case.control("fault", rule={"method": "apply", "command": sample.path, "action": "store", "values": values})
+                out = through(case, sample, argv)
+                if ok:
+                    check(out.ok, f"{sample.path} stored within its tolerance: {out.describe()}")
+                else:
+                    check(out.code == "E_VERIFY_FAILED", f"{sample.path} stored outside its tolerance: {out.describe()}")
+        break
     for sample in [s for s in samples if batchable(subject, s)][:1]:
         with Case(subject) as case:
             argv = sample.prepare(case)
@@ -334,6 +402,33 @@ def d11(subject: Subject) -> None:
         got = case.run("job", "get", "--job", job["id"], "--wait", "10s")
         check(got.ok and got.data["state"] == "cancelled", f"job get after the application stopped: {got.describe()}")
         check(got.data.get("ok") is False and got.data.get("code") == "E_INTERRUPTED", f"a cancelled job's outcome: {got.data}")
+    if "session" in subject.modes and sample.mode == "session":
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            case.control("fault", rule={"method": "apply", "command": sample.path, "action": "job", "steps": 50})
+            job = through(case, sample, argv).data["result"]["job"]
+            case.control("set_session", session="fake-1", state="busy")
+            out = case.run("job", "cancel", "--job", job["id"])
+            check(out.ok, f"job cancel while the instance is busy: {out.describe()}")
+    for label, fault, want in (("read back", None, (True, None)),
+                               ("not read back", {"method": "read_back", "command": sample.path, "action": "unreadable"},
+                                (False, "E_VERIFY_INCOMPLETE")),
+                               ("ended in part", {"method": "job_status", "action": "result",
+                                                  "result": {"state": "partial", "change": "applied", "delivery": "not_applicable",
+                                                             "persistence": "unchanged"}},
+                                (False, "E_PARTIAL"))):
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            fields = sorted({c["field"] for c in call(case, sample, "--dry-run", argv=argv).data["preview"]["changes"] if c.get("field")})
+            case.control("fault", rule={"method": "apply", "command": sample.path, "action": "job", "steps": 2})
+            job = through(case, sample, argv).data["result"]["job"]
+            if fault is not None:
+                if fault["action"] == "unreadable":
+                    fault = {**fault, "fields": fields}
+                case.control("fault", rule=fault)
+            got = case.run("job", "get", "--job", job["id"], "--wait", "10s")
+            check(got.ok and got.data["state"] in ("completed", "partial"), f"a job that {label}: {got.describe()}")
+            check((got.data.get("ok"), got.data.get("code")) == want, f"a job that {label}: ok {got.data.get('ok')}, code {got.data.get('code')}")
 
 
 def d12(subject: Subject) -> None:
@@ -348,6 +443,15 @@ def d12(subject: Subject) -> None:
         check(out.code == "E_HUMAN_REQUIRED" and out.details.get("action") == "restart_application", f"{sample.path}: {out.describe()}")
         check(out.details.get("dispatch_state") == "not_started", f"{sample.path}: dispatch_state")
         _no_apply(case, f"{sample.path} on a stale host component")
+    sample = _std(subject, "doc save")
+    with Case(subject) as case:
+        argv = sample.prepare(case)
+        token = token_for(case, sample, argv)
+        case.control("configure", plugin={"version_on_disk": "9.9.9"})
+        out = confirm(case, sample, argv, token)
+        check(out.code == "E_HUMAN_REQUIRED" and out.details.get("action") == "restart_application",
+              f"a confirm after the host component went stale: {out.describe()}")
+        check(not case.calls("save_doc"), "the save was sent to a stale host component")
 
 
 def d13(subject: Subject) -> list[str]:
@@ -456,9 +560,16 @@ def d19(subject: Subject) -> None:
     try:
         with Case(subject) as case:
             env = recorder.env()
-            out = case.run("knowledge", "create", "--id", "conformance-web", "--url", "https://example.com/rules",
-                           "--title", "Rules", "--kind", "rule", env=env)
-            check(out.code == "E_VALIDATION", f"a link that is not Feishu: {out.describe()}")
+            for url in ("https://example.com/rules", "https://notfeishu.cn/wiki/x", "http://team.feishu.cn/wiki/x",
+                        "https://user@team.feishu.cn/wiki/x", "https://team.feishu.cn:8443/wiki/x", "https://feishu.cn.evil.com/wiki/x",
+                        "https://team.feishu.cn/wiki/" + "x" * 2100):
+                out = case.run("knowledge", "create", "--id", "conformance-web", "--url", url, "--title", "Rules", "--kind", "rule", env=env)
+                check(out.code == "E_VALIDATION", f"the link {url[:60]!r} is not a Feishu link: {out.describe()}")
+            builtin = case.run("knowledge", "list", "--source", "builtin", env=env).data["items"]
+            if builtin:
+                out = case.run("knowledge", "create", "--id", builtin[0]["id"], "--url", "https://team.feishu.cn/wiki/x",
+                               "--title", "Clash", "--kind", "guide", env=env)
+                check(out.code == "E_VALIDATION", f"a team link with a builtin ID: {out.describe()}")
             listed = case.run("knowledge", "list", "--source", "team", env=env)
             check(listed.ok and listed.data["items"] == [], f"something was registered: {listed.describe()}")
             case.revoke()
@@ -479,12 +590,13 @@ def d19(subject: Subject) -> None:
 
 
 def d20(subject: Subject) -> None:
-    with Case(subject) as case:
-        case.control("configure", protocol_version="2.0.0")
-        sample = _session_target(subject)
-        out = call(case, sample, argv=sample.prepare(case))
-        check(out.code == "E_PROTOCOL", f"{sample.path} with protocol 2.0.0: {out.describe()}")
-        _no_apply(case, f"{sample.path} after a protocol mismatch")
+    for version in ("2.0.0", "0.9.0"):
+        with Case(subject) as case:
+            case.control("configure", protocol_version=version)
+            sample = _session_target(subject)
+            out = call(case, sample, argv=sample.prepare(case))
+            check(out.code == "E_PROTOCOL", f"{sample.path} with protocol {version}: {out.describe()}")
+            _no_apply(case, f"{sample.path} after a protocol mismatch")
 
 
 def d21(subject: Subject) -> None:
@@ -511,10 +623,13 @@ def d22(subject: Subject) -> None:
         case.control("add_session", session="fake-2")
         case.control("set_session", session="fake-2", state="unresponsive")
         started = time.monotonic()
+        case.run("--version")
+        startup = time.monotonic() - started
+        started = time.monotonic()
         out = case.run("session", "list")
-        took = time.monotonic() - started
+        took = time.monotonic() - started - startup
         check(out.ok, f"session list: {out.describe()}")
-        check(took <= 5 + 1.5, f"session list took {took:.1f} s")
+        check(took <= 2 + 1.0, f"session list waited {took:.1f} s for an instance that does not answer; the limit is 2 s")
         states = {s["id"]: s["state"] for s in out.data["items"]}
         check(states.get("fake-1") == "ready" and states.get("fake-2") == "unresponsive", f"the states are {states}")
 
@@ -523,6 +638,16 @@ def d23(subject: Subject) -> list[str]:
     samples = _device_writes(subject)
     check(samples, "no device-mode write has a sample")
     sample = samples[0]
+    with Case(subject) as case:
+        argv = sample.prepare(case)
+        token = token_for(case, sample, argv)
+        ready = [{**{k: v for k, v in d.items() if k != "values"}, "state": "ready"} for d in case.state()["devices"]]
+        case.control("set_device", device="dev-1", state="emergency_stop")
+        # The first read of the device still says ready; the read right before dispatch must not (DSEC-061).
+        case.control("fault", rule={"method": "devices", "action": "result", "result": {"items": ready}})
+        out = confirm(case, sample, argv, token)
+        check(out.code == "E_HUMAN_REQUIRED", f"{sample.path} when the emergency stop is pressed during the confirm: {out.describe()}")
+        _no_apply(case, f"{sample.path} when the emergency stop is pressed during the confirm")
     for state in ("emergency_stop", "fault"):
         _refused_then_usable(subject, sample, lambda c, s=state: c.control("set_device", device="dev-1", state=s),
                              lambda c: c.control("set_device", device="dev-1", state="ready"), _human("confirm_on_device"),
@@ -553,6 +678,39 @@ def d24(subject: Subject) -> None:
         others = [i for i in items if i not in failed]
         if subject.tier(sample.path, sample.mode) != "dangerous" or "--continue-on-error" in flags:
             check(others and all(i["ok"] for i in others), f"the other objects are {others}")
+    for sample in [s for s in samples if subject.tier(s.path, s.mode) == "dangerous"][:1]:
+        with Case(subject) as case:
+            batch = as_batch(sample, sample.prepare(case), ["conformance-b", "conformance-c"])
+            case.control("fault", rule={"method": "apply", "command": sample.path, "target": "conformance-b", "action": "error",
+                                        "error": {"code": "E_NATIVE_FAILURE"}})
+            out = through(case, sample, batch)
+            last = [i for i in out.details.get("batch", {}).get("items", []) if i.get("target", "").endswith("conformance-c")]
+            check(last and last[0].get("skipped") is True, f"a dangerous batch went on after a failure: {out.describe()}")
+    with Case(subject) as case:
+        sample = samples[0]
+        batch = as_batch(sample, sample.prepare(case), ["conformance-b", "conformance-c"])
+        case.control("fault", rule={"method": "apply", "command": sample.path, "target": "conformance-b", "action": "error",
+                                    "error": {"code": "E_BUSY"}})
+        out = through(case, sample, batch)
+        check(out.code == "E_PARTIAL", f"a batch stopped by a busy instance after one change: {out.describe()}")
+        items = {i["target"].rsplit("/", 1)[-1]: i for i in out.details["batch"]["items"]}
+        check(items["conformance-c"].get("skipped") is True, f"the batch did not stop when the instance was busy: {items}")
+        resume = out.details.get("resume", "")
+        check("conformance-b" in resume and "conformance-c" in resume and argv_id(sample, case) not in resume,
+              f"resume must cover only the unfinished objects: {resume!r}")
+    with Case(subject) as case:
+        sample = samples[0]
+        batch = as_batch(sample, sample.prepare(case), ["conformance-b"])
+        case.control("fault", rule={"method": "apply", "command": sample.path, "action": "error", "times": 0,
+                                    "error": {"code": "E_VALIDATION"}})
+        out = through(case, sample, batch)
+        check(out.code == "E_VALIDATION", f"a batch where every object fails takes the first object's code: {out.describe()}")
+
+
+def argv_id(sample: Sample, case: Case) -> str:
+    argv = sample.argv(case)
+    flag = "--id" if "--id" in argv else "--ids"
+    return argv[argv.index(flag) + 1].split(",")[0]
 
 
 def d25(subject: Subject) -> None:
@@ -561,14 +719,17 @@ def d25(subject: Subject) -> None:
     for sample in halts:
         with Case(subject) as case:
             argv = sample.prepare(case)
-            if sample.mode == "device":
-                case.control("set_device", device="dev-1", state="busy")
-            else:
-                case.control("set_session", session="fake-1", state="busy")
+            states = ["busy", "fault", "emergency_stop"] if sample.mode == "device" else ["busy", "blocked"]
             case.grant(effects=["change"], confirm="always")
-            out = call(case, sample, argv=argv)
-            check(out.ok and out.data.get("receipt"), f"{sample.path} while busy: {out.describe()}")
-            check(case.calls("apply"), f"{sample.path} was not sent")
+            for state in states:
+                if sample.mode == "device":
+                    case.control("set_device", device="dev-1", state=state)
+                else:
+                    case.control("set_session", session="fake-1", state=state)
+                sent = len(case.calls("apply"))
+                out = call(case, sample, argv=argv)
+                check(out.ok and out.data.get("receipt"), f"{sample.path} while {state}: {out.describe()}")
+                check(len(case.calls("apply")) > sent, f"{sample.path} was not sent while {state}")
 
 
 TESTS: dict[str, Any] = {
