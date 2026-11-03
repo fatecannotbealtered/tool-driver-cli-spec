@@ -114,7 +114,8 @@
               "cancel",
               "devices",
               "plugin_status",
-              "plugin_install"
+              "plugin_install",
+              "plugin_remove"
             ]
           }
         },
@@ -219,7 +220,61 @@
         "coordinate_system": {
           "$ref": "reference.schema.json#/$defs/coordinate_system"
         }
-      }
+      },
+      "allOf": [
+        {
+          "description": "A physical parameter has the type quantity and names its quantity (DCLI-085).",
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "quantity"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "quantity"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "quantity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "quantity"
+              }
+            }
+          }
+        },
+        {
+          "description": "A flag that names a file the command creates is a path.",
+          "if": {
+            "required": [
+              "output"
+            ],
+            "properties": {
+              "output": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "path"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

@@ -145,7 +145,7 @@
 
 ### DCLI-005 命名与取值
 
-- 所有键必须用 snake_case，`data` 和 `details` 里的键也一样。
+- 表示字段名的键必须用 snake_case，`data` 和 `details` 里的键也一样。本身就是取值的键，如回执 `observed` 里的目标键（DCLI-061），按取值原样写。
 - ID 必须是字符串。
 - 时间必须是带 `Z` 后缀的 ISO 8601 UTC 时间，放在以 `_at` 结尾的键下；不带时刻的日期必须放在以 `_on` 结尾的键下。
 - 枚举值必须用小写 snake_case。
@@ -438,7 +438,7 @@
 运行时必须拒绝违反这些规则的登记，比如没有声明物理量的物理量参数（DCLI-085）；确认级别必须由运行时根据登记推导，禁止由作者指定（DCLI-052）。`reference` 由登记生成（DCLI-031）。工具项目里的 `contract/commands.json` 必须由登记生成，并由 `contract/schemas/commands.schema.json` 校验。
 
 为什么：每个命令只有一份声明，`reference`、确认级别、授权范围检查、机密遮盖和读回都从它来，彼此就不会对不上。
-检查：🤖 `check_project` 用 `commands.schema.json` 校验 `contract/commands.json`；驱动一致性测试 D13 检查没有单位的参数会被拒绝。
+检查：🤖 `check_project` 用 `commands.schema.json` 校验 `contract/commands.json`；运行时单元测试检查运行时会拒绝违反规则的登记。
 
 ## 内置命令
 
@@ -756,7 +756,7 @@
 
 - `operation_id`、`command`、`target`（没有目标对象的命令没有这一项，DCLI-054）、`effects`、`tier`；
 - `outcome`，即下表的五个维度；
-- `observed` 和 `mismatched`：读回的值（包括生成的每个文件的路径、大小和 SHA-256），以及不一致的字段；
+- `observed` 和 `mismatched`：读回的值，与适配层的读回一样以目标键为键（DCLI-260），没有目标对象的命令以对象为键，如 `session`，其中包括生成的每个文件的路径、大小和 SHA-256；以及不一致的字段，每项写成 `<field>@<key>`；
 - `session` `{id, generation}` 和 `document` `{id, revision, dirty}`；
 - `failed_stage`：失败或中断时所在的阶段：`apply`、`deliver`、`persist` 或 `verify`；
 - `notes`：补充说明；
@@ -774,7 +774,7 @@
 五个维度必须分开报告，禁止合并成一个成功标记。
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"x_mm":12.5,"y_mm":30.0},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
 ```
 
 为什么：执行了、改了、送达了、存了、核实了是不同的事实，Agent 必须逐一如实报告。
@@ -1026,7 +1026,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 物理量参数必须带单位给出，如 `--x 100mil` 或 `--x 2.54mm`，由运行时换算成标准单位。不带单位的数必须以 `E_USAGE` 拒绝，`problem` 必须列出该参数可接受的单位。只接受 DCLI-080 为该物理量列出的单位，其他单位属于无效的参数值（`E_USAGE`）。
 
 为什么：用户和手册混用各种单位，一个光秃秃的 `100` 可能是毫米也可能是 mil；要求写明单位、在一处统一换算，每个工具都不会算错单位。
-检查：🤖 运行时单元测试。
+检查：🤖 驱动一致性测试 D13；运行时单元测试。
 
 ### DCLI-083 显示单位
 
@@ -1047,7 +1047,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 没有声明所属物理量的物理量参数，必须在命令登记时就被拒绝（DCLI-029）。
 
 为什么：未声明的单位在工具发布前就被发现，而不是等写错了数值才发现。
-检查：🤖 驱动一致性测试 D13。
+检查：🤖 运行时单元测试；`check_project` 用 `commands.schema.json` 校验 `contract/commands.json`，它要求每个 `quantity` 类型的参数都写明物理量。
 
 ## 模式与会话
 
@@ -1181,6 +1181,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 - `id`；
 - `path`：文件路径；从未保存过的新文档为 `null`；
+- `key`：文档的目标键（DCLI-028）。没有路径的文档，适配层必须给出，因为 `untitled:<session-id>/<n>` 里的 `<n>` 只有适配层知道；其他文档可以给出；
 - `session`：文档所在的会话；文件模式下为 `null`；
 - `revision`：由适配层给出的不透明字符串，每次修改和每次保存都会变；文件模式下是文件内容的哈希；
 - `dirty`：有没有未保存的修改；
@@ -1233,7 +1234,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 长任务至少必须有以下字段：`id`、`operation_id`、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
 
-`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态时，`job get` 必须同时返回它的 `receipt`、`result`，以及由回执推导出的 `ok`（DCLI-065）。
+`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。
 
 `job list` 列出所有会话的长任务。`job get --job <id> --wait <duration>` 必须在任务结束或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
 
@@ -1305,6 +1306,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `devices` | CLI 端 | — | — | 必需 | 列出设备及其状态 |
 | `plugin_status` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 报告宿主组件的版本 |
 | `plugin_install` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 安装宿主组件 |
+| `plugin_remove` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 移除宿主组件 |
 
 - 标为「必需」的能力，支持该模式的每个工具都必须实现。「有写命令时」表示工具有写命令时必需；「有长任务时」「有宿主组件时」同理。「可选」的能力可以不实现。「—」表示该模式用不到这项能力。
 - CLI 端的能力在 CLI 进程里运行。实例端的能力在适配层里运行，或作为宿主方法在宿主组件里运行（DCLI-262、DCLI-274）。

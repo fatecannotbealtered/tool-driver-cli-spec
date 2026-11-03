@@ -151,7 +151,7 @@
 | `D10` | `session` | 关闭有未保存修改的文档 | 被拒绝，`E_CONFLICT` `unsaved_changes`；带 `--discard` 时属于危险级，没有 `--dangerous` 也被拒绝 | DCLI-212 |
 | `D11` | `jobs` | 取消长任务 | 先报告 `cancel_requested`；软件确认已停止后，任务的 `state` 才变为 `cancelled` | DCLI-065, DCLI-220, DCLI-221 |
 | `D12` | `host_component` | 宿主组件的磁盘版本与已加载版本不一致 | `doctor` 的 `plugin` 检查失败；写命令被拒绝，返回 `E_HUMAN_REQUIRED`，`action` 为 `restart_application` | DCLI-240, DSEC-053 |
-| `D13` | `always` | 登记一个不带单位的物理量参数；另外，调用时给物理量参数传一个不带单位的数 | 登记被拒绝；调用返回 `E_USAGE`，`problem` 列出可用的单位 | DCLI-029, DCLI-085 |
+| `D13` | `always` | 调用时给领域命令的物理量参数、以及 `job get` 的 `--wait` 时长，传一个不带单位的数 | `E_USAGE`，`problem` 列出可用的单位 | DCLI-082 |
 | `D14` | `physical` | 物理动作没有带 `--dangerous`，或授权范围没有允许 `physical` | 被拒绝；什么都没派发 | DSEC-014, DSEC-060 |
 | `D15` | `device` | 使用模拟设备 | 设备对象和在它上面运行的每条命令的结果都带 `simulated: true` | DCLI-230, DSEC-062 |
 | `D16` | `session` | 会话模式下直接执行一次修改 | 一次调用完成，有操作记录、读回和完整回执；没有授权范围时和其他写操作一样被拒绝 | DCLI-050, DCLI-052, DSEC-015 |

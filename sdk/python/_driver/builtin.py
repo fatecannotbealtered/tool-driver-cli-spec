@@ -1,0 +1,553 @@
+"""The built-in commands (DCLI-030 to DCLI-036): reference, context, doctor, changelog,
+operation get, list and resolve, --help and --version. All are declared ``observe``.
+"""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from . import knowledge
+from .args import Meta
+from .errors import DriverError, usage
+from .output import Result, page
+from .records import parse_utc, public, utc_now
+from .registry import Command, Flag
+from .runtime import Run
+from .writes import read_back
+
+if TYPE_CHECKING:
+    from .tool import Tool
+
+SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
+WRITE_ERRORS = ["E_FORBIDDEN", "E_CONFIRMATION_REQUIRED", "E_CONFLICT", "E_OUTCOME_UNKNOWN", "E_PARTIAL",
+                "E_VERIFY_FAILED", "E_VERIFY_INCOMPLETE", "E_IO"]
+READ_ERRORS = ["E_USAGE", "E_NOT_FOUND", "E_AMBIGUOUS", "E_UNSUPPORTED", "E_BUSY", "E_HUMAN_REQUIRED",
+               "E_BACKEND_UNAVAILABLE", "E_VALIDATION", "E_NATIVE_FAILURE", "E_PROTOCOL"]
+
+
+def commands(tool: Tool) -> list[Command]:
+    from .standard import make
+
+    states = tuple(tool.contract["operation"]["states"]) + ("all",)
+    return [
+        make(tool, "reference", "Describe the commands: the index, one command, or every command written to a file.",
+             [Flag("--command", "string", "The path of one command."), Flag("--all", "boolean", "Every command; needs --output."),
+              Flag("--output", "path", "With --all, the file to write.")], reference, kind="builtin",
+             schema="reference.schema.json", capabilities=[], examples=["reference", "reference --command \"session list\""]),
+        make(tool, "context", "Local state: versions, state directory, authorization, application, sessions, knowledge.", [],
+             context, kind="builtin", schema="context.schema.json", capabilities=[], examples=["context"]),
+        make(tool, "doctor", "Health checks, each with a fix.", [], doctor, kind="builtin", schema="doctor.schema.json",
+             capabilities=[], examples=["doctor"]),
+        make(tool, "changelog", "Release notes from the bundled CHANGELOG.", [Flag("--since", "string", "Only versions newer than this one.")],
+             changelog, kind="builtin", schema="changelog.schema.json", capabilities=[], examples=["changelog --since 1.0.0"]),
+        make(tool, "operation get", "One operation record.", [Flag("--id", "string", "The operation ID.", required=True)],
+             operation_get, kind="builtin", schema="operation.schema.json", capabilities=[], examples=["operation get --id op_7mq2xk4v"]),
+        make(tool, "operation list", "Operation records, newest first.",
+             [Flag("--state", "string", "Only records in this state; all for every state.", choices=states),
+              Flag("--batch", "string", "Only the items of this batch operation."),
+              Flag("--limit", "integer", "Items per page; default 20, at most 100.", maximum=100, default=20),
+              Flag("--offset", "integer", "Start position of the page; default 0.", default=0)],
+             operation_list, kind="builtin", schema="operation.schema.json", capabilities=[],
+             examples=["operation list --state unknown"]),
+        make(tool, "operation resolve", "Settle an outcome-unknown write by reading the target back, or record the outcome found by other means.",
+             [Flag("--id", "string", "The operation ID.", required=True),
+              Flag("--outcome", "string", "applied, not_applied or partial; only when the target cannot be read back.",
+                   choices=tuple(tool.contract["operation"]["resolve_outcomes"])),
+              Flag("--evidence", "string", "How the outcome was found; with --outcome.")],
+             operation_resolve, kind="builtin", schema="operation.schema.json", capabilities=["read_back"],
+             examples=["operation resolve --id op_7mq2xk4v"]),
+    ]
+
+
+# ------------------------------------------------------------------ --help and --version
+
+
+def meta(tool: Tool, what: Meta) -> Result:
+    if what.what == "version":
+        return Result({"tool": tool.name, "version": tool.version})
+    lines = [f"{tool.name} {tool.version}: drives {tool.application}.", "",
+             f"Usage: {tool.name} <command> [flags]", "",
+             "Global flags: " + ", ".join(tool.contract.global_flags), ""]
+    if what.path and what.path in tool.commands:
+        command = tool.commands[what.path]
+        lines = [f"{tool.name} {command.path}: {command.summary}", ""]
+        for flag in command.flags:
+            lines.append(f"  {flag.name}  {flag.summary}")
+    else:
+        lines.append("Commands:")
+        for path, command in tool.commands.items():
+            lines.append(f"  {path:<22} {command.summary}")
+        lines += ["", f"Run `{tool.name} reference` for the machine-readable description."]
+    return Result({"usage": "\n".join(lines)})
+
+
+# ------------------------------------------------------------------ reference
+
+
+def tier_of(tool: Tool, command: Command) -> str | dict[str, str]:
+    if not command.writes:
+        return "none"
+    return tool.tiers.per_mode(command)
+
+
+def describe(tool: Tool, command: Command) -> dict[str, Any]:
+    """One command as ``reference`` shows it (DCLI-031)."""
+    flags = []
+    for flag in command.flags:
+        entry: dict[str, Any] = {"name": flag.name, "summary": flag.summary}
+        if flag.required:
+            entry["required"] = True
+        entry["type"] = "|".join(flag.choices) if flag.choices else flag.type
+        if flag.quantity:
+            unit = tool.contract.units[flag.quantity]
+            entry["unit"] = unit["unit"]
+            entry["summary"] = (flag.summary + " " if flag.summary else "") + f"Give a unit: {', '.join(unit['accepts'])}."
+        if flag.default is not None:
+            entry["default"] = flag.default
+        if flag.maximum is not None:
+            entry["maximum"] = flag.maximum
+        if flag.secret:
+            entry["secret"] = True
+        if flag.coordinate_system:
+            entry["coordinate_system"] = flag.coordinate_system
+        flags.append(entry)
+    out: dict[str, Any] = {"path": command.path, "summary": command.summary, "flags": flags,
+                           "output_schema": command.output_schema, "examples": command.examples,
+                           "effects": command.effects, "tier": tier_of(tool, command)}
+    if command.writes and command.tier_when:
+        out["tier_when"] = command.tier_when
+    out.update(maturity=command.maturity, evidence=command.evidence, modes=command.modes,
+               capabilities=command.adapter_capabilities,
+               errors=READ_ERRORS + (WRITE_ERRORS if command.writes or command.path == "operation resolve" else []))
+    if command.default_fields:
+        out["default_fields"] = command.default_fields
+    if command.related_knowledge:
+        out["related_knowledge"] = command.related_knowledge
+    if command.departures:
+        out["departures"] = command.departures
+    out["formats"] = command.formats
+    if command.output_coordinate_system:
+        out["output_coordinate_system"] = command.output_coordinate_system
+    return out
+
+
+def driver_block(tool: Tool) -> dict[str, Any]:
+    return {"modes": tool.modes, "application": tool.application, "versions": tool.versions, "host_component": tool.host_component}
+
+
+def reference(run: Run) -> Result:
+    tool, call = run.tool, run.call
+    head = {"tool": tool.name, "version": tool.version, "spec_version": tool.contract.version, "driver": driver_block(tool)}
+    if call.values.get("--all"):
+        if not call.has("--output"):
+            raise usage("reference --all writes every command to a file; add --output <path>.", "--output")
+        full = {**head, "commands": [describe(tool, c) for c in tool.commands.values()]}
+        text = json.dumps(full, ensure_ascii=False, indent=1)
+        path = call.values["--output"]
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as exc:
+            raise DriverError("E_IO", f"Cannot write {path}: {exc.strerror}.") from None
+        return Result({"path": path, "count": len(full["commands"]), "bytes": len(text.encode("utf-8"))})
+    if call.has("--output"):
+        raise usage("--output works only with --all.", "--output")
+    if call.has("--command"):
+        path = call.values["--command"]
+        if path not in tool.commands:
+            raise usage(f"There is no command {path!r}.", "--command", f"Run `{tool.name} reference` to list the commands.")
+        return Result(describe(tool, tool.commands[path]))
+    index = [{"path": c.path, "summary": c.summary, "effects": c.effects, "tier": tier_of(tool, c)} for c in tool.commands.values()]
+    return Result({**head, "index": index})
+
+
+# ------------------------------------------------------------------ context and doctor
+
+
+def _probe(run: Run) -> dict[str, Any]:
+    result = dict(run.capability("probe", {}, 5000))
+    if run.fake:
+        result["path"] = f"fake host at {run.fake}"
+    return result
+
+
+def _plugin(run: Run) -> dict[str, Any] | None:
+    if not run.tool.host_component:
+        return None
+    return run.capability("plugin_status", {}, 5000)
+
+
+def context(run: Run) -> Result:
+    tool, state = run.tool, run.state
+    try:
+        state.ensure()
+    except DriverError:
+        pass
+    data: dict[str, Any] = {
+        "tool": tool.name, "version": tool.version, "spec_version": tool.contract.version,
+        "state_dir": {"path": str(state.path), "usable": state.usable(), "protection": state.protection()},
+        "authorization": run.scope.summary(),
+    }
+    try:
+        data["application"] = _probe(run)
+    except DriverError as exc:
+        data["application"] = {"found": False}
+        run.notices.append({"type": "application", "severity": "warning", "message": exc.message})
+    sessions: dict[str, Any] = {"count": 0, "ids": []}
+    if run.has_sessions():
+        try:
+            items = run.sessions()["items"]
+            sessions = {"count": len(items), "ids": [s["id"] for s in items]}
+        except DriverError as exc:
+            run.notices.append({"type": "sessions", "severity": "warning", "message": exc.message})
+    data["sessions"] = sessions
+    components: dict[str, Any] = {"cli": tool.version}
+    if tool.host_component:
+        try:
+            plugin = _plugin(run) or {}
+            components["plugin_on_disk"] = plugin.get("version_on_disk")
+            components["plugin_loaded"] = plugin.get("loaded", [])
+        except DriverError as exc:
+            components["plugin_on_disk"] = None
+            run.notices.append({"type": "plugin", "severity": "warning", "message": exc.message})
+    data["components"] = components
+    kb = knowledge.Base(run)
+    team = kb.team_entries(strict=False)
+    data["knowledge"] = {"builtin_count": len(kb.builtin()),
+                         "team": [{"id": e["id"], "title": e["title"], "kind": e["kind"], "url": e["url"]} for e in team]}
+    return Result(data, [".knowledge.team[*].url", ".knowledge.team[*].title"])
+
+
+def _check(name: str, status: str, message: str, fix: str | None = None) -> dict[str, Any]:
+    out = {"check": name, "status": status, "message": message}
+    if status != "pass":
+        out["fix"] = fix or "See the message."
+    return out
+
+
+def doctor(run: Run) -> Result:
+    tool, state = run.tool, run.state
+    checks = []
+    try:
+        state.ensure()
+    except DriverError:
+        pass
+    protection = state.protection()
+    if not state.usable():
+        checks.append(_check("state_store", "fail", f"The state directory {state.path} cannot be used.",
+                             f"Make {state.path} a directory the current user can read and write."))
+    elif protection == "none":
+        checks.append(_check("state_store", "fail", f"Other users may be able to read or write {state.path}.",
+                             f"Remove {state.path}; the tool creates it again readable by you alone."))
+    else:
+        checks.append(_check("state_store", "pass", f"{state.path} is usable and protected ({protection})."))
+    scope = run.scope
+    status = {"granted": "pass", "missing": "warn", "expired": "warn", "invalid": "fail"}[scope.status]
+    message = {"granted": f"Scope {scope.scope_id} grants {', '.join(scope.data.get('effects', []))} until {scope.data.get('expires_at')}.",
+               "missing": f"There is no scope file at {scope.path}; reads work, writes are refused.",
+               "expired": f"The scope {scope.scope_id} expired at {scope.data.get('expires_at')}; writes are refused.",
+               "invalid": f"The scope file {scope.path} is invalid: {scope.problem}."}[scope.status]
+    checks.append(_check("authorization", status, message, f"Ask the person to write or fix the scope file at {scope.path}."))
+    checks.append(_skills_version(run))
+    checks.append(_update_check(run))
+    probe: dict[str, Any] | None = None
+    try:
+        probe = _probe(run)
+        if run.fake:
+            checks.append(_check("application", "pass", f"The application is the fake host at {run.fake}; results are simulated."))
+        elif probe.get("found"):
+            checks.append(_check("application", "pass", f"{tool.application} {probe.get('version', '')} at {probe.get('path', '?')}."))
+        else:
+            checks.append(_check("application", "fail", f"{tool.application} was not found.", f"Install {tool.application} {tool.versions}."))
+    except DriverError as exc:
+        checks.append(_check("application", "fail", exc.message, f"Install {tool.application} {tool.versions}."))
+    license_state = (probe or {}).get("license", "unknown")
+    checks.append(_check("license", {"valid": "pass", "not_required": "pass", "unknown": "warn"}.get(license_state, "fail"),
+                         f"The license is {license_state}.", f"Activate the {tool.application} license."))
+    checks.append(_plugin_check(run))
+    checks.append(_sessions_check(run))
+    checks.append(knowledge.doctor_check(run))
+    return Result({"checks": checks})
+
+
+def _skills_version(run: Run) -> dict[str, Any]:
+    folder = run.tool.root / "skills"
+    versions = {}
+    if folder.is_dir():
+        for skill in sorted(folder.glob("*/SKILL.md")):
+            match = re.search(r"^\s+version:\s*['\"]?([^'\"\s]+)", skill.read_text(encoding="utf-8"), re.MULTILINE)
+            versions[skill.parent.name] = match.group(1) if match else None
+    if not versions:
+        return _check("version", "warn", "No Skills ship with this tool.", "Reinstall the tool from npm.")
+    wrong = {k: v for k, v in versions.items() if v != run.tool.version}
+    if wrong:
+        return _check("version", "fail", f"Skills at another version than the CLI {run.tool.version}: {wrong}.",
+                      f"Run `{run.tool.name} update` to sync the Skills.")
+    return _check("version", "pass", f"The CLI and {len(versions)} Skills are at {run.tool.version}.")
+
+
+def _plugin_check(run: Run) -> dict[str, Any]:
+    if not run.tool.host_component:
+        return _check("plugin", "pass", "This tool has no host component.")
+    try:
+        plugin = _plugin(run) or {}
+    except DriverError as exc:
+        return _check("plugin", "fail", exc.message, f"Run `{run.tool.name} plugin install`.")
+    on_disk = plugin.get("version_on_disk")
+    if not on_disk:
+        return _check("plugin", "warn", "The host component is not installed.", f"Run `{run.tool.name} plugin install`.")
+    stale = [f"{i['session']} has {i['version']}" for i in plugin.get("loaded", []) if i["version"] != on_disk]
+    if stale:
+        return _check("plugin", "fail", f"Version {on_disk} is on disk, but {'; '.join(stale)} loaded.",
+                      "Ask the person to restart or reload those instances.")
+    return _check("plugin", "pass", f"Version {on_disk} is on disk and loaded in every instance.")
+
+
+def _sessions_check(run: Run) -> dict[str, Any]:
+    if not run.has_sessions():
+        return _check("sessions", "pass", "This tool does not drive running instances.")
+    try:
+        items = run.sessions()["items"]
+    except DriverError as exc:
+        return _check("sessions", "warn", exc.message, "Start the application, then run doctor again.")
+    trouble = [f"{s['id']} is {s['state']}" for s in items if s["state"] in ("blocked", "lost", "unresponsive")]
+    if trouble:
+        return _check("sessions", "warn", "; ".join(trouble) + ".", "Ask the person to look at those instances.")
+    return _check("sessions", "pass", f"{len(items)} instances are running.")
+
+
+# ------------------------------------------------------------------ update notices (DCLI-079)
+
+
+def _registry(env: Any) -> str:
+    base = env.get("npm_config_registry") or env.get("NPM_CONFIG_REGISTRY") or "https://registry.npmjs.org/"
+    return base if base.endswith("/") else base + "/"
+
+
+def query_registry(run: Run, timeout: float) -> dict[str, Any]:
+    """Ask the npm registry for the latest version; only update and doctor do this."""
+    url = _registry(run.env) + urllib.parse.quote(run.tool.package, safe="@")
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.npm.install-v1+json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - the registry URL is https by default
+        data = json.loads(response.read().decode("utf-8"))
+    latest = data.get("dist-tags", {}).get("latest")
+    versions = data.get("versions", {})
+    deprecated = bool(isinstance(versions.get(run.tool.version), dict) and versions[run.tool.version].get("deprecated"))
+    return {"checked_at": utc_now(), "latest": latest, "deprecated": deprecated}
+
+
+def _cache_path(run: Run) -> Path:
+    return run.state.path / "cache" / "update.json"
+
+
+def _update_check(run: Run) -> dict[str, Any]:
+    try:
+        info = query_registry(run, run.contract["update"]["doctor_registry_timeout_ms"] / 1000)
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        return _check("update", "warn", f"The npm registry at {_registry(run.env)} could not be reached ({type(exc).__name__}).",
+                      f"Check the network, then run `{run.tool.name} update --check`.")
+    old = _read_cache(run)
+    info["notified_at"] = old.get("notified_at")
+    _write_cache(run, info)
+    latest = info.get("latest")
+    if latest and newer(latest, run.tool.version):
+        return _check("update", "warn", f"Version {latest} is available; this is {run.tool.version}.", f"Run `{run.tool.name} update`.")
+    return _check("update", "pass", f"{run.tool.version} is the latest version.")
+
+
+def _read_cache(run: Run) -> dict[str, Any]:
+    try:
+        data = json.loads(_cache_path(run).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_cache(run: Run, data: dict[str, Any]) -> None:
+    try:
+        path = run.state.sub("cache") / "update.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except (OSError, DriverError):
+        pass
+
+
+def update_notice(run: Run) -> None:
+    """At most once every 24 hours, from the cache only (DCLI-079)."""
+    if run.fake:
+        run.notices.append({"type": "fake_host", "severity": "warning",
+                            "message": f"{run.tool.prefix}_FAKE_HOST is set: the application is the fake host at {run.fake}, and results are simulated."})
+    cache = _read_cache(run)
+    latest = cache.get("latest")
+    if not latest or not (newer(latest, run.tool.version) or cache.get("deprecated")):
+        return
+    last = cache.get("notified_at")
+    hours = run.contract["update"]["notice_interval_hours"]
+    if last and parse_utc(last) > datetime.now(timezone.utc) - timedelta(hours=hours):
+        return
+    major = newer(latest, run.tool.version) and latest.split(".")[0] != run.tool.version.split(".")[0]
+    severity = "warning" if major or cache.get("deprecated") else "info"
+    what = f"Version {latest} is available" if newer(latest, run.tool.version) else f"Version {run.tool.version} is deprecated"
+    run.notices.append({"type": run.contract["update"]["notice_type"], "severity": severity,
+                        "message": f"{what}; run `{run.tool.name} update`."})
+    cache["notified_at"] = utc_now()
+    _write_cache(run, cache)
+
+
+def _key(version: str) -> tuple[Any, ...]:
+    match = SEMVER.match(version)
+    if not match:
+        return (-1,)
+    pre = match.group(4)
+    parts: tuple[Any, ...] = tuple(int(match.group(i)) for i in (1, 2, 3))
+    if pre is None:
+        return parts + ((1,),)
+    ids = tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre.split("."))
+    return parts + ((0,) + ids,)
+
+
+def newer(a: str, b: str) -> bool:
+    return bool(SEMVER.match(a)) and _key(a) > _key(b)
+
+
+# ------------------------------------------------------------------ changelog
+
+
+def changelog(run: Run) -> Result:
+    since = run.call.values.get("--since")
+    if since and not SEMVER.match(since):
+        raise usage(f"--since takes a version such as 1.2.0, not {since!r}.", "--since")
+    path = run.tool.root / "CHANGELOG.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        raise DriverError("E_CONFIG", f"The bundled CHANGELOG is missing at {path}.") from None
+    entries: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    group: str | None = None
+    groups = {g.capitalize(): g for g in run.contract["changelog_groups"]}
+    for line in text.splitlines():
+        head = re.match(r"^## \[?([^\]\s]+)\]?(?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?", line)
+        if head:
+            name = head.group(1)
+            current = None if name.lower() == "unreleased" else {"version": name, "date": head.group(2), "changes": {}}
+            if current:
+                entries.append(current)
+            group = None
+            continue
+        sub = re.match(r"^### (\w+)", line)
+        if sub:
+            group = groups.get(sub.group(1))
+            continue
+        item = re.match(r"^[-*] (.+)", line)
+        if item and current is not None and group:
+            current["changes"].setdefault(group, []).append(item.group(1).strip())
+    if since:
+        entries = [e for e in entries if newer(e["version"], since)]
+    return Result({"current_version": run.tool.version, "entries": entries})
+
+
+# ------------------------------------------------------------------ operation records
+
+
+def _record(run: Run, operation_id: str) -> dict[str, Any]:
+    record = run.records.load(operation_id)
+    if record is None:
+        raise DriverError("E_NOT_FOUND", f"There is no operation {operation_id}.",
+                          next_action=f"Run `{run.tool.name} operation list` to see the operations.")
+    return record
+
+
+def operation_get(run: Run) -> Result:
+    record = _record(run, run.call.values["--id"])
+    return Result(public(record), _record_untrusted())
+
+
+def _record_untrusted() -> list[str]:
+    return [".preview.action", ".preview.changes[*].before", ".preview.changes[*].after", ".receipt.notes",
+            ".target.label", ".preview.target.label", ".resolution.evidence"]
+
+
+def operation_list(run: Run) -> Result:
+    call = run.call
+    state = call.values.get("--state", "all")
+    batch = call.values.get("--batch")
+    records = [r for r in run.records.all() if (state == "all" or r.get("state") == state) and (not batch or r.get("batch") == batch)]
+    data, offset = page([public(r) for r in records], call.values.get("--offset", 0), call.values.get("--limit", 20))
+    return Result(data, [".items[*]" + p for p in _record_untrusted()], offset=offset)
+
+
+def operation_resolve(run: Run) -> Result:
+    """Settle an outcome-unknown write (DCLI-035, DCLI-063, DSEC-017)."""
+    call = run.call
+    record = _record(run, call.values["--id"])
+    operation_id = record["operation_id"]
+    if record.get("state") != "unknown":
+        raise DriverError("E_VALIDATION", f"Operation {operation_id} is {record.get('state')}, not outcome unknown; there is nothing to resolve.")
+    keys = _record_keys(record)
+    missing = run.scope.missing(record["effects"], False, keys)
+    if missing is not None:
+        raise DriverError("E_FORBIDDEN", f"Resolving {operation_id} needs a scope that covers its effects and targets ({run.scope.status}).",
+                          scope=missing,
+                          next_action="Pass `details.scope.snippet` to the person; only the person edits the scope file.")
+    changes = [c for c in (record.get("preview") or {}).get("changes", []) if c.get("origin", "tool") == "tool" and "field" in c]
+    readable = bool(record.get("_request") and changes and run.backend.has("read_back", record["_request"].get("session")))
+    outcome = call.values.get("--outcome")
+    if outcome:
+        if readable:
+            raise DriverError("E_VALIDATION", f"The target of {operation_id} can be read back; run the command without --outcome.",
+                              next_action=f"Run `{run.tool.name} operation resolve --id {operation_id}`.")
+        evidence = call.values.get("--evidence")
+        if not evidence:
+            raise usage("--outcome needs --evidence: how the outcome was found.", "--evidence")
+        resolution = {"outcome": outcome, "resolved_by": "agent", "evidence": evidence, "resolved_at": utc_now()}
+    else:
+        if call.has("--evidence"):
+            raise usage("--evidence goes with --outcome.", "--evidence")
+        if not readable:
+            raise DriverError("E_UNSUPPORTED", f"The target of {operation_id} cannot be read back.",
+                              next_action=f"Find the outcome in the application, then run `{run.tool.name} operation resolve --id {operation_id} "
+                                          f"--outcome applied|not_applied|partial --evidence \"<how you found it>\"`.")
+        request = {**record["_request"], "operation_id": operation_id, "targets": sorted({c["target"] for c in changes}),
+                   "fields": sorted({c["field"] for c in changes})}
+        after = read_back(run, request, changes, record.get("_tolerances", {}))
+        if after.status == "incomplete":
+            raise DriverError("E_BUSY", f"The target of {operation_id} could not be read back yet: {'; '.join(after.notes)}",
+                              retry_after_ms=2000)
+        before_changes = [{**c, "after": c.get("before")} for c in changes]
+        before = read_back(run, request, before_changes, record.get("_tolerances", {}))
+        applied = len(changes) - len(after.mismatched)
+        if after.status == "passed":
+            found = "applied"
+        elif before.status == "passed":
+            found = "not_applied"
+        elif applied:
+            found = "partial"
+        else:
+            found = "not_applied"
+        resolution = {"outcome": found, "resolved_by": "read_back", "observed": after.observed, "resolved_at": utc_now()}
+    record["resolution"] = resolution
+    record["state"] = "failed" if resolution["outcome"] == "not_applied" else "completed"
+    record["finished_at"] = record.get("finished_at") or utc_now()
+    run.records.save(record)
+    run.locks.release(operation_id)
+    return Result(public(record), _record_untrusted())
+
+
+def _record_keys(record: dict[str, Any]) -> list[str]:
+    target = record.get("target")
+    targets = target if isinstance(target, list) else ([target] if target else [])
+    keys = [t["key"] for t in targets]
+    for change in (record.get("preview") or {}).get("changes", []):
+        if change["target"] not in keys:
+            keys.append(change["target"])
+    return keys
+
+
+def lark_cli_on_path() -> bool:
+    return shutil.which("lark-cli") is not None

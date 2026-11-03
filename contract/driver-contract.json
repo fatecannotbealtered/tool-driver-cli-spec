@@ -417,7 +417,7 @@
   ],
   "objects": {
     "session": ["id", "application", "pid", "owned", "generation", "state", "documents", "plugin_loaded"],
-    "document": ["id", "path", "session", "revision", "dirty", "readonly", "disk"],
+    "document": ["id", "path", "key", "session", "revision", "dirty", "readonly", "disk"],
     "job": ["id", "operation_id", "state", "cancel_requested", "progress", "started_at", "finished_at"],
     "device": ["id", "model", "firmware", "state", "simulated"],
     "plugin": ["name", "version_on_disk", "protocol_version", "install_path", "loaded"]
@@ -618,6 +618,13 @@
     },
     {
       "name": "plugin_install",
+      "file": "with_host_component",
+      "session": "with_host_component",
+      "device": "with_host_component",
+      "side": "cli"
+    },
+    {
+      "name": "plugin_remove",
       "file": "with_host_component",
       "session": "with_host_component",
       "device": "with_host_component",

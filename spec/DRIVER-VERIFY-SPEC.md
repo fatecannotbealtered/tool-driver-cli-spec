@@ -151,7 +151,7 @@ The runtime, not the tool author, decides from the command registration (DCLI-02
 | `D10` | `session` | Closing a document with unsaved changes | Refused with `E_CONFLICT` `unsaved_changes`; with `--discard` it is dangerous and refused without `--dangerous` | DCLI-212 |
 | `D11` | `jobs` | Cancelling a long job | `cancel_requested` is reported first; the job's `state` becomes `cancelled` only after the application confirms it stopped | DCLI-065, DCLI-220, DCLI-221 |
 | `D12` | `host_component` | The host component on disk differs from the loaded version | The `plugin` check of `doctor` fails; write commands are refused with `E_HUMAN_REQUIRED`, action `restart_application` | DCLI-240, DSEC-053 |
-| `D13` | `always` | A physical parameter registered without a unit; separately, a call that gives a physical parameter as a bare number | The registration is rejected; the call returns `E_USAGE` whose `problem` lists the accepted units | DCLI-029, DCLI-085 |
+| `D13` | `always` | A call gives a physical parameter of a domain command, and the `--wait` duration of `job get`, as a bare number | `E_USAGE` whose `problem` lists the accepted units | DCLI-082 |
 | `D14` | `physical` | A physical effect without `--dangerous`, or with a scope that does not allow `physical` | Refused; nothing is dispatched | DSEC-014, DSEC-060 |
 | `D15` | `device` | A simulated device | The device object and the result of every command on it carry `simulated: true` | DCLI-230, DSEC-062 |
 | `D16` | `session` | A direct change in session mode | Done in one call, with an operation record, read-back and a full receipt; refused like any write when there is no scope | DCLI-050, DCLI-052, DSEC-015 |

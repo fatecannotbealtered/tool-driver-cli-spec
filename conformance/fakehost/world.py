@@ -92,7 +92,7 @@ class Document:
 
     def view(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "id": self.id, "path": self.path, "session": self.session,
+            "id": self.id, "path": self.path, "key": self.key(), "session": self.session,
             "revision": f"r{self.revision}", "dirty": self.dirty, "readonly": self.readonly,
         }
         if self.path is not None:
@@ -152,7 +152,7 @@ class World:
         self.suffixes = {u["quantity"]: u["suffix"] for u in data["units"]}
         self.cli_side = [c["name"] for c in data["adapter_capabilities"] if c["side"] == "cli"]
         self.instance_side = [c["name"] for c in data["adapter_capabilities"] if c["side"] == "instance"]
-        self.write_methods = set(data["host_protocol"]["write_methods"]) | {"open_session", "plugin_install"}
+        self.write_methods = set(data["host_protocol"]["write_methods"]) | {"open_session", "plugin_install", "plugin_remove"}
         self.host_error_codes = set(data["host_protocol"]["allowed_error_codes"])
         self.required = _required_keys(adapter)
         self.reset(config, commands)
@@ -169,6 +169,7 @@ class World:
             self.plugin = dict(cfg["plugin"])
             self.plugin_state_dir: str | None = None
             self.host_component = bool(cfg["host_component"])
+            self.plugin_installed = self.host_component
             self.instances: dict[str, Instance] = {}
             self.documents: dict[str, Document] = {}
             self.devices = {d["id"]: {**d, "values": {}} for d in cfg["devices"]}
@@ -610,6 +611,8 @@ class World:
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged"}
 
     def cap_read_back(self, params: dict[str, Any], rule: dict[str, Any] | None = None) -> dict[str, Any]:
+        if params["command"] == "doc save":
+            return self._read_saved(params, rule)
         plan = self._plan(params)
         self._gate(params, halt=plan["halt"])
         keys = [t["key"] for t in plan["targets"]] + [file_key(p) for p in plan["outputs"]]
@@ -624,6 +627,30 @@ class World:
         for path in plan["outputs"]:
             if file_key(path) in wanted:
                 observed[file_key(path)] = {"exists": os.path.exists(path)}
+        result: dict[str, Any] = {"observed": observed}
+        if unreadable:
+            result["unreadable"] = sorted(unreadable)
+        return result
+
+    def _read_saved(self, params: dict[str, Any], rule: dict[str, Any] | None) -> dict[str, Any]:
+        """Read the changed fields from the file a save wrote."""
+        self._gate(params)
+        doc = self._document(params)
+        assert doc is not None
+        if doc.path is None:
+            raise HostError("E_VALIDATION", "an untitled document has no file to read")
+        try:
+            objects = json.loads(Path(doc.path).read_text(encoding="utf-8")).get("objects", {})
+        except (OSError, ValueError) as exc:
+            raise HostError("E_NATIVE_FAILURE", "the saved file cannot be read", native_message=str(exc)) from exc
+        unreadable = set(rule.get("fields", [])) if rule is not None else set()
+        prefix = doc.key() + "#/"
+        observed: dict[str, dict[str, Any]] = {}
+        for key in params.get("targets") or []:
+            obj = key[len(prefix):] if key.startswith(prefix) else "" if key == doc.key() else None
+            values = objects.get(obj, {}) if obj is not None else {}
+            names = params.get("fields") or list(values)
+            observed[key] = {n: values[n] for n in names if n in values and n not in unreadable}
         result: dict[str, Any] = {"observed": observed}
         if unreadable:
             result["unreadable"] = sorted(unreadable)
@@ -652,7 +679,7 @@ class World:
 
     def cap_plugin_status(self, params: dict[str, Any]) -> dict[str, Any]:
         loaded = [{"session": i.id, "version": i.plugin_loaded} for i in self.instances.values() if i.plugin_loaded]
-        installed = self.plugin_state_dir is not None or self.host_component
+        installed = self.plugin_installed
         return {
             "name": self.plugin["name"],
             "version_on_disk": self.plugin["version_on_disk"] if installed else None,
@@ -665,8 +692,14 @@ class World:
         self.plugin_state_dir = params["state_dir"]
         version = params.get("version", self.plugin["version_on_disk"])
         self.plugin["version_on_disk"] = version
+        self.plugin_installed = True
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "saved", "install_path": str(self.workdir / "plugin"), "version": version}
+
+    def cap_plugin_remove(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.plugin_installed = False
+        self.plugin_state_dir = None
+        return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
 
     # ------------------------------------------------------------------ instance-side capabilities
 

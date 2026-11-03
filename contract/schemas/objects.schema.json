@@ -63,12 +63,13 @@
       ]
     },
     "document": {
-      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`.",
+      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key in `key`, whose number only the adapter knows.",
       "type": "object",
       "required": ["id", "path", "revision", "dirty", "readonly"],
       "properties": {
         "id": {"$ref": "#/$defs/id"},
         "path": {"type": ["string", "null"]},
+        "key": {"$ref": "preview.schema.json#/$defs/target_key"},
         "session": {"type": ["string", "null"]},
         "revision": {"type": "string", "minLength": 1},
         "dirty": {"type": "boolean"},
@@ -81,7 +82,8 @@
           "if": {"properties": {"path": {"type": "string"}}},
           "then": {"required": ["disk"]},
           "else": {"not": {"required": ["disk"]}}
-        }
+        },
+        {"if": {"required": ["path"], "properties": {"path": {"type": "null"}}}, "then": {"required": ["key"]}}
       ],
       "unevaluatedProperties": false
     },
@@ -113,17 +115,24 @@
         "finished_at": {"$ref": "error.schema.json#/$defs/utc"},
         "receipt": {"$ref": "receipt.schema.json#/$defs/receipt"},
         "result": true,
+        "ok": {"description": "In a final state: whether the receipt derives a success (DCLI-062).", "type": "boolean"},
+        "code": {"description": "The error code the receipt derives when ok is false.", "$ref": "error.schema.json#/properties/code"},
         "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
         "poll_after_ms": {"type": "integer", "minimum": 0}
       },
       "allOf": [
         {
           "if": {"required": ["state"], "properties": {"state": {"enum": ["completed", "failed", "partial", "cancelled"]}}},
-          "then": {"required": ["finished_at", "receipt"]}
+          "then": {"required": ["finished_at", "receipt", "ok"]}
         },
         {
           "if": {"required": ["state"], "properties": {"state": {"enum": ["planned", "running", "blocked"]}}},
-          "then": {"not": {"anyOf": [{"required": ["finished_at"]}, {"required": ["receipt"]}]}}
+          "then": {"not": {"anyOf": [{"required": ["finished_at"]}, {"required": ["receipt"]}, {"required": ["ok"]}, {"required": ["code"]}]}}
+        },
+        {
+          "if": {"required": ["ok"], "properties": {"ok": {"const": false}}},
+          "then": {"required": ["code"]},
+          "else": {"not": {"required": ["code"]}}
         },
         {
           "if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}},

@@ -130,6 +130,7 @@
           "unevaluatedProperties": false
         },
         "read_back": {
+          "description": "Reads back the fields of the targets a write changed. With the command doc save, it reads them from the saved file (DCLI-057).",
           "$ref": "#/$defs/command_call",
           "required": ["operation_id"],
           "properties": {
@@ -168,6 +169,15 @@
             "operation_id": {"$ref": "#/$defs/operation_id"},
             "state_dir": {"description": "Written into the host component's configuration, so a host started from the desktop writes its discovery file to the same hosts/ directory.", "type": "string", "minLength": 1},
             "version": {"type": "string", "minLength": 1},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "plugin_remove": {
+          "type": "object",
+          "required": ["operation_id"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
             "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
           }
         }
@@ -239,7 +249,7 @@
           "properties": {"result": true}
         },
         "preview": {
-          "description": "What the change would do. `after` is the value the application will actually store. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
+          "description": "What the change would do. `after` is the value the application will actually store. For a batch, targets lists one target per selected object, in the order of the selection. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
           "type": "object",
           "required": ["changes", "can_apply"],
           "additionalProperties": false,
@@ -321,7 +331,8 @@
             "version": {"type": "string", "minLength": 1}
           },
           "unevaluatedProperties": false
-        }
+        },
+        "plugin_remove": {"$ref": "#/$defs/write_facts", "unevaluatedProperties": false}
       }
     },
     "id": {"type": "string", "minLength": 1},

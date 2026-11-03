@@ -12,21 +12,24 @@
 | `contract/driver-contract.json` | 机器契约：工具或测试能当作数据读取的每一个值 |
 | `contract/schemas/` | 信封、回执、授权范围文件、宿主协议报文和契约本身的 JSON Schema |
 | `contract/examples/` | `valid/<schema>/` 是必须通过的示例，`invalid/<schema>/` 是必须不通过的示例 |
+| `sdk/python/_driver/` | 驱动运行时，每个工具原样复制；只用 Python 标准库 |
 | `conformance/fakehost/` | 模拟宿主，也是宿主协议的参考实现；只用 Python 标准库 |
+| `conformance/suites/` | 通用和驱动两组一致性测试；以进程方式启动工具，接模拟宿主 |
 | `scripts/check_spec.py` | 检查条款格式、编号、中英文对应、契约表格、Schema 和示例 |
 | `scripts/build_spec_bundle.py` | 生成发布用的 ZIP 和它的 SHA-256 文件 |
 | `docs/OPEN-QUESTIONS.md` | 开放问题；规范正文里不放开放问题 |
-| `tests/` | 脚本和模拟宿主的单元测试 |
+| `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具 |
 
 ## 修改规范
 
 1. 改到某个值（错误码、参数、状态、字段）时，先改契约，再改两种语言文件里对应的表格。
 2. 英文文件和 `_zh` 文件同步：章节相同，条款编号相同且顺序相同，表格相同且行数相同。
-3. 运行下面的检查，两项都通过才能提交。
+3. 运行下面的检查，全部通过才能提交。
 
 ```bash
 python scripts/check_spec.py
 python -m unittest discover -s tests -v
+cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
 
 ## 条款格式

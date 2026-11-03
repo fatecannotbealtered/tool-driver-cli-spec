@@ -145,7 +145,7 @@ Check: 🤖 General conformance test R04.
 
 ### DCLI-005 Names and values
 
-- Every key MUST be snake_case, including the keys inside `data` and `details`.
+- Every key that names a field MUST be snake_case, including the keys inside `data` and `details`. A key that is itself a value, such as a target key in a receipt's `observed` (DCLI-061), is written as that value.
 - IDs MUST be strings.
 - Times MUST be UTC in ISO 8601 with a `Z` suffix, under keys that end in `_at`. Dates without a time of day MUST be under keys that end in `_on`.
 - Enum values MUST be lower snake_case.
@@ -438,7 +438,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a unit quantity (DCLI-085), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
 
 Why: One declaration per command feeds `reference`, the tier, the scope check, the masking of secrets and the read-back, so none of them can disagree.
-Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; driver conformance test D13 checks that a parameter without a unit is rejected.
+Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; runtime unit tests check that the runtime rejects a registration that breaks a rule.
 
 ## Built-in Commands
 
@@ -756,7 +756,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 
 - `operation_id`, `command`, `target` (absent for a command with no target object, DCLI-054), `effects` and `tier`;
 - `outcome`, with the five dimensions below;
-- `observed` and `mismatched`: the values read back, including every produced file with its path, size and SHA-256, and the fields that do not match;
+- `observed` and `mismatched`: the values read back, keyed by target key as the adapter's read-back reports them (DCLI-260), or by the object, such as `session`, for a command with no target object, including every produced file with its path, size and SHA-256; and the fields that do not match, each written `<field>@<key>`;
 - `session` `{id, generation}` and `document` `{id, revision, dirty}`;
 - `failed_stage`: where the write failed or was interrupted: `apply`, `deliver`, `persist` or `verify`;
 - `notes`: extra remarks;
@@ -774,7 +774,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 The five dimensions MUST be reported separately and MUST NOT be merged into one success flag.
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"x_mm":12.5,"y_mm":30.0},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
 ```
 
 Why: Ran, changed, delivered, saved and verified are different facts, and the Agent must report each one truthfully.
@@ -1026,7 +1026,7 @@ Check: 👀 Review of the output schemas in `reference`.
 A parameter for a physical quantity MUST be given with a unit, such as `--x 100mil` or `--x 2.54mm`; the runtime converts it to the standard unit. A bare number MUST be refused with `E_USAGE`, and `problem` MUST list the units the parameter accepts. Only the units listed for the quantity in DCLI-080 are accepted; any other unit is an invalid value (`E_USAGE`).
 
 Why: Users and manuals mix units, and a bare `100` can mean millimetres or mils; asking for the unit and converting in one place prevents unit mistakes in every tool.
-Check: 🤖 Runtime unit tests.
+Check: 🤖 Driver conformance test D13; runtime unit tests.
 
 ### DCLI-083 Display units
 
@@ -1047,7 +1047,7 @@ Check: 👀 Review of `reference`.
 A physical parameter without a declared unit quantity MUST be rejected when the command is registered (DCLI-029).
 
 Why: An undeclared unit is caught before the tool ships, not after a wrong value is written.
-Check: 🤖 Driver conformance test D13.
+Check: 🤖 Runtime unit tests; `check_project` validates `contract/commands.json` against `commands.schema.json`, which needs a quantity for every flag of type `quantity`.
 
 ## Modes and Sessions
 
@@ -1181,6 +1181,7 @@ A document MUST have at least these fields; the full definition is in the contra
 
 - `id`;
 - `path`: the file path, or `null` for a new document that has never been saved;
+- `key`: the document's target key (DCLI-028). The adapter MUST give it for a document without a path, because only the adapter knows the `<n>` of `untitled:<session-id>/<n>`, and MAY give it for any other;
 - `session`: the session that holds it, or `null` in file mode;
 - `revision`: an opaque string, supplied by the adapter, that changes with every change and every save; in file mode it is a hash of the file content;
 - `dirty`: whether it has unsaved changes;
@@ -1233,7 +1234,7 @@ Check: 👀 Review of the adapter.
 
 A job MUST have at least these fields: `id`, `operation_id`, `state`, `cancel_requested`, `started_at` and `finished_at` (`null` until the job ends). When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
 
-`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state, `job get` MUST also return its `receipt`, its `result` and the `ok` derived from the receipt (DCLI-065).
+`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state, `job get` MUST also return its `receipt`, its `result`, and `ok`, derived from the receipt as DCLI-062 sets, with the error code in `code` when `ok` is `false` (DCLI-065).
 
 `job list` lists the long jobs of every session. `job get --job <id> --wait <duration>` MUST return when the job ends or the time runs out, whichever comes first. `--wait` MAY be up to 600 seconds, because waiting is not work (DCLI-065); a longer value returns `E_USAGE`. `job get` MUST return `poll_after_ms`, the time after which asking again is useful.
 
@@ -1305,6 +1306,7 @@ Besides the domain commands, the tool author writes only the adapter capabilitie
 | `devices` | CLI | — | — | required | Lists devices and their states |
 | `plugin_status` | CLI | with a host component | with a host component | with a host component | Reports the host component versions |
 | `plugin_install` | CLI | with a host component | with a host component | with a host component | Installs the host component |
+| `plugin_remove` | CLI | with a host component | with a host component | with a host component | Removes the host component |
 
 - A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with long jobs" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
 - CLI-side capabilities run in the CLI process. Instance-side capabilities run in the adapter or, as host methods, in a host component (DCLI-262, DCLI-274).
