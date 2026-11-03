@@ -77,6 +77,10 @@ class Client:
             reply = self.channel.read_message()
         except BrokenPipeError as exc:
             raise ConnectionClosed(str(exc)) from exc
+        except TimeoutError:
+            # A late reply must not be read as the answer to the next call.
+            self.close()
+            raise
         finally:
             if not self.channel.closed:
                 self.channel.settimeout(None)

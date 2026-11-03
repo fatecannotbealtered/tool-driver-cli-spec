@@ -405,6 +405,7 @@ A target key is the one way to write the identity of an object. Scope files, pre
 | `file`: a whole file | `file:///<absolute-path>` | `file:///D:/proj/board.kicad_pcb` |
 | `file_object`: an object in a file | `file:///<absolute-path>#<domain-path>` | `file:///D:/proj/board.kicad_pcb#/footprints/R1` |
 | `untitled_document`: a new document not yet saved | `untitled:<session-id>/<n>` | `untitled:kicad-1234/1` |
+| `untitled_object`: an object in a new document | `untitled:<session-id>/<n>#<domain-path>` | `untitled:kicad-1234/1#/footprints/R1` |
 | `device_part`: a part of a device | `device:<device-id>/<part>` | `device:cnc-01/axis-x` |
 
 Matching MUST be by prefix: `file:///D:/proj/` in a scope file covers every object in every file under that folder, and `untitled:` covers every new document. Before comparing, the runtime MUST normalize paths: absolute paths, one separator style, and case-insensitive comparison on Windows. A prefix MUST match only at a boundary, that is, when one of these holds: the key equals the prefix, the prefix ends with `/`, `#` or `:`, or the key continues with `/` or `#` right after the prefix. So `file:///D:/proj` covers `file:///D:/proj/board.kicad_pcb` but not `file:///D:/proj2/board.kicad_pcb`. Target locks use the same boundary rule (DCLI-060).

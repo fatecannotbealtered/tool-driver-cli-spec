@@ -89,12 +89,9 @@ class _UnixListener(Listener):
     def __init__(self, address: str) -> None:
         self.address = address
         self._closed = False
+        # The socket lives in a private 0700 directory (private_dir), so only its owner reaches it.
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        old = os.umask(0o177)
-        try:
-            self._sock.bind(address)
-        finally:
-            os.umask(old)
+        self._sock.bind(address)
         self._sock.listen(16)
         self._sock.settimeout(0.2)
 

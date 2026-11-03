@@ -38,10 +38,12 @@ class FakeHost:
         self._dir = transport.private_dir()
         self.address = transport.new_address("main", self._dir)
         self._main: transport.Listener | None = None
+        # One lock guards the endpoints, the discovery files, the open channels and stopping.
+        self._lock = threading.RLock()
         self._endpoints: dict[str, tuple[transport.Listener, int]] = {}
+        self._written: dict[str, tuple[str, str, str]] = {}
         self._lost: set[str] = set()
         self._channels: set[Channel] = set()
-        self._lock = threading.Lock()
         self._shutdown = threading.Event()
         self.stopped = threading.Event()
 
@@ -54,14 +56,14 @@ class FakeHost:
         return self
 
     def stop(self) -> None:
-        if self.stopped.is_set():
-            return
-        self.stopped.set()
-        listeners = [self._main] if self._main else []
         with self._lock:
-            listeners += [listener for listener, _ in self._endpoints.values()]
-            sessions = list(self._endpoints) + list(self._lost)
+            if self.stopped.is_set():
+                return
+            self.stopped.set()
+            listeners = ([self._main] if self._main else []) + [entry[0] for entry in self._endpoints.values()]
+            sessions = set(self._endpoints) | self._lost
             self._endpoints.clear()
+            self._lost.clear()
             channels = list(self._channels)
         for listener in listeners:
             listener.close()
@@ -86,38 +88,43 @@ class FakeHost:
 
     def sync(self) -> None:
         """Give every live instance an endpoint and a discovery file, as a host component would."""
-        if not self.world.host_component or self.stopped.is_set():
+        if not self.world.host_component:
             return
-        with self.world.lock:
-            instances = {i.id: (i.state, i.generation) for i in self.world.instances.values()}
-        for session, (state, generation) in instances.items():
-            current = self._endpoints.get(session)
-            if state in _LIVE and (current is None or current[1] != generation):
-                if current is not None:
-                    current[0].close()
-                listener = transport.listen(transport.new_address(session, self._dir))
-                with self._lock:
+        with self._lock:
+            if self.stopped.is_set():
+                return
+            with self.world.lock:
+                instances = {i.id: (i.state, i.generation) for i in self.world.instances.values()}
+                versions = (self.world.protocol_version, self.world.plugin["version"], self.world.config["application"]["version"])
+            for session, (state, generation) in instances.items():
+                current = self._endpoints.get(session)
+                if state in _LIVE and (current is None or current[1] != generation):
+                    if current is not None:
+                        current[0].close()
+                    listener = transport.listen(transport.new_address(session, self._dir))
                     self._endpoints[session] = (listener, generation)
                     self._lost.discard(session)
-                self._write_discovery(session, listener.address)
-                self._spawn(self._accept_loop, listener, session)
-            elif state == "lost" and current is not None:
-                current[0].close()
-                with self._lock:
-                    del self._endpoints[session]
+                    self._write_discovery(session, listener.address, versions)
+                    self._spawn(self._accept_loop, listener, session)
+                elif state in _LIVE and self._written.get(session) != versions:
+                    self._write_discovery(session, current[0].address, versions)
+                elif state == "lost" and current is not None:
+                    current[0].close()
+                    self._endpoints.pop(session, None)
                     self._lost.add(session)
-        for session in set(self._endpoints) | self._lost:
-            if instances.get(session, ("closed", 0))[0] == "closed":
-                endpoint = self._endpoints.pop(session, None)
-                if endpoint is not None:
-                    endpoint[0].close()
-                self._lost.discard(session)
-                self._remove_discovery(session)
+            for session in set(self._endpoints) | self._lost:
+                if instances.get(session, ("closed", 0))[0] == "closed":
+                    endpoint = self._endpoints.pop(session, None)
+                    if endpoint is not None:
+                        endpoint[0].close()
+                    self._lost.discard(session)
+                    self._remove_discovery(session)
 
     def _discovery_path(self, session: str) -> Path | None:
         return self.state_dir / "hosts" / f"{session}.json" if self.state_dir else None
 
-    def _write_discovery(self, session: str, address: str) -> None:
+    def _write_discovery(self, session: str, address: str, versions: tuple[str, str, str]) -> None:
+        self._written[session] = versions
         path = self._discovery_path(session)
         if path is None:
             return
@@ -126,8 +133,8 @@ class FakeHost:
             "address": address,
             "pid": os.getpid(),
             "application": dict(self.world.config["application"]),
-            "protocol_version": self.world.protocol_version,
-            "plugin_version": self.world.plugin["version"],
+            "protocol_version": versions[0],
+            "plugin_version": versions[1],
             "started_at": utc_now(),
         }
         tmp = path.with_suffix(".tmp")
@@ -135,6 +142,7 @@ class FakeHost:
         os.replace(tmp, path)
 
     def _remove_discovery(self, session: str) -> None:
+        self._written.pop(session, None)
         path = self._discovery_path(session)
         if path is not None:
             path.unlink(missing_ok=True)
@@ -150,6 +158,9 @@ class FakeHost:
             if channel is None:
                 return
             with self._lock:
+                if self.stopped.is_set():
+                    channel.close()
+                    return
                 self._channels.add(channel)
             self._spawn(self._serve, channel, endpoint)
 
@@ -159,7 +170,7 @@ class FakeHost:
             while True:
                 try:
                     message = channel.read_message()
-                except (FramingError, OSError) as exc:
+                except FramingError as exc:
                     self._violation(f"framing: {exc}")
                     return
                 if message is None:
@@ -173,8 +184,10 @@ class FakeHost:
                 if reply is _CLOSE:
                     return
                 if reply is _HANG:
-                    while channel.read_message() is not None:
-                        pass
+                    # The call never gets a reply; record anything else sent on this connection.
+                    while (late := channel.read_message()) is not None:
+                        late = late if isinstance(late, dict) else {}
+                        self.world.record_ignored(late.get("method"), late.get("params"), endpoint)
                     return
                 channel.write_message(reply)
         except (FramingError, OSError):
@@ -220,8 +233,15 @@ class FakeHost:
         except Close:
             return _CLOSE
         finally:
-            self.sync()
+            self._sync_quietly()
         return {"jsonrpc": "2.0", "id": rpc_id, "result": result}
+
+    def _sync_quietly(self) -> None:
+        try:
+            self.sync()
+        except Exception as exc:  # noqa: BLE001 - never drop a reply because of the fake host's own fault
+            with self.world.lock:
+                self.world.internal_errors.append(f"sync: {type(exc).__name__}: {exc}")
 
     # ------------------------------------------------------------------ control
 
@@ -229,7 +249,8 @@ class FakeHost:
         w = self.world
         if name == "state":
             state = w.state()
-            state["endpoints"] = {s: listener.address for s, (listener, _) in self._endpoints.items()}
+            with self._lock:
+                state["endpoints"] = {s: entry[0].address for s, entry in self._endpoints.items()}
             return state
         actions = {
             "reset": lambda: w.reset(p.get("config"), p.get("commands")),
@@ -251,11 +272,13 @@ class FakeHost:
         if name == "reset":
             with self._lock:
                 old = list(self._endpoints.items())
+                sessions = set(self._endpoints) | self._lost
                 self._endpoints.clear()
                 self._lost.clear()
-            for session, (listener, _) in old:
-                listener.close()
-                self._remove_discovery(session)
+                for _, (listener, _) in old:
+                    listener.close()
+                for session in sessions:
+                    self._remove_discovery(session)
         result = actions[name]()
         self.sync()
         return result if result is not None else {}

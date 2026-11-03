@@ -1,10 +1,14 @@
 """The fake application: instances, documents, devices and long jobs, the generic answer to
 domain commands (DVER-020), and the faults a test injects.
 
-Every adapter capability of DCLI-260 is a method of ``World`` with the payloads of
-``contract/schemas/adapter.schema.json``. ``World.handle`` runs one call and applies the
-faults; it raises ``HostError`` for a host error (DCLI-279), ``Hang`` when the call must get
-no reply, and ``Close`` when the connection must close without a reply.
+Every adapter capability of DCLI-260 is a ``cap_<name>`` method of ``World`` with the
+payloads of ``contract/schemas/adapter.schema.json``. ``World.handle`` runs one call and
+applies the faults; it raises ``HostError`` for a host error (DCLI-279), ``Hang`` when the
+call must get no reply, and ``Close`` when the connection must close without a reply.
+
+Reads never change the world. A request that breaks the protocol or the payloads is
+refused and recorded in ``violations``; a fault in the fake host itself is recorded in
+``internal_errors``. Tests check both lists.
 """
 from __future__ import annotations
 
@@ -19,20 +23,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-PROTOCOL_VERSION = "1.0.0"
 CONTRACT = Path(__file__).resolve().parents[2] / "contract" / "driver-contract.json"
+_DEFAULT = json.loads(CONTRACT.read_text(encoding="utf-8"))
+PROTOCOL_VERSION: str = _DEFAULT["host_protocol"]["version"]
 
-CLI_SIDE = ["probe", "sessions", "open_session", "devices", "plugin_status", "plugin_install"]
-INSTANCE_SIDE = [
-    "close_session", "documents", "create_doc", "open_doc", "save_doc", "save_doc_as", "close_doc",
-    "undo", "read", "preview", "apply", "read_back", "job_status", "cancel",
-]
-WRITE_METHODS = {
-    "open_session", "close_session", "create_doc", "open_doc", "save_doc", "save_doc_as", "close_doc",
-    "undo", "apply", "cancel", "plugin_install",
-}
 SELECT = ("id", "ids", "items")
 FAULT_ACTIONS = {"error", "hang", "close", "result", "store", "unreadable", "job"}
+FAULT_METHODS = {"store": "apply", "job": "apply", "unreadable": "read_back"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "application": {"name": "FakeApp", "version": "1.0.0"},
@@ -69,6 +66,10 @@ class Close(Exception):
     """The connection closes before the reply."""
 
 
+class Refused(Exception):
+    """The request breaks the protocol or the payloads; it is answered with E_VALIDATION."""
+
+
 @dataclass
 class Document:
     id: str
@@ -83,12 +84,11 @@ class Document:
     disk: str = "in_sync"
     tool_changes: list[dict[str, Any]] = field(default_factory=list)
     external_changes: list[dict[str, Any]] = field(default_factory=list)
-    history: list[tuple[str, dict[str, dict[str, Any]]]] = field(default_factory=list)
+    history: list[dict[str, Any]] = field(default_factory=list)
 
     def key(self, obj: str | None = None) -> str:
-        if self.path is None:
-            return f"untitled:{self.session}/{self.untitled}"
-        return file_key(self.path) + (f"#/{obj}" if obj else "")
+        base = f"untitled:{self.session}/{self.untitled}" if self.path is None else file_key(self.path)
+        return f"{base}#/{obj}" if obj else base
 
     def view(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -99,9 +99,14 @@ class Document:
             out["disk"] = self.disk
         return out
 
-    def write_file(self) -> None:
-        if self.path is not None:
-            Path(self.path).write_text(json.dumps({"objects": self.objects}, sort_keys=True), encoding="utf-8")
+    def content(self) -> bytes:
+        return json.dumps({"objects": self.objects}, sort_keys=True).encode("utf-8")
+
+    def saved(self) -> None:
+        self.dirty, self.disk = False, "in_sync"
+        self.revision += 1
+        self.tool_changes.clear()
+        self.external_changes.clear()
 
 
 @dataclass
@@ -115,6 +120,7 @@ class Instance:
     since_at: str | None = None
     plugin_loaded: str | None = None
     untitled: int = 0
+    values: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -127,6 +133,7 @@ class Job:
     action: str | None = None
     cancel_requested: bool = False
     polls_after_cancel: int = 0
+    facts: dict[str, Any] = field(default_factory=dict)
 
 
 class World:
@@ -139,8 +146,15 @@ class World:
     ) -> None:
         self.lock = threading.RLock()
         self.workdir = Path(workdir or tempfile.mkdtemp(prefix="fakehost-"))
-        data = json.loads(Path(contract or CONTRACT).read_text(encoding="utf-8"))
+        path = Path(contract or CONTRACT)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        adapter = json.loads((path.parent / "schemas" / "adapter.schema.json").read_text(encoding="utf-8"))
         self.suffixes = {u["quantity"]: u["suffix"] for u in data["units"]}
+        self.cli_side = [c["name"] for c in data["adapter_capabilities"] if c["side"] == "cli"]
+        self.instance_side = [c["name"] for c in data["adapter_capabilities"] if c["side"] == "instance"]
+        self.write_methods = set(data["host_protocol"]["write_methods"]) | {"open_session", "plugin_install"}
+        self.host_error_codes = set(data["host_protocol"]["allowed_error_codes"])
+        self.required = _required_keys(adapter)
         self.reset(config, commands)
 
     # ------------------------------------------------------------------ state
@@ -157,14 +171,15 @@ class World:
             self.host_component = bool(cfg["host_component"])
             self.instances: dict[str, Instance] = {}
             self.documents: dict[str, Document] = {}
-            self.devices = {d["id"]: dict(d) for d in cfg["devices"]}
+            self.devices = {d["id"]: {**d, "values": {}} for d in cfg["devices"]}
             self.jobs: dict[str, Job] = {}
             self.faults: list[dict[str, Any]] = []
             self.calls: list[dict[str, Any]] = []
             self.applied: list[dict[str, Any]] = []
             self.violations: list[str] = []
+            self.internal_errors: list[str] = []
+            self.pending_jobs: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             self.counter = 0
-            self._pending_jobs: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             for spec in cfg["instances"]:
                 inst = self._add_instance(spec.get("id"), owned=False)
                 for doc in spec.get("documents", []):
@@ -173,8 +188,12 @@ class World:
                 self._add_document(doc, None)
 
     def _next(self, prefix: str) -> str:
-        self.counter += 1
-        return f"{prefix}-{self.counter}"
+        taken = set(self.instances) | set(self.documents) | set(self.jobs)
+        while True:
+            self.counter += 1
+            candidate = f"{prefix}-{self.counter}"
+            if candidate not in taken:
+                return candidate
 
     def _add_instance(self, instance_id: str | None, owned: bool) -> Instance:
         inst = Instance(id=instance_id or self._next("fake"), pid=os.getpid(), owned=owned)
@@ -185,15 +204,14 @@ class World:
 
     def _add_document(self, spec: dict[str, Any], session: str | None) -> Document:
         doc_id = spec.get("id") or self._next("doc")
-        name = spec.get("name", f"{doc_id}.fake")
-        path = None if spec.get("untitled") else str(self.workdir / name)
+        path = None if spec.get("untitled") else spec.get("path") or str(self.workdir / spec.get("name", f"{doc_id}.fake"))
         doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})))
         if path is None:
             inst = self.instances[session]
             inst.untitled += 1
             doc.untitled = inst.untitled
-        else:
-            doc.write_file()
+        elif not Path(path).exists():
+            Path(path).write_bytes(doc.content())
         self.documents[doc.id] = doc
         return doc
 
@@ -201,7 +219,7 @@ class World:
         """Everything a test may check, as plain data."""
         with self.lock:
             return copy.deepcopy({
-                "instances": [self._session_view(i) for i in self.instances.values()],
+                "instances": [{**self._session_view(i), "values": i.values} for i in self.instances.values()],
                 "documents": [
                     {**d.view(), "objects": d.objects, "external_changes": d.external_changes}
                     for d in self.documents.values()
@@ -209,9 +227,11 @@ class World:
                 "devices": list(self.devices.values()),
                 "jobs": [vars(j) for j in self.jobs.values()],
                 "plugin": self.plugin,
+                "protocol_version": self.protocol_version,
                 "calls": self.calls,
                 "applied": self.applied,
                 "violations": self.violations,
+                "internal_errors": self.internal_errors,
                 "faults": self.faults,
             })
 
@@ -230,38 +250,34 @@ class World:
         }
         if inst.state == "blocked":
             out["blocker"] = inst.blocker or {"action": "dismiss_dialog", "title": "Fake dialog"}
-        if inst.since_at and inst.state in ("busy", "unresponsive", "blocked"):
-            out["since_at"] = inst.since_at
-        if inst.state == "unresponsive" and "since_at" not in out:
-            out["since_at"] = utc_now()
+        if inst.state in ("busy", "unresponsive", "blocked"):
+            out["since_at"] = inst.since_at or utc_now()
         return out
 
     # ------------------------------------------------------------------ dispatch
+
+    def record_ignored(self, method: Any, params: Any, endpoint: str | None) -> None:
+        """A request sent on a connection that already hangs; it gets no reply."""
+        with self.lock:
+            self.calls.append({"seq": len(self.calls) + 1, "endpoint": endpoint or "main", "method": method,
+                               "params": params, "outcome": "ignored"})
 
     def handle(self, method: str, params: dict[str, Any], endpoint: str | None = None) -> Any:
         """Run one call, with the faults that match it. ``endpoint`` is the instance a host
         component connection belongs to, or ``None`` for the fake host's main address."""
         with self.lock:
-            entry = {"seq": len(self.calls) + 1, "endpoint": endpoint or "main", "method": method, "params": params}
+            entry: dict[str, Any] = {"seq": len(self.calls) + 1, "endpoint": endpoint or "main", "method": method, "params": params}
             self.calls.append(entry)
-            self._check_request(method, params)
-            if endpoint is not None and method in INSTANCE_SIDE:
-                if params.get("session", endpoint) != endpoint:
-                    self.violations.append(f"{method}: session {params['session']} sent to the host of {endpoint}")
-                params = {**params, "session": endpoint}
-            if method == "hello":
-                handler = lambda p: self._hello(p, endpoint)  # noqa: E731
-            else:
-                handler = getattr(self, f"cap_{method}", None)
-            if handler is None or (endpoint is not None and method not in INSTANCE_SIDE + ["hello"]):
-                entry["outcome"] = "error"
-                raise HostError("E_UNSUPPORTED", f"{method} is not a method of this host")
-            rule = self._take_fault(method, params)
             try:
-                result = self._run(handler, method, params, rule)
+                handler, params = self._route(method, params, endpoint)
+                rule = self._take_fault(method, params)
+                result = self._run(handler, params, rule)
+            except Refused as exc:
+                self.violations.append(f"{method}: {exc}")
+                entry.update(outcome="error", error="E_VALIDATION")
+                raise HostError("E_VALIDATION", str(exc)) from exc
             except HostError as exc:
-                entry["outcome"] = "error"
-                entry["error"] = exc.data["code"]
+                entry.update(outcome="error", error=exc.data["code"])
                 raise
             except Hang:
                 entry["outcome"] = "hang"
@@ -269,15 +285,42 @@ class World:
             except Close:
                 entry["outcome"] = "close"
                 raise
-            except (KeyError, TypeError, ValueError, AttributeError) as exc:
-                self.violations.append(f"{method}: malformed request ({type(exc).__name__}: {exc})")
-                entry["outcome"] = "error"
-                entry["error"] = "E_VALIDATION"
-                raise HostError("E_VALIDATION", f"malformed {method} request: {exc}") from exc
+            except OSError as exc:
+                entry.update(outcome="error", error="E_NATIVE_FAILURE")
+                raise HostError("E_NATIVE_FAILURE", "the application could not write a file", native_message=str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 - a fault of the fake host itself
+                self.internal_errors.append(f"{method}: {type(exc).__name__}: {exc}")
+                entry.update(outcome="error", error="E_NATIVE_FAILURE")
+                raise HostError("E_NATIVE_FAILURE", f"fake host internal error: {exc}") from exc
             entry["outcome"] = "result"
             return result
 
-    def _run(self, handler: Any, method: str, params: dict[str, Any], rule: dict[str, Any] | None) -> Any:
+    def _route(self, method: str, params: Any, endpoint: str | None) -> tuple[Any, dict[str, Any]]:
+        """Check the request and pick its handler."""
+        if not isinstance(params, dict):
+            raise Refused("params is not an object")
+        deadline = params.get("deadline_ms")
+        if not isinstance(deadline, int) or isinstance(deadline, bool) or deadline < 1:
+            raise Refused("deadline_ms is missing or not a positive integer")
+        if method == "hello":
+            if not (params.get("protocol_version") and params.get("cli_version")):
+                raise Refused("hello needs protocol_version and cli_version")
+            return (lambda p: self._hello(endpoint)), params
+        known = method in self.cli_side or method in self.instance_side
+        if not known or (endpoint is not None and method not in self.instance_side):
+            raise HostError("E_UNSUPPORTED", f"{method} is not a method of this host")
+        if endpoint is not None:
+            if params.get("session", endpoint) != endpoint:
+                raise Refused(f"session {params['session']} sent to the host of {endpoint}")
+            params = {**params, "session": endpoint}
+        elif self.host_component and method in self.instance_side:
+            self.violations.append(f"{method}: an instance-side call on the main address; with a host component it goes to the instance (DVER-023)")
+        missing = [k for k in self.required.get(method, []) if k not in params]
+        if missing:
+            raise Refused(f"missing {', '.join(missing)}")
+        return getattr(self, f"cap_{method}"), params
+
+    def _run(self, handler: Any, params: dict[str, Any], rule: dict[str, Any] | None) -> Any:
         action = rule["action"] if rule else None
         if action in ("error", "hang", "close"):
             if rule.get("apply_first"):
@@ -295,26 +338,14 @@ class World:
             if code == "E_HUMAN_REQUIRED":
                 error.setdefault("action", "dismiss_dialog")
             raise HostError(code, message, **error)
-        if action in ("store", "unreadable", "job"):
+        if action in FAULT_METHODS:
             return handler(params, rule)
         result = handler(params)
         if action == "result":
             _merge(result, rule.get("result", {}))
         return result
 
-    def _check_request(self, method: str, params: Any) -> None:
-        if not isinstance(params, dict):
-            self.violations.append(f"{method}: params is not an object")
-            return
-        deadline = params.get("deadline_ms")
-        if not isinstance(deadline, int) or isinstance(deadline, bool) or deadline < 1:
-            self.violations.append(f"{method}: deadline_ms missing or not a positive integer")
-        if method in WRITE_METHODS and not params.get("operation_id"):
-            self.violations.append(f"{method}: a write without operation_id")
-        if method == "hello" and not (params.get("protocol_version") and params.get("cli_version")):
-            self.violations.append("hello: protocol_version and cli_version are required")
-
-    def _hello(self, params: dict[str, Any], endpoint: str | None) -> dict[str, Any]:
+    def _hello(self, endpoint: str | None) -> dict[str, Any]:
         if endpoint is None:
             session = {"id": "fakehost", "generation": 0}
         else:
@@ -327,19 +358,22 @@ class World:
             "plugin_version": self.plugin["version"],
             "application": dict(self.config["application"]),
             "session": session,
-            "methods": ["hello", *INSTANCE_SIDE],
+            "methods": ["hello", *self.instance_side],
         }
 
     # ------------------------------------------------------------------ faults
 
     def add_fault(self, rule: dict[str, Any]) -> None:
-        if rule.get("action") not in FAULT_ACTIONS:
-            raise ValueError(f"unknown fault action {rule.get('action')!r}")
-        if "method" not in rule:
-            raise ValueError("a fault needs a method")
-        only = {"store": "apply", "job": "apply", "unreadable": "read_back"}.get(rule["action"])
-        if only and rule["method"] != only:
-            raise ValueError(f"the {rule['action']} fault works only on {only}")
+        action, method = rule.get("action"), rule.get("method")
+        if action not in FAULT_ACTIONS:
+            raise ValueError(f"unknown fault action {action!r}")
+        if method not in self.cli_side + self.instance_side + ["hello"]:
+            raise ValueError(f"unknown method {method!r}")
+        if action in FAULT_METHODS and method != FAULT_METHODS[action]:
+            raise ValueError(f"the {action} fault works only on {FAULT_METHODS[action]}")
+        code = rule.get("error", {}).get("code", "E_NATIVE_FAILURE")
+        if action == "error" and code not in self.host_error_codes:
+            raise ValueError(f"a host may not return {code} (DCLI-279)")
         with self.lock:
             self.faults.append({"times": 1, **rule})
 
@@ -369,26 +403,25 @@ class World:
         return inst
 
     def _gate(self, params: dict[str, Any], halt: bool = False) -> None:
-        """Refuse a call the way a real instance or device would in its current state."""
-        session = params.get("session")
-        if session:
-            inst = self._instance(session)
+        """Refuse a call the way a real instance or device would in its current state.
+        A halt command passes a busy or blocked target (DSEC-018)."""
+        if params.get("session"):
+            inst = self._instance(params["session"])
             if inst.state == "unresponsive":
                 raise Hang()
             if inst.state == "lost":
                 raise Close()
             if inst.state == "closed":
-                raise HostError("E_NOT_FOUND", f"instance {session} is closed")
+                raise HostError("E_NOT_FOUND", f"instance {inst.id} is closed")
             if not halt and inst.state in ("busy", "starting"):
                 raise HostError("E_BUSY", "the main thread is busy", retry_after_ms=500)
             if not halt and inst.state == "blocked":
                 blocker = inst.blocker or {"action": "dismiss_dialog"}
                 raise HostError("E_HUMAN_REQUIRED", "a dialog blocks the application", action=blocker["action"])
-        device = params.get("device")
-        if device:
-            dev = self.devices.get(device)
+        if params.get("device"):
+            dev = self.devices.get(params["device"])
             if dev is None:
-                raise HostError("E_NOT_FOUND", f"no device {device!r}")
+                raise HostError("E_NOT_FOUND", f"no device {params['device']!r}")
             if dev["state"] == "offline":
                 raise Close()
             if not halt and dev["state"] == "busy":
@@ -398,7 +431,7 @@ class World:
         ref = params.get("document")
         if ref is None:
             if required:
-                raise HostError("E_NOT_FOUND", "the call names no document")
+                raise Refused("the call names no document")
             return None
         for doc in self.documents.values():
             if ref in (doc.id, doc.path) or (doc.path and ref == file_key(doc.path)):
@@ -409,114 +442,98 @@ class World:
 
     # ------------------------------------------------------------------ generic domain answer
 
-    def _registered(self, command: str) -> dict[str, dict[str, Any]] | None:
-        """Input key -> flag, for a registered command; ``None`` when the command is unknown."""
-        reg = self.commands.get(command)
-        if reg is None:
-            return None
-        keys = {}
-        for flag in reg.get("flags", []):
-            key = flag["name"][2:].replace("-", "_")
-            if flag.get("quantity"):
-                key += self.suffixes[flag["quantity"]]
-            keys[key] = flag
-        return keys
-
     def _plan(self, params: dict[str, Any]) -> dict[str, Any]:
         """The targets, the changed fields and the output files of a domain command call."""
         command = params["command"]
-        reg = self.commands.get(command, {})
-        flags = self._registered(command)
+        reg = self.commands.get(command)
+        if reg is None and self.commands:
+            raise Refused(f"command {command!r} is not registered")
+        flags: dict[str, dict[str, Any]] | None = None
+        if reg is not None:
+            flags = {}
+            for flag in reg.get("flags", []):
+                key = flag["name"][2:].replace("-", "_")
+                flags[key + self.suffixes.get(flag.get("quantity", ""), "")] = flag
         inputs = params.get("inputs") or {}
-
-        def is_field(key: str) -> bool:
-            if key in SELECT:
-                return False
-            if flags is None:
-                return True
-            return key in flags and not flags[key].get("output")
-
-        common = {k: v for k, v in inputs.items() if is_field(k)}
-        outputs = [str(v) for k, v in inputs.items() if flags and k in flags and flags[k].get("output")]
-        selected: list[tuple[str, dict[str, Any]]] = []
-        if isinstance(inputs.get("items"), list):
-            for item in inputs["items"]:
-                own = {k: v for k, v in item.items() if is_field(k)}
-                selected.append((str(item["id"]), {**common, **own}))
+        items = inputs.get("items") if isinstance(inputs.get("items"), list) else None
+        for key in list(inputs) + [k for item in items or [] for k in item]:
+            if flags is not None and key not in SELECT and key not in flags:
+                raise Refused(f"input {key!r} is not a flag of {command}")
+        outputs = [str(v) for k, v in inputs.items() if flags and flags.get(k, {}).get("output")]
+        common = {k: v for k, v in inputs.items() if k not in SELECT and not (flags and flags.get(k, {}).get("output"))}
+        if items is not None:
+            selected = [(str(i["id"]), {**common, **{k: v for k, v in i.items() if k != "id"}}) for i in items]
         else:
-            for obj in _selected(inputs):
-                selected.append((obj, dict(common)))
+            selected = [(obj, dict(common)) for obj in _selected(inputs)]
 
         doc = self._document(params, required=False)
         device = params.get("device")
-        if doc is None and device is None and params.get("session"):
-            docs = [d for d in self.documents.values() if d.session == params["session"]]
-            doc = docs[0] if docs else None
+        if doc is None and device is None and selected:
+            raise Refused("objects are selected but the call names no document or device")
         targets = []
         for obj, fields in selected:
             if doc is not None:
                 if obj in doc.missing:
                     raise HostError("E_NOT_FOUND", f"no object {obj!r} in {doc.id}")
                 targets.append({"key": doc.key(obj), "object": obj, "fields": fields})
-            elif device is not None:
-                targets.append({"key": f"device:{device}/{obj}", "object": obj, "fields": fields})
             else:
-                raise HostError("E_NOT_FOUND", "the call names no document or device")
+                targets.append({"key": f"device:{device}/{obj}", "object": obj, "fields": fields})
         if not selected and not outputs:
             if doc is not None:
                 targets.append({"key": doc.key(), "object": None, "fields": common})
             elif device is not None:
                 targets.append({"key": f"device:{device}", "object": None, "fields": common})
-            else:
-                raise HostError("E_NOT_FOUND", "the call names no document or device")
         return {
-            "command": command, "reg": reg, "doc": doc, "device": device, "targets": targets,
-            "outputs": outputs, "artifact": "artifact" in reg.get("effects", []),
-            "halt": bool(reg.get("halt")),
+            "command": command, "reg": reg or {}, "doc": doc, "device": device, "session": params.get("session"),
+            "targets": targets, "fields": common, "outputs": outputs,
+            "artifact": "artifact" in (reg or {}).get("effects", []), "halt": bool((reg or {}).get("halt")),
         }
 
-    def _values(self, plan: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
-        doc, obj = plan["doc"], target["object"]
+    def _store(self, plan: dict[str, Any], target: dict[str, Any], create: bool = False) -> dict[str, Any]:
+        """The stored values of a target; reads get a copy and never create anything."""
+        doc, obj = plan["doc"], target["object"] or ""
         if doc is not None:
-            if obj is None:
-                return doc.objects.setdefault("", {})
-            return doc.objects.setdefault(obj, {})
-        dev = self.devices[plan["device"]]
-        return dev.setdefault("values", {}).setdefault(obj or "", {})
+            box = doc.objects
+        else:
+            box = self.devices[plan["device"]]["values"]
+        if create:
+            return box.setdefault(obj, {})
+        return dict(box.get(obj, {}))
+
+    @staticmethod
+    def _fields(plan: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+        return target["fields"] or {"last_command": plan["command"]}
 
     def _changes(self, plan: dict[str, Any]) -> list[dict[str, Any]]:
         changes = []
         for target in plan["targets"]:
-            values = self._values(plan, target)
-            fields = target["fields"] or {"last_command": plan["command"]}
-            for name, after in fields.items():
+            values = self._store(plan, target)
+            for name, after in self._fields(plan, target).items():
                 changes.append({"target": target["key"], "field": name, "before": values.get(name), "after": after})
         for path in plan["outputs"]:
             changes.append({"target": file_key(path), "field": "exists", "before": os.path.exists(path), "after": True})
         return changes
 
     def cap_read(self, params: dict[str, Any]) -> dict[str, Any]:
-        self._gate(params)
         plan = self._plan(params)
-        objects = []
-        for target in plan["targets"]:
-            values = self._values(plan, target)
-            objects.append({"key": target["key"], "id": target["object"], **values})
-        return {"result": {"items": objects}}
+        self._gate(params, halt=plan["halt"])
+        items = [{"key": t["key"], "id": t["object"], **self._store(plan, t)} for t in plan["targets"]]
+        return {"result": {"items": items}}
 
     def cap_preview(self, params: dict[str, Any]) -> dict[str, Any]:
-        self._gate(params)
         if params["command"] == "doc save":
+            self._gate(params)
             doc = self._document(params)
             assert doc is not None
             return {
                 "action": "save",
                 "targets": [{"key": doc.key(), "kind": "document"}],
-                "changes": [{**c, "origin": "tool"} for c in doc.tool_changes],
+                "changes": [{**{k: v for k, v in c.items() if k != "operation_id"}, "origin": "tool"} for c in doc.tool_changes],
                 "external_changes": copy.deepcopy(doc.external_changes),
                 "can_apply": True,
             }
         plan = self._plan(params)
+        self._gate(params, halt=plan["halt"])
         kind = plan["reg"].get("target_kind", "object")
         targets = [{"key": t["key"], "kind": kind} for t in plan["targets"]]
         targets += [{"key": file_key(p), "kind": "file"} for p in plan["outputs"]]
@@ -528,64 +545,64 @@ class World:
         if rule is not None and rule["action"] == "job":
             job = Job(id=self._next("job"), operation_id=params["operation_id"], total=int(rule.get("steps", 3)))
             self.jobs[job.id] = job
-            self._pending_jobs[job.id] = (params, plan)
-            return {
-                "dispatch_state": "dispatched", "change": "not_applied", "delivery": "not_applicable",
-                "persistence": "unchanged", "job": {"id": job.id, "state": "running"},
-            }
+            self.pending_jobs[job.id] = (params, plan)
+            return {"dispatch_state": "dispatched", "change": "not_applied", "delivery": "not_applicable",
+                    "persistence": "unchanged", "job": {"id": job.id, "state": "running"}}
         stored = rule.get("values", {}) if rule is not None and rule["action"] == "store" else {}
         return self._do_apply(params, plan, stored)
 
     def _do_apply(self, params: dict[str, Any], plan: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
-        doc = plan["doc"]
-        changes = self._changes(plan)
-        if doc is not None:
-            doc.history.append((params["operation_id"], copy.deepcopy(doc.objects)))
-        for target in plan["targets"]:
-            values = self._values(plan, target)
-            fields = target["fields"] or {"last_command": plan["command"]}
-            for name, value in fields.items():
-                values[name] = stored.get(name, value)
-        files = []
+        doc, op = plan["doc"], params["operation_id"]
+        outputs = {}
         for path in plan["outputs"]:
-            data = json.dumps({"command": plan["command"], "inputs": params.get("inputs")}, sort_keys=True).encode()
+            outputs[path] = json.dumps({"command": plan["command"], "inputs": params.get("inputs")}, sort_keys=True).encode()
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_bytes(data)
-            files.append({"path": path, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+            Path(path).write_bytes(outputs[path])
+        changes = self._changes(plan)
+        undo = []
+        for target in plan["targets"]:
+            values = self._store(plan, target, create=True)
+            for name, value in self._fields(plan, target).items():
+                undo.append((target["object"] or "", name, values.get(name)))
+                values[name] = stored.get(name, value)
+        if not plan["targets"] and not plan["outputs"] and plan["session"]:
+            self._instance(plan["session"]).values.update(plan["fields"])
         self.applied.append({
-            "operation_id": params["operation_id"], "command": plan["command"],
+            "operation_id": op, "command": plan["command"],
             "targets": [t["key"] for t in plan["targets"]] + [file_key(p) for p in plan["outputs"]],
         })
         if plan["artifact"]:
-            return {
-                "dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
-                "persistence": "saved", "files": files,
-            }
+            files = [{"path": p, "bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()} for p, b in outputs.items()]
+            return {"dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
+                    "persistence": "saved", "files": files}
         if doc is not None:
+            doc.history.append({"operation_id": op, "undo": undo})
             doc.revision += 1
-            doc.tool_changes.extend(c for c in changes if c["field"] != "exists")
+            doc.tool_changes.extend({"operation_id": op, **c} for c in changes)
             if doc.session is None:
-                doc.write_file()
+                Path(doc.path).write_bytes(doc.content())
+                doc.tool_changes.clear()
                 return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
             doc.dirty = True
             return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged"}
-        return {"dispatch_state": "dispatched", "change": "applied", "delivery": "delivered", "persistence": "not_applicable"}
+        if plan["device"] is not None:
+            return {"dispatch_state": "dispatched", "change": "applied", "delivery": "delivered", "persistence": "not_applicable"}
+        return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged"}
 
     def cap_read_back(self, params: dict[str, Any], rule: dict[str, Any] | None = None) -> dict[str, Any]:
-        self._gate(params)
         plan = self._plan(params)
-        wanted_targets = set(params.get("targets") or [t["key"] for t in plan["targets"]] + [file_key(p) for p in plan["outputs"]])
-        wanted_fields = params.get("fields")
-        unreadable = set(rule.get("fields", [])) if rule is not None and rule["action"] == "unreadable" else set()
+        self._gate(params, halt=plan["halt"])
+        keys = [t["key"] for t in plan["targets"]] + [file_key(p) for p in plan["outputs"]]
+        wanted = set(params.get("targets") or keys)
+        unreadable = set(rule.get("fields", [])) if rule is not None else set()
         observed: dict[str, dict[str, Any]] = {}
         for target in plan["targets"]:
-            if target["key"] not in wanted_targets:
-                continue
-            values = self._values(plan, target)
-            names = wanted_fields or list(target["fields"]) or ["last_command"]
-            observed[target["key"]] = {n: values.get(n) for n in names if n not in unreadable}
+            if target["key"] in wanted:
+                values = self._store(plan, target)
+                names = params.get("fields") or list(self._fields(plan, target))
+                observed[target["key"]] = {n: values.get(n) for n in names if n not in unreadable}
         for path in plan["outputs"]:
-            if file_key(path) in wanted_targets:
+            if file_key(path) in wanted:
                 observed[file_key(path)] = {"exists": os.path.exists(path)}
         result: dict[str, Any] = {"observed": observed}
         if unreadable:
@@ -603,9 +620,11 @@ class World:
         return {"items": items, "complete": True}
 
     def cap_open_session(self, params: dict[str, Any]) -> dict[str, Any]:
+        if params.get("path") and not Path(params["path"]).is_file():
+            raise HostError("E_NOT_FOUND", f"no file {params['path']}")
         inst = self._add_instance(None, owned=True)
         if params.get("path"):
-            self._add_document({"id": self._next("doc"), "name": Path(params["path"]).name}, inst.id)
+            self._add_document({"path": params["path"]}, inst.id)
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "not_applicable", "session": self._session_view(inst)}
 
@@ -646,15 +665,14 @@ class World:
         if params.get("session"):
             self._gate(params)
             docs = [d for d in self.documents.values() if d.session == params["session"]]
-        elif params.get("path"):
-            docs = [d for d in self.documents.values() if d.session is None and d.path and d.path.startswith(params["path"])]
         else:
-            docs = [d for d in self.documents.values() if d.session is None]
+            prefix = params.get("path", "")
+            docs = [d for d in self.documents.values() if d.session is None and (d.path or "").startswith(prefix)]
         return {"items": [d.view() for d in docs]}
 
     def cap_create_doc(self, params: dict[str, Any]) -> dict[str, Any]:
         self._gate(params)
-        doc = self._add_document({"id": self._next("doc"), "untitled": True}, params["session"])
+        doc = self._add_document({"untitled": True}, params["session"])
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "unchanged", "document": doc.view()}
 
@@ -663,12 +681,11 @@ class World:
         path = Path(params["path"])
         if not path.is_file():
             raise HostError("E_NOT_FOUND", f"no file {params['path']}")
-        doc = Document(id=self._next("doc"), path=str(path), session=params["session"])
         try:
-            doc.objects = json.loads(path.read_text(encoding="utf-8")).get("objects", {})
-        except (ValueError, OSError) as exc:
+            objects = json.loads(path.read_text(encoding="utf-8")).get("objects", {})
+        except ValueError as exc:
             raise HostError("E_VALIDATION", f"cannot read {path}", native_message=str(exc)) from exc
-        self.documents[doc.id] = doc
+        doc = self._add_document({"path": str(path), "objects": objects}, params["session"])
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "unchanged", "document": doc.view()}
 
@@ -678,11 +695,8 @@ class World:
         assert doc is not None
         if doc.path is None:
             raise HostError("E_VALIDATION", "an untitled document needs save-as")
-        doc.write_file()
-        doc.dirty, doc.disk = False, "in_sync"
-        doc.revision += 1
-        doc.tool_changes.clear()
-        doc.external_changes.clear()
+        Path(doc.path).write_bytes(doc.content())
+        doc.saved()
         self.applied.append({"operation_id": params["operation_id"], "command": "doc save", "targets": [doc.key()]})
         return {"dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
                 "persistence": "saved", "document": doc.view()}
@@ -694,11 +708,10 @@ class World:
         path = Path(params["path"])
         if path.exists() and not params.get("overwrite"):
             raise HostError("E_VALIDATION", f"{path} exists")
+        data = doc.content()
+        path.write_bytes(data)
         doc.path, doc.untitled = str(path), 0
-        doc.write_file()
-        data = path.read_bytes()
-        doc.dirty, doc.disk = False, "in_sync"
-        doc.revision += 1
+        doc.saved()
         self.applied.append({"operation_id": params["operation_id"], "command": "doc save-as", "targets": [doc.key()]})
         return {"dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
                 "persistence": "saved", "document": doc.view(),
@@ -714,12 +727,20 @@ class World:
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "not_applicable"}
 
     def cap_undo(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Undo the tool's most recent change: only its fields go back; a person's edits stay."""
         self._gate(params)
         doc = self._document(params)
         assert doc is not None
         if not doc.history:
             raise HostError("E_NATIVE_FAILURE", "nothing to undo")
-        _, doc.objects = doc.history.pop()
+        last = doc.history.pop()
+        for obj, name, before in reversed(last["undo"]):
+            values = doc.objects.setdefault(obj, {})
+            if before is None:
+                values.pop(name, None)
+            else:
+                values[name] = before
+        doc.tool_changes = [c for c in doc.tool_changes if c["operation_id"] != last["operation_id"]]
         doc.revision += 1
         doc.dirty = True
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
@@ -734,19 +755,17 @@ class World:
                 job.polls_after_cancel += 1
                 if job.polls_after_cancel >= 2:
                     job.state = "cancelled"
+                    job.facts = {"change": "not_applied", "delivery": "not_applicable", "persistence": "unchanged"}
             else:
                 job.done += 1
                 if job.done >= job.total:
-                    params_plan = self._pending_jobs.pop(job.id)
-                    facts = self._do_apply(*params_plan, {})
+                    facts = self._do_apply(*self.pending_jobs.pop(job.id), {})
                     job.state = "completed"
-                    return {"state": "completed", "progress": {"done": job.total, "total": job.total, "unit": "steps"},
-                            **{k: facts[k] for k in ("change", "delivery", "persistence")}}
+                    job.facts = {k: v for k, v in facts.items() if k in ("change", "delivery", "persistence", "files")}
         out: dict[str, Any] = {"state": job.state, "progress": {"done": job.done, "total": job.total, "unit": "steps"}}
         if job.state == "blocked":
             out["action"] = job.action or "dismiss_dialog"
-        if job.state == "cancelled":
-            out.update({"change": "not_applied", "delivery": "not_applicable", "persistence": "unchanged"})
+        out.update(job.facts)
         return out
 
     def cap_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -773,8 +792,10 @@ class World:
 
     def add_session(self, session: str | None = None) -> str:
         with self.lock:
+            if session in self.instances:
+                raise ValueError(f"instance {session} exists")
             inst = self._add_instance(session, owned=False)
-            self._add_document({"id": self._next("doc")}, inst.id)
+            self._add_document({}, inst.id)
             return inst.id
 
     def set_device(self, device: str, state: str) -> None:
@@ -816,6 +837,19 @@ class World:
                 self.protocol_version = protocol_version
             if plugin:
                 self.plugin.update(plugin)
+
+
+def _required_keys(adapter: dict[str, Any]) -> dict[str, list[str]]:
+    """The keys each adapter request requires, from adapter.schema.json."""
+    defs = adapter["$defs"]
+    out = {}
+    for name, sub in defs["requests"]["properties"].items():
+        keys = set(sub.get("required", []))
+        ref = sub.get("$ref", "")
+        if ref.startswith("#/$defs/"):
+            keys |= set(defs[ref.rsplit("/", 1)[-1]].get("required", []))
+        out[name] = sorted(keys)
+    return out
 
 
 def _selected(inputs: dict[str, Any]) -> list[str]:

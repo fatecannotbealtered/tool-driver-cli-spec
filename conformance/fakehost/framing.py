@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from typing import Any, Callable
 
 HEADER = re.compile(rb"Content-Length: ([0-9]{1,9})\r\n\r\n")
@@ -39,6 +40,7 @@ class Channel:
         self._close = close
         self._settimeout = settimeout
         self._buffer = b""
+        self._close_lock = threading.Lock()
         self.closed = False
 
     def settimeout(self, seconds: float | None) -> None:
@@ -84,6 +86,8 @@ class Channel:
         self._send(b"Content-Length: %d\r\n\r\n" % len(body) + body)
 
     def close(self) -> None:
-        if not self.closed:
+        with self._close_lock:
+            if self.closed:
+                return
             self.closed = True
-            self._close()
+        self._close()

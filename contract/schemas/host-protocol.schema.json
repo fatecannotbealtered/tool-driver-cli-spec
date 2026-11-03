@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/host-protocol.schema.json",
   "title": "Host protocol",
-  "description": "Discovery files and JSON-RPC 2.0 messages between the CLI and a host component (DCLI-270 to DCLI-281). Each message is framed by a Content-Length header. Every message is a request from the CLI or the reply to it; there are no notifications. A method's params are the adapter request of the same capability plus deadline_ms, and its result is the adapter result (adapter.schema.json).",
+  "description": "Discovery files and JSON-RPC 2.0 messages between the CLI and a host component (DCLI-270 to DCLI-281). The fake host's own address (DVER-023) uses the same framing and also answers the CLI-side capabilities, which this schema leaves out because a host component never receives them. Each message is framed by a Content-Length header. Every message is a request from the CLI or the reply to it; there are no notifications. A method's params are the adapter request of the same capability plus deadline_ms, and its result is the adapter result (adapter.schema.json).",
   "anyOf": [
     {"$ref": "#/$defs/discovery_file"},
     {"$ref": "#/$defs/request"},

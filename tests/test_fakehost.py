@@ -107,6 +107,7 @@ class HostTestCase(unittest.TestCase):
         self.state_dir = Path(self.tmp.name) / "state"
         self.host = FakeHost(self.state_dir, self.config, COMMANDS, workdir=self.tmp.name).start()
         self.addCleanup(self.host.stop)
+        self.addCleanup(lambda: self.assertEqual(self.host.world.internal_errors, []))
 
     def client(self, address: str | None = None, **kwargs) -> Client:
         client = Client(address or self.host.address, **kwargs)
@@ -285,13 +286,83 @@ class MainAddressTest(HostTestCase):
         raw.channel.read_message()
         violations = self.state()["violations"]
         self.assertTrue(any("before hello" in v for v in violations), violations)
-        self.assertTrue(any("without operation_id" in v for v in violations), violations)
+        self.assertTrue(any("missing operation_id" in v for v in violations), violations)
         self.assertTrue(any("deadline_ms" in v for v in violations), violations)
 
     def test_restart_raises_the_generation(self):
         c = self.client()
         c.control("restart_session", session="fake-1")
         self.assertEqual(c.call("sessions")["items"][0]["generation"], 1)
+
+    def test_new_ids_never_reuse_existing_ones(self):
+        c = self.client()
+        added = c.control("add_session")["session"]
+        opened = self.valid("open_session", c.call("open_session", {"operation_id": "op_1"}))["session"]
+        created = self.valid("create_doc", c.call("create_doc", {"session": "fake-1", "operation_id": "op_2"}))["document"]
+        sessions = {s["id"]: s for s in c.call("sessions")["items"]}
+        self.assertEqual(len(sessions), 3)
+        self.assertFalse(sessions["fake-1"]["owned"])
+        self.assertTrue(sessions[opened["id"]]["owned"])
+        self.assertNotIn(added, ("fake-1", opened["id"]))
+        self.assertEqual({d["id"] for d in sessions["fake-1"]["documents"]}, {"doc-1", created["id"]})
+
+    def test_reads_change_nothing(self):
+        c = self.client()
+        c.call("preview", MOVE)
+        c.call("read", MOVE)
+        c.call("read_back", {**MOVE, "operation_id": "op_1"})
+        c.call("preview", {"command": "axis move", "inputs": {"id": "x", "position_mm": 1.0}, "device": "dev-1"})
+        state = self.state()
+        self.assertEqual(next(d for d in state["documents"] if d["id"] == "doc-1")["objects"], {})
+        self.assertEqual(state["devices"][0]["values"], {})
+        self.assertEqual(state["applied"], [])
+
+    def test_objects_of_an_untitled_document_have_their_own_keys(self):
+        c = self.client()
+        doc = c.call("create_doc", {"session": "fake-1", "operation_id": "op_1"})["document"]["id"]
+        call = {"command": "footprint move", "session": "fake-1", "document": doc}
+        preview = self.valid("preview", c.call("preview", {**call, "inputs": {"ids": ["R1", "R2"], "x_mm": 1.0}}))
+        self.assertEqual(sorted({ch["target"] for ch in preview["changes"]}), ["untitled:fake-1/1#/R1", "untitled:fake-1/1#/R2"])
+
+    def test_halt_previews_on_a_busy_device(self):
+        c = self.client()
+        c.control("set_device", device="dev-1", state="busy")
+        self.valid("preview", c.call("preview", {"command": "stop", "inputs": {}, "device": "dev-1"}))
+
+    def test_undo_and_save_as_keep_the_record_honest(self):
+        c = self.client()
+        c.call("apply", {**MOVE, "operation_id": "op_1"})
+        c.control("edit", document="doc-1", object="C3", field="value", value="10nF")
+        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_2"})
+        objects = next(d for d in self.state()["documents"] if d["id"] == "doc-1")["objects"]
+        self.assertEqual((objects["R1"], objects["C3"]), ({}, {"value": "10nF"}))
+        save = {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"}
+        preview = c.call("preview", save)
+        self.assertEqual((preview["changes"], len(preview["external_changes"])), ([], 1))
+        target = str(Path(self.tmp.name) / "copy.fake")
+        saved = self.valid("save_doc_as", c.call("save_doc_as", {"session": "fake-1", "document": "doc-1", "path": target, "operation_id": "op_3"}))
+        self.assertFalse(saved["document"]["dirty"])
+        preview = c.call("preview", save)
+        self.assertEqual((preview["changes"], preview["external_changes"]), ([], []))
+
+    def test_a_finished_job_keeps_its_facts(self):
+        c = self.client()
+        c.control("fault", rule={"method": "apply", "action": "job", "steps": 1})
+        job = c.call("apply", {**MOVE, "operation_id": "op_1"})["job"]["id"]
+        first, second = c.call("job_status", {"job": job}), c.call("job_status", {"job": job})
+        self.assertEqual(first, second)
+        self.assertEqual((first["state"], first["change"]), ("completed", "applied"))
+
+    def test_unregistered_inputs_and_commands_are_refused(self):
+        c = self.client()
+        for call in ({**MOVE, "inputs": {"id": "R1", "x": 1.0}}, {**MOVE, "command": "footprint teleport"}):
+            with self.subTest(call=call):
+                with self.assertRaises(HostCallError) as ctx:
+                    c.call("preview", call)
+                self.assertEqual(ctx.exception.code, "E_VALIDATION")
+        self.assertEqual(len(self.state()["violations"]), 2)
+        with self.assertRaises(HostCallError):
+            c.control("fault", rule={"method": "apply", "action": "error", "error": {"code": "E_CONFLICT"}})
 
 
 class HostComponentTest(HostTestCase):
@@ -340,8 +411,53 @@ class HostComponentTest(HostTestCase):
 
     def test_protocol_major_mismatch(self):
         self.client().control("configure", protocol_version="2.0.0")
+        self.assertEqual(self.discovery()["protocol_version"], "2.0.0")
         with self.assertRaises(ProtocolMismatch):
             Client(self.discovery()["address"]).connect()
+
+    def test_concurrent_calls_while_instances_restart(self):
+        import threading
+
+        failures: list[str] = []
+
+        def reader() -> None:
+            try:
+                with Client(self.host.address) as c:
+                    for _ in range(20):
+                        c.call("sessions")
+            except Exception as exc:  # noqa: BLE001
+                failures.append(repr(exc))
+
+        threads = [threading.Thread(target=reader) for _ in range(6)]
+        for thread in threads:
+            thread.start()
+        control = self.client()
+        for _ in range(10):
+            control.control("restart_session", session="fake-1")
+        for thread in threads:
+            thread.join(timeout=30)
+        self.assertEqual(failures, [])
+        self.assertEqual(self.client(self.discovery()["address"]).hello["session"]["generation"], 10)
+
+    def test_instance_side_calls_belong_on_the_instance(self):
+        c = self.client()
+        c.call("preview", MOVE)
+        self.assertTrue(any("main address" in v for v in self.state()["violations"]))
+
+    def test_requests_on_a_hanging_connection_are_recorded(self):
+        self.client().control("fault", rule={"method": "preview", "action": "hang"})
+        c = self.client(self.discovery()["address"])
+        c.channel.write_message({"jsonrpc": "2.0", "id": 7, "method": "preview", "params": {**MOVE, "deadline_ms": 100}})
+        c.channel.write_message({"jsonrpc": "2.0", "id": 8, "method": "read", "params": {**MOVE, "deadline_ms": 100}})
+        time.sleep(0.3)
+        c.close()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            outcomes = [x["outcome"] for x in self.state()["calls"] if x["method"] in ("preview", "read")]
+            if outcomes == ["hang", "ignored"]:
+                break
+            time.sleep(0.05)
+        self.assertEqual(outcomes, ["hang", "ignored"])
 
 
 class ProcessTest(unittest.TestCase):
