@@ -80,7 +80,7 @@ Command behavior, security, Skills and verification have their own clauses. This
 
 ### DREPO-001 Project layout
 
-The tree below shows a typical tool project. It illustrates the layout and is not itself the rule: the required files and paths are those of DREPO-002 and DREPO-004, and other clauses add paths inside them, such as `tests/simulation/` (DVER-023) and `tests/matrix/` (DVER-030). The example shows a Python tool; a tool built with another build system replaces `pyproject.toml` with its own build configuration.
+The tree below shows a typical tool project. It illustrates the layout and is not itself the rule: the required files and paths are those of DREPO-002 and DREPO-004, and other clauses add paths inside them, such as `tests/matrix/` (DVER-030). The example shows a Python tool; a tool built with another build system replaces `pyproject.toml` with its own build configuration.
 
 ```
 <tool>/
@@ -114,7 +114,6 @@ The tree below shows a typical tool project. It illustrates the layout and is no
 │   └── evidence/                   live records and eval reports (JSON)
 ├── scripts/                        build, npm platform packages, smoke test, checks
 ├── tests/                          the tool's tests and conformance runs
-│   ├── simulation/                 command simulations for the fake host
 │   ├── matrix/                     behavior matrices, one JSON file per command
 │   └── eval/                       evaluation questions (required before a command is marked stable)
 └── .github/                        workflows ci.yml and release.yml, issue and pull request templates
@@ -183,9 +182,8 @@ Every tool project MUST have these paths. This table and the conditional paths b
 | `docs/E2E_zh.md` | The Chinese live acceptance document |
 | `docs/evidence/` | Live records and eval reports (DVER-042, DSKL-043) |
 | `scripts/` | Build, packaging, smoke test and check scripts |
-| `tests/` | The tool's tests, including the conformance runs, the command simulations and the behavior matrices (DVER-023, DVER-030) |
+| `tests/` | The tool's tests, including the conformance runs and the behavior matrices (DVER-001, DVER-030) |
 | `tests/matrix/` | One behavior matrix per command (DVER-030) |
-| `tests/simulation/` | One command simulation per domain command (DVER-023) |
 | `.github/workflows/ci.yml` | The merge gate (DREPO-041) |
 | `.github/workflows/release.yml` | The release workflow, run only by a tag (DREPO-043) |
 
@@ -306,8 +304,8 @@ Check: 🤖 `check_project` checks the sections, compares the five fixed section
 | `Commands` | The commands developers run to build, test and check the tool |
 | `Branch and Commit Convention` | How branches are named and commit messages are written |
 | `CI Checks` | The merge gate (DREPO-041) and how to run it locally |
-| `Tests and Evidence` | Conformance tests, command simulations, behavior matrices, live records, eval reports, and how evidence sets maturity (DVER-001, DVER-023, DVER-030, DVER-040) |
-| `Adding or Changing a Command` | Registration with effects, units, target type and capability IDs (DCLI-029, DREPO-061), the simulation and the behavior matrix, whose `normal` row is the write sample (DVER-002, DVER-023, DVER-030), the Skill and the CHANGELOG entry |
+| `Tests and Evidence` | Conformance tests, behavior matrices, live records, eval reports, and how evidence sets maturity (DVER-001, DVER-030, DVER-040) |
+| `Adding or Changing a Command` | Registration with effects, units, target type and capability IDs (DCLI-029, DREPO-061), the behavior matrix, whose `normal` row is the write sample (DVER-002, DVER-030), the Skill and the CHANGELOG entry |
 | `Pull Requests` | What a pull request contains and how it is reviewed |
 | `Security` | Where to report vulnerabilities instead of opening a public issue (`SECURITY.md`) |
 
@@ -353,8 +351,8 @@ A tool without a host component MUST keep Client and Host and Host Component Ver
 | Application version | Operating system | Mode | Status |
 |---|---|---|---|
 | 10.0 | Windows | session | ✅ verified |
-| 10.0 | Linux | session | 🧪 simulated |
-| 9.0 | macOS | file | ⏳ untested |
+| 10.0 | Linux | session | ⏳ untested |
+| 9.0 | macOS | file | ⛔ unsupported |
 
 Why: A person sees at a glance where the tool works and how sure that is, before installing it. A matrix generated from the records cannot claim more than they show.
 Check: 🤖 `check_project` checks the sections, regenerates the support matrix and compares.
@@ -436,7 +434,7 @@ A badge row for a tool that drives KiCad 10.0 in file and session mode looks lik
 ![mode](https://img.shields.io/badge/mode-file_·_session-0e8a16)
 ![platform](https://img.shields.io/badge/platform-Windows_·_macOS_·_Linux-555555)
 ![risk](https://img.shields.io/badge/risk-T1-d29922)
-![maturity](https://img.shields.io/badge/maturity-experimental-8957e5)
+![maturity](https://img.shields.io/badge/maturity-verified-8957e5)
 ![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.0-0969da)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ```
@@ -469,11 +467,10 @@ Each row of the support matrix (DREPO-016) MUST carry exactly one of these label
 | Label | Mark | Meaning | Evidence needed |
 |---|---|---|---|
 | `verified` | ✅ | Tested on the real application | A current live record for this application version, operating system and mode (DVER-042, DVER-043) |
-| `simulated` | 🧪 | Tested only with the fake host | Both conformance suites and the behavior matrices pass on this operating system (DVER-021) |
-| `untested` | ⏳ | Not tested yet | None |
+| `untested` | ⏳ | Not tested on the real application yet | None |
 | `unsupported` | ⛔ | The tool does not support this combination | None |
 
-Why: Four marks that mean the same thing in every tool let a person read any support matrix without a legend.
+Why: Three marks that mean the same thing in every tool let a person read any support matrix without a legend.
 Check: 🤖 `check_project` checks every label and its evidence.
 
 ### DREPO-023 No overstatement
@@ -482,7 +479,7 @@ Badges, the info card and compatibility labels MUST NOT claim more than the data
 
 - The badge row, the info card and the support matrix MUST be generated from the sources named in DREPO-016, DREPO-020 and DREPO-021, never typed by hand.
 - The maturity badge MUST equal the level derived from `reference`.
-- ✅ verified MUST rest on a current live record (DVER-043). A row backed only by the fake host is 🧪 simulated at most (DVER-021).
+- ✅ verified MUST rest on a current live record (DVER-043). A row backed only by the fake host is ⏳ untested (DVER-021).
 - A platform MUST appear as supported only when it was delivered: `package.json` lists a platform package for it, and the release workflow published that package only after its platform delivery passed (DREPO-042, DREPO-043). This holds everywhere: in the badge row, the info card, `docs/COMPATIBILITY.md` and the release notes.
 
 Why: Not run is not passed and simulated is not real; a label that claims more than its evidence misleads exactly the person who trusts it.
@@ -555,7 +552,6 @@ Every change MUST pass these checks before it merges. The release workflow runs 
 | Lint | The tool's code style rules |
 | Unit tests | The tool's own tests |
 | Conformance suites | Both suites (DVER-001), on every shipped platform |
-| Behavior matrices | Every row that applies in every behavior matrix, run on the fake host with the command simulations (DVER-030), on every shipped platform |
 | Project check | `check_project`: layout, documents, labels, pinned copies and capability tracing |
 | Output size check | Every envelope stays within the size limits (DCLI-008); general conformance test R04 performs it |
 | npm package content check | Each package holds only what DREPO-051 allows, with no install scripts (DSEC-072) |
@@ -676,7 +672,7 @@ A new tool is usually built by an AI Agent. It SHOULD follow these eight steps, 
 | 3 Generate the project | Generate the project from the template; `check_project` passes right away |
 | 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024) and the registration fields (DCLI-029), each with effects, units, target type and capability IDs (DREPO-061) |
 | 5 Implement the adapter | Implement only the adapter capabilities the chosen modes need (DCLI-260); put each in the adapter layer or the host component (DCLI-262) |
-| 6 Test | Write a simulation and a behavior matrix for each domain command (DVER-023, DVER-030) and run them with both conformance suites on the fake host (DVER-001); then run the matrices on the real application, on authorized targets (DVER-031, DVER-050) |
+| 6 Test | Run both conformance suites on the fake host (DVER-001); write a behavior matrix for each domain command (DVER-030) and run it on the real application, on authorized targets (DVER-031, DVER-050) |
 | 7 Write Skills and knowledge | Decide whether to split the Skills (DSKL-020, DSKL-021); add playbooks to the template's fixed sections (DSKL-009); turn the survey's operating notes, limits and troubleshooting into knowledge entries (DSKL-126); run the evaluation before marking a command stable (DSKL-043) |
 | 8 Publish | Build platform packages for the platforms and CPU architectures DREPO-052 calls for, run platform delivery (DREPO-042) and publish to npm with provenance (DREPO-043) |
 

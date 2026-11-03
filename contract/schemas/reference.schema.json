@@ -72,7 +72,7 @@
         }
       ]
     },
-    "evidence_ref": {"type": "string", "pattern": "^(simulated|live|eval):[^#\\s]+(#\\S+)?$"},
+    "evidence_ref": {"type": "string", "pattern": "^(live|eval):[^#\\s]+(#\\S+)?$"},
     "coordinate_system": {
       "description": "The origin, axis directions and unit of coordinate values, as the application defines them.",
       "type": "string",
@@ -121,7 +121,7 @@
             }
           }
         },
-        "maturity": {"enum": ["draft", "experimental", "verified", "stable"]},
+        "maturity": {"enum": ["draft", "verified", "stable"]},
         "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
         "modes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mode"}},
         "capabilities": {"type": "array", "items": {"type": "string"}},

@@ -812,8 +812,7 @@
       {"id": "R02", "title": "command tree rules"},
       {"id": "R03", "title": "unknown command, flag or argument"},
       {"id": "R04", "title": "every envelope is valid"},
-      {"id": "R05", "title": "context, doctor and operation list on empty state"},
-      {"id": "R06", "title": "every command exercised by tool tests"}
+      {"id": "R05", "title": "context, doctor and operation list on empty state"}
     ],
     "driver": [
       {"id": "D01", "title": "several instances without --session", "applies_when": ["session"]},
@@ -859,19 +858,13 @@
   ],
   "maturity_levels": [
     {"level": "draft", "evidence": []},
-    {"level": "experimental", "evidence": ["simulated"]},
-    {"level": "verified", "evidence": ["simulated", "live"]},
-    {"level": "stable", "evidence": ["simulated", "live", "eval"]}
+    {"level": "verified", "evidence": ["live"]},
+    {"level": "stable", "evidence": ["live", "eval"]}
   ],
-  "evidence_kinds": ["simulated", "live", "eval"],
+  "evidence_kinds": ["live", "eval"],
   "evidence_ref_format": "<kind>:<path>[#<anchor>]",
   "badges": ["agent_native", "ci", "npm", "drives", "mode", "platform", "risk", "maturity", "spec", "license"],
-  "compatibility_labels": [
-    {"label": "verified", "emoji": "✅"},
-    {"label": "simulated", "emoji": "🧪"},
-    {"label": "untested", "emoji": "⏳"},
-    {"label": "unsupported", "emoji": "⛔"}
-  ],
+  "compatibility_labels": [{"label": "verified", "emoji": "✅"}, {"label": "untested", "emoji": "⏳"}, {"label": "unsupported", "emoji": "⛔"}],
   "check_labels": [{"label": "auto", "emoji": "🤖"}, {"label": "review", "emoji": "👀"}],
   "platforms": ["windows", "macos", "linux"],
   "project": {
@@ -908,7 +901,6 @@
       "scripts/",
       "tests/",
       "tests/matrix/",
-      "tests/simulation/",
       ".github/workflows/ci.yml",
       ".github/workflows/release.yml"
     ],

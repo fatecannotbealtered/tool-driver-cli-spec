@@ -23,7 +23,7 @@
       "actual": {
         "exit": 0
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#normal"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#normal"
     },
     {
       "row": "empty",
@@ -48,7 +48,7 @@
         "exit": 2,
         "code": "E_USAGE"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#empty"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#empty"
     },
     {
       "row": "invalid_input",
@@ -74,7 +74,7 @@
         "exit": 2,
         "code": "E_USAGE"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#invalid_input"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#invalid_input"
     },
     {
       "row": "not_found",
@@ -99,7 +99,7 @@
         "exit": 3,
         "code": "E_NOT_FOUND"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#not_found"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#not_found"
     },
     {
       "row": "ambiguous",
@@ -121,7 +121,7 @@
         "exit": 2,
         "code": "E_AMBIGUOUS"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#ambiguous"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#ambiguous"
     },
     {
       "row": "conflict",
@@ -147,7 +147,7 @@
         "exit": 6,
         "code": "E_CONFLICT"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#conflict"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#conflict"
     },
     {
       "row": "no_scope",
@@ -172,7 +172,7 @@
         "exit": 4,
         "code": "E_FORBIDDEN"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#no_scope"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#no_scope"
     },
     {
       "row": "busy",
@@ -197,7 +197,7 @@
         "exit": 7,
         "code": "E_BUSY"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#busy"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#busy"
     },
     {
       "row": "dialog",
@@ -243,7 +243,7 @@
         "exit": 8,
         "code": "E_OUTCOME_UNKNOWN"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#disconnect"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#disconnect"
     },
     {
       "row": "unsaved",
@@ -273,7 +273,7 @@
         "exit": 1,
         "code": "E_VERIFY_FAILED"
       },
-      "evidence": "simulated:tests/matrix/footprint-move.json#read_back_mismatch"
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#read_back_mismatch"
     }
   ]
 }

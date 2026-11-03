@@ -80,7 +80,7 @@
 
 ### DREPO-001 项目布局
 
-下面的目录树是一个典型的工具项目。它只是示意，本身不是规则：必需的文件和路径以 DREPO-002 和 DREPO-004 为准，其他条款还会在其中加入路径，如 `tests/simulation/`（DVER-023）和 `tests/matrix/`（DVER-030）。示例是 Python 工具；用其他构建系统的工具，把 `pyproject.toml` 换成自己的构建配置。
+下面的目录树是一个典型的工具项目。它只是示意，本身不是规则：必需的文件和路径以 DREPO-002 和 DREPO-004 为准，其他条款还会在其中加入路径，如 `tests/matrix/`（DVER-030）。示例是 Python 工具；用其他构建系统的工具，把 `pyproject.toml` 换成自己的构建配置。
 
 ```
 <tool>/
@@ -114,7 +114,6 @@
 │   └── evidence/                   真实软件记录和评测报告（JSON）
 ├── scripts/                        构建、打 npm 平台包、冒烟测试、检查脚本
 ├── tests/                          工具的测试和一致性测试的运行
-│   ├── simulation/                 供模拟宿主使用的命令模拟
 │   ├── matrix/                     行为矩阵，每条命令一个 JSON 文件
 │   └── eval/                       评测题（命令要标 stable 时必需）
 └── .github/                        工作流 ci.yml 和 release.yml、Issue 与 PR 模板
@@ -183,9 +182,8 @@
 | `docs/E2E_zh.md` | 中文真实软件验收文档 |
 | `docs/evidence/` | 真实软件记录和评测报告（DVER-042、DSKL-043） |
 | `scripts/` | 构建、打包、冒烟测试和检查脚本 |
-| `tests/` | 工具的测试，包括一致性测试的运行、命令模拟和行为矩阵（DVER-023、DVER-030） |
+| `tests/` | 工具的测试，包括一致性测试的运行和行为矩阵（DVER-001、DVER-030） |
 | `tests/matrix/` | 每条命令一份行为矩阵（DVER-030） |
-| `tests/simulation/` | 每条领域命令一个命令模拟（DVER-023） |
 | `.github/workflows/ci.yml` | 合并门槛（DREPO-041） |
 | `.github/workflows/release.yml` | 发布工作流，只由标签触发（DREPO-043） |
 
@@ -306,8 +304,8 @@ README 必须以标题区开头，依次是：写着工具名称的 `#` 标题�
 | `Commands` 常用命令 | 开发者构建、测试和检查工具时运行的命令 |
 | `Branch and Commit Convention` 分支与提交约定 | 分支怎样命名、提交信息怎样写 |
 | `CI Checks` CI 检查 | 合并门槛（DREPO-041），以及怎样在本地运行 |
-| `Tests and Evidence` 测试与证据 | 一致性测试、命令模拟、行为矩阵、真实软件记录、评测报告，以及证据怎样决定成熟度（DVER-001、DVER-023、DVER-030、DVER-040） |
-| `Adding or Changing a Command` 新增或修改命令 | 登记时写明效果、单位、目标类型和能力编号（DCLI-029、DREPO-061）；命令模拟和行为矩阵，矩阵的 `normal` 行就是写命令样例（DVER-002、DVER-023、DVER-030）；以及 Skill 和 CHANGELOG 条目 |
+| `Tests and Evidence` 测试与证据 | 一致性测试、行为矩阵、真实软件记录、评测报告，以及证据怎样决定成熟度（DVER-001、DVER-030、DVER-040） |
+| `Adding or Changing a Command` 新增或修改命令 | 登记时写明效果、单位、目标类型和能力编号（DCLI-029、DREPO-061）；行为矩阵，矩阵的 `normal` 行就是写命令样例（DVER-002、DVER-030）；以及 Skill 和 CHANGELOG 条目 |
 | `Pull Requests` 合并请求 | 合并请求包含什么、怎样评审 |
 | `Security` 安全 | 漏洞按 `SECURITY.md` 报告，不开公开的 Issue |
 
@@ -353,8 +351,8 @@ README 必须以标题区开头，依次是：写着工具名称的 `#` 标题�
 | 软件版本 | 操作系统 | 模式 | 状态 |
 |---|---|---|---|
 | 10.0 | Windows | session | ✅ verified |
-| 10.0 | Linux | session | 🧪 simulated |
-| 9.0 | macOS | file | ⏳ untested |
+| 10.0 | Linux | session | ⏳ untested |
+| 9.0 | macOS | file | ⛔ unsupported |
 
 为什么：人在安装之前，一眼就能看出工具在哪里能用、有多大把握。由记录生成的矩阵，不会说得比记录多。
 检查：🤖 `check_project` 检查章节，重新生成支持矩阵并比对。
@@ -436,7 +434,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 ![mode](https://img.shields.io/badge/mode-file_·_session-0e8a16)
 ![platform](https://img.shields.io/badge/platform-Windows_·_macOS_·_Linux-555555)
 ![risk](https://img.shields.io/badge/risk-T1-d29922)
-![maturity](https://img.shields.io/badge/maturity-experimental-8957e5)
+![maturity](https://img.shields.io/badge/maturity-verified-8957e5)
 ![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.0-0969da)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ```
@@ -469,11 +467,10 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 | 标签 | 标记 | 含义 | 需要的证据 |
 |---|---|---|---|
 | `verified` | ✅ | 在真实软件上测过 | 这个软件版本、操作系统和模式下当前有效的真实软件记录（DVER-042、DVER-043） |
-| `simulated` | 🧪 | 只在模拟宿主上测过 | 两组一致性测试和各行为矩阵在这个操作系统上通过（DVER-021） |
-| `untested` | ⏳ | 还没测 | 无 |
+| `untested` | ⏳ | 还没在真实软件上测过 | 无 |
 | `unsupported` | ⛔ | 工具不支持这种组合 | 无 |
 
-为什么：四个标记在每个工具里含义都一样，人读任何一张支持矩阵都不用看图例。
+为什么：三个标记在每个工具里含义都一样，人读任何一张支持矩阵都不用看图例。
 检查：🤖 `check_project` 检查每个标签及其证据。
 
 ### DREPO-023 不虚标
@@ -482,7 +479,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 
 - 徽章行、信息卡和支持矩阵必须从 DREPO-016、DREPO-020 和 DREPO-021 写明的来源生成，禁止手写。
 - 成熟度徽章必须等于从 `reference` 得出的等级。
-- ✅ verified 必须有当前有效的真实软件记录作依据（DVER-043）。只有模拟宿主结果支撑的行，最多标 🧪 simulated（DVER-021）。
+- ✅ verified 必须有当前有效的真实软件记录作依据（DVER-043）。只有模拟宿主结果支撑的行，标 ⏳ untested（DVER-021）。
 - 只有交付过的平台才可以写成支持：`package.json` 为它列出了平台包，而且发布工作流在这个包通过平台交付之后才发布了它（DREPO-042、DREPO-043）。这一点处处适用：徽章行、信息卡、`docs/COMPATIBILITY.md` 和发布说明都一样。
 
 为什么：没运行不等于通过，模拟不等于真实；标签说得比证据多，误导的正是相信它的人。
@@ -555,7 +552,6 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 | Lint | 工具的代码风格规则 |
 | 单元测试 | 工具自己的测试 |
 | 一致性测试 | 两组测试（DVER-001），在每个出包平台上运行 |
-| 行为矩阵 | 每张行为矩阵里每一个适用的行，在模拟宿主上配合命令模拟运行（DVER-030），在每个出包平台上运行 |
 | 项目检查 | `check_project`：布局、文档、标签、固定副本和能力对应 |
 | 输出大小检查 | 每个信封都不超过大小上限（DCLI-008）；由通用一致性测试 R04 完成 |
 | npm 包内容检查 | 每个包只含 DREPO-051 允许的内容，没有安装脚本（DSEC-072） |
@@ -676,7 +672,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 | 3 生成项目 | 用模板生成项目；`check_project` 立即就能通过 |
 | 4 登记命令 | 按命名规则（DCLI-020 至 DCLI-024）和登记字段（DCLI-029）登记领域命令，每条写明效果、单位、目标类型和能力编号（DREPO-061） |
 | 5 实现适配层 | 只实现所选模式需要的适配能力（DCLI-260）；每项能力决定放在适配层还是宿主组件里（DCLI-262） |
-| 6 测试 | 为每个领域命令写命令模拟和行为矩阵（DVER-023、DVER-030），在模拟宿主上连同两组一致性测试一起运行（DVER-001）；再在授权目标上用真实软件跑行为矩阵（DVER-031、DVER-050） |
+| 6 测试 | 在模拟宿主上运行两组一致性测试（DVER-001）；为每个领域命令写行为矩阵（DVER-030），并在授权目标上用真实软件运行（DVER-031、DVER-050） |
 | 7 写 Skill 和知识库 | 决定是否拆分 Skill（DSKL-020、DSKL-021）；在模板提供的固定段落上补充剧本（DSKL-009）；把调查里的操作要点、限制和故障处理写成知识条目（DSKL-126）；把命令标为 stable 之前先跑评测（DSKL-043） |
 | 8 发布 | 按 DREPO-052 为该出的平台和 CPU 架构做平台包，完成平台交付（DREPO-042），带来源证明发布到 npm（DREPO-043） |
 
