@@ -202,7 +202,7 @@ class World:
         self.instances[inst.id] = inst
         return inst
 
-    def _add_document(self, spec: dict[str, Any], session: str | None) -> Document:
+    def _add_document(self, spec: dict[str, Any], session: str | None, write: bool = True) -> Document:
         doc_id = spec.get("id") or self._next("doc")
         path = None if spec.get("untitled") else spec.get("path") or str(self.workdir / spec.get("name", f"{doc_id}.fake"))
         doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})))
@@ -210,7 +210,7 @@ class World:
             inst = self.instances[session]
             inst.untitled += 1
             doc.untitled = inst.untitled
-        elif not Path(path).exists():
+        elif write:
             Path(path).write_bytes(doc.content())
         self.documents[doc.id] = doc
         return doc
@@ -270,6 +270,8 @@ class World:
             self.calls.append(entry)
             try:
                 handler, params = self._route(method, params, endpoint)
+                if method != "hello":
+                    self._reachable(params)
                 rule = self._take_fault(method, params)
                 result = self._run(handler, params, rule)
             except Refused as exc:
@@ -401,6 +403,18 @@ class World:
         if inst is None:
             raise HostError("E_NOT_FOUND", f"no instance {session!r}")
         return inst
+
+    def _reachable(self, params: dict[str, Any]) -> None:
+        """An instance that does not answer, a lost one and an offline device answer nothing,
+        whatever the call asks for."""
+        inst = self.instances.get(params.get("session") or "")
+        if inst is not None and inst.state == "unresponsive":
+            raise Hang()
+        if inst is not None and inst.state == "lost":
+            raise Close()
+        dev = self.devices.get(params.get("device") or "")
+        if dev is not None and dev["state"] == "offline":
+            raise Close()
 
     def _gate(self, params: dict[str, Any], halt: bool = False) -> None:
         """Refuse a call the way a real instance or device would in its current state.
@@ -559,12 +573,19 @@ class World:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).write_bytes(outputs[path])
         changes = self._changes(plan)
+        snapshot = copy.deepcopy(doc.objects) if doc is not None else None
         undo = []
         for target in plan["targets"]:
             values = self._store(plan, target, create=True)
             for name, value in self._fields(plan, target).items():
                 undo.append((target["object"] or "", name, values.get(name)))
                 values[name] = stored.get(name, value)
+        if doc is not None and doc.session is None:
+            try:
+                Path(doc.path).write_bytes(doc.content())
+            except OSError:
+                doc.objects = snapshot
+                raise
         if not plan["targets"] and not plan["outputs"] and plan["session"]:
             self._instance(plan["session"]).values.update(plan["fields"])
         self.applied.append({
@@ -580,7 +601,6 @@ class World:
             doc.revision += 1
             doc.tool_changes.extend({"operation_id": op, **c} for c in changes)
             if doc.session is None:
-                Path(doc.path).write_bytes(doc.content())
                 doc.tool_changes.clear()
                 return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
             doc.dirty = True
@@ -620,11 +640,10 @@ class World:
         return {"items": items, "complete": True}
 
     def cap_open_session(self, params: dict[str, Any]) -> dict[str, Any]:
-        if params.get("path") and not Path(params["path"]).is_file():
-            raise HostError("E_NOT_FOUND", f"no file {params['path']}")
+        objects = self._load(params["path"]) if params.get("path") else None
         inst = self._add_instance(None, owned=True)
         if params.get("path"):
-            self._add_document({"path": params["path"]}, inst.id)
+            self._add_document({"path": params["path"], "objects": objects}, inst.id, write=False)
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "not_applicable", "session": self._session_view(inst)}
 
@@ -678,16 +697,19 @@ class World:
 
     def cap_open_doc(self, params: dict[str, Any]) -> dict[str, Any]:
         self._gate(params)
-        path = Path(params["path"])
-        if not path.is_file():
-            raise HostError("E_NOT_FOUND", f"no file {params['path']}")
-        try:
-            objects = json.loads(path.read_text(encoding="utf-8")).get("objects", {})
-        except ValueError as exc:
-            raise HostError("E_VALIDATION", f"cannot read {path}", native_message=str(exc)) from exc
-        doc = self._add_document({"path": str(path), "objects": objects}, params["session"])
+        objects = self._load(params["path"])
+        doc = self._add_document({"path": params["path"], "objects": objects}, params["session"], write=False)
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "unchanged", "document": doc.view()}
+
+    @staticmethod
+    def _load(path: str) -> dict[str, Any]:
+        if not Path(path).is_file():
+            raise HostError("E_NOT_FOUND", f"no file {path}")
+        try:
+            return json.loads(Path(path).read_text(encoding="utf-8")).get("objects", {})
+        except ValueError as exc:
+            raise HostError("E_VALIDATION", f"cannot read {path}", native_message=str(exc)) from exc
 
     def cap_save_doc(self, params: dict[str, Any]) -> dict[str, Any]:
         self._gate(params)
@@ -734,13 +756,22 @@ class World:
         if not doc.history:
             raise HostError("E_NATIVE_FAILURE", "nothing to undo")
         last = doc.history.pop()
+        unsaved = any(c["operation_id"] == last["operation_id"] for c in doc.tool_changes)
+        reverse = []
         for obj, name, before in reversed(last["undo"]):
             values = doc.objects.setdefault(obj, {})
+            reverse.append({"operation_id": params["operation_id"], "target": doc.key(obj or None),
+                            "field": name, "before": values.get(name), "after": before})
             if before is None:
                 values.pop(name, None)
             else:
                 values[name] = before
-        doc.tool_changes = [c for c in doc.tool_changes if c["operation_id"] != last["operation_id"]]
+        if unsaved:
+            # The undone change was never saved: it simply disappears from the save preview.
+            doc.tool_changes = [c for c in doc.tool_changes if c["operation_id"] != last["operation_id"]]
+        else:
+            # It was saved: taking it back is itself a change the next save writes.
+            doc.tool_changes.extend(reverse)
         doc.revision += 1
         doc.dirty = True
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",

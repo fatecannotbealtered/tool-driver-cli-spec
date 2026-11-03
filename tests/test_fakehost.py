@@ -353,6 +353,43 @@ class MainAddressTest(HostTestCase):
         self.assertEqual(first, second)
         self.assertEqual((first["state"], first["change"]), ("completed", "applied"))
 
+    def test_a_failed_file_write_changes_nothing(self):
+        c = self.client()
+        path = Path(self.tmp.name) / "file-1.fake"
+        path.unlink()
+        path.mkdir()
+        with self.assertRaises(HostCallError) as ctx:
+            c.call("apply", {"command": "footprint move", "inputs": {"id": "R1", "x_mm": 1.0}, "document": "file-1", "operation_id": "op_1"})
+        self.assertEqual(ctx.exception.data["code"], "E_NATIVE_FAILURE")
+        state = self.state()
+        self.assertEqual(next(d for d in state["documents"] if d["id"] == "file-1")["objects"], {})
+        self.assertEqual(state["applied"], [])
+
+    def test_undo_after_save_shows_in_the_next_save(self):
+        c = self.client()
+        c.call("apply", {**MOVE, "operation_id": "op_1"})
+        c.call("save_doc", {"session": "fake-1", "document": "doc-1", "operation_id": "op_2"})
+        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_3"})
+        preview = c.call("preview", {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"})
+        self.assertEqual(sorted((ch["field"], ch["before"], ch["after"]) for ch in preview["changes"]),
+                         [("x_mm", 12.5, None), ("y_mm", 30.0, None)])
+
+    def test_reset_rewrites_files_and_open_session_loads_them(self):
+        c = self.client()
+        c.call("apply", {"command": "footprint move", "inputs": {"id": "R1", "x_mm": 1.0}, "document": "file-1", "operation_id": "op_1"})
+        path = Path(self.tmp.name) / "file-1.fake"
+        opened = c.call("open_session", {"path": str(path), "operation_id": "op_2"})["session"]
+        doc = opened["documents"][0]["id"]
+        self.assertEqual(c.call("read", {"command": "footprint move", "inputs": {"id": "R1"}, "session": opened["id"], "document": doc})["result"]["items"][0]["x_mm"], 1.0)
+        c.control("reset", commands=COMMANDS)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["objects"], {})
+
+    def test_a_silent_instance_answers_nothing_at_all(self):
+        c = self.client()
+        c.control("set_session", session="fake-1", state="unresponsive")
+        with self.assertRaises(TimeoutError):
+            c.call("preview", {**MOVE, "document": "no-such-doc"}, deadline_ms=300)
+
     def test_unregistered_inputs_and_commands_are_refused(self):
         c = self.client()
         for call in ({**MOVE, "inputs": {"id": "R1", "x": 1.0}}, {**MOVE, "command": "footprint teleport"}):

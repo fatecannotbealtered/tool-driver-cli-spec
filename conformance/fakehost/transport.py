@@ -234,7 +234,7 @@ class _PipeListener(Listener):
                 self._next = None
         # Wake an accept that waits on the remaining pipe instance.
         try:
-            _pipe_connect(self.address, 0.5).close()
+            _pipe_connect(self.address, 0.2).close()
         except ConnectionError:
             pass
 
