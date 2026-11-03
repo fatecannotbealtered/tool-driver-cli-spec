@@ -12,21 +12,24 @@ This repository holds tool-driver-cli-spec: five specifications, a machine contr
 | `contract/driver-contract.json` | The machine contract: every value a tool or test can read as data |
 | `contract/schemas/` | JSON Schemas for envelopes, receipts, scope files, host protocol messages and the contract itself |
 | `contract/examples/` | `valid/<schema>/` examples that must pass and `invalid/<schema>/` examples that must fail |
+| `sdk/python/_driver/` | The driver runtime every tool copies unchanged; Python standard library only |
 | `conformance/fakehost/` | The fake host and reference implementation of the host protocol; Python standard library only |
+| `conformance/suites/` | The general and driver conformance suites; they start a tool as a process against the fake host |
 | `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
 | `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
 | `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
-| `tests/` | Unit tests for the scripts and the fake host |
+| `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against |
 
 ## Changing the specification
 
 1. Change the contract first when a value changes (an error code, a flag, a state, a field). Then change the matching table in both language files.
 2. Keep the English file and the `_zh` file in step: same sections, same clause IDs in the same order, same tables with the same number of rows.
-3. Run the checks below. Both must pass before a commit.
+3. Run the checks below. All must pass before a commit.
 
 ```bash
 python scripts/check_spec.py
 python -m unittest discover -s tests -v
+cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
 
 ## Clause format

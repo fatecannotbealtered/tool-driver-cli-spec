@@ -28,7 +28,7 @@
       "properties": {
         "outcome": {"enum": ["applied", "not_applied", "partial"]},
         "resolved_by": {"enum": ["read_back", "agent"]},
-        "observed": {"type": "object"},
+        "observed": {"type": "object", "additionalProperties": {"type": "object"}},
         "evidence": {"type": "string", "minLength": 1},
         "resolved_at": {"$ref": "error.schema.json#/$defs/utc"}
       },

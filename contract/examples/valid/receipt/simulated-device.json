@@ -20,7 +20,9 @@
       "verification": "passed"
     },
     "observed": {
-      "position_mm": 120.0
+      "device:cnc-01/axis-x": {
+        "position_mm": 120.0
+      }
     },
     "mismatched": [],
     "simulated": true

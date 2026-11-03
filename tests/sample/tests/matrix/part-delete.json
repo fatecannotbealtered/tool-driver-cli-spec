@@ -1,0 +1,75 @@
+{
+  "command": "part delete",
+  "rows": [
+    {
+      "row": "normal",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R9"
+      ],
+      "expected": {
+        "exit": 0
+      }
+    },
+    {
+      "row": "empty",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "invalid_input",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "not_found",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "ambiguous",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "conflict",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "no_scope",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "busy",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "dialog",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "disconnect",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "unsaved",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    },
+    {
+      "row": "read_back_mismatch",
+      "applies": false,
+      "reason": "The sample tool drives no real application; it keeps only its write sample, for the conformance suites."
+    }
+  ]
+}

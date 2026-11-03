@@ -44,8 +44,8 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot 
 |---|---|---|
 | 1 | Design | Done |
 | 2 | Specifications, contract, schemas, checks | Done |
-| 3 | Fake host, the reference implementation of the host protocol | In progress |
-| 4 | Python driver runtime, the two conformance suites and the project template | Planned |
+| 3 | Fake host, the reference implementation of the host protocol | Done |
+| 4 | Python driver runtime, the two conformance suites and the project template | In progress |
 | 5 | Skill and knowledge templates, development Skill, onboarding guide | Planned |
 | 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
 
@@ -55,13 +55,14 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot 
 tool-driver-cli-spec/
 ├── spec/        the five specifications, English and Chinese
 ├── contract/    driver-contract.json, schemas/, examples/
-├── conformance/ fakehost/, the fake host (DVER-020)
+├── sdk/python/  _driver/, the driver runtime every tool copies (DREPO-032)
+├── conformance/ fakehost/, the fake host (DVER-020); suites/, the two conformance suites (DVER-001)
 ├── scripts/     check_spec.py, build_spec_bundle.py
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       unit tests for the scripts and the fake host
+└── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against
 ```
 
-Later phases add the conformance suites, `sdk/`, `template/` and `skills/`.
+Later phases add `template/` and `skills/`.
 
 ## Checks
 
@@ -70,6 +71,8 @@ python -m pip install --require-hashes --no-deps -r requirements-dev.txt
 python scripts/check_spec.py
 python -m unittest discover -s tests -v
 python scripts/build_spec_bundle.py
+cd conformance
+python -m suites --project ../tests/sample -- python -m sample_cli
 ```
 
 ## License

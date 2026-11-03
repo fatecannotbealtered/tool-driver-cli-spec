@@ -1,0 +1,463 @@
+{
+  "tool": "sample-cli",
+  "version": "0.1.0",
+  "commands": [
+    {
+      "path": "part get",
+      "summary": "Read one part.",
+      "effects": [
+        "observe"
+      ],
+      "modes": [
+        "file",
+        "session"
+      ],
+      "target_kind": "part",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The reference of the part.",
+          "required": true
+        }
+      ],
+      "untrusted_fields": [
+        "value"
+      ],
+      "adapter_capabilities": [
+        "read"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "part list",
+      "summary": "List the parts of a document.",
+      "effects": [
+        "observe"
+      ],
+      "modes": [
+        "file",
+        "session"
+      ],
+      "target_kind": "part",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--limit",
+          "type": "integer"
+        },
+        {
+          "name": "--offset",
+          "type": "integer"
+        }
+      ],
+      "untrusted_fields": [
+        "value"
+      ],
+      "adapter_capabilities": [
+        "read"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [
+        "id",
+        "value"
+      ],
+      "related_knowledge": []
+    },
+    {
+      "path": "part move",
+      "summary": "Move one or more parts.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "file",
+        "session"
+      ],
+      "target_kind": "part",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The reference of the part."
+        },
+        {
+          "name": "--ids",
+          "type": "list",
+          "summary": "Several parts, separated by commas."
+        },
+        {
+          "name": "--input",
+          "type": "input",
+          "summary": "Each part with its own position."
+        },
+        {
+          "name": "--x",
+          "type": "quantity",
+          "summary": "X position.",
+          "quantity": "length",
+          "coordinate_system": "board: origin at the top-left corner, x right, y down"
+        },
+        {
+          "name": "--y",
+          "type": "quantity",
+          "summary": "Y position.",
+          "quantity": "length",
+          "coordinate_system": "board: origin at the top-left corner, x right, y down"
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {
+        "x_mm": 0.001,
+        "y_mm": 0.001
+      },
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "part update",
+      "summary": "Change the value of a part in a file.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "file"
+      ],
+      "target_kind": "part",
+      "flags": [
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The reference of the part.",
+          "required": true
+        },
+        {
+          "name": "--value",
+          "type": "string",
+          "summary": "The new value."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [
+        "value"
+      ],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "part delete",
+      "summary": "Delete parts; the application cannot undo it.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "part",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The reference of the part."
+        },
+        {
+          "name": "--ids",
+          "type": "list",
+          "summary": "Several parts, separated by commas."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": true,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "drawing export",
+      "summary": "Export the drawing as a PDF.",
+      "effects": [
+        "artifact"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "file",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "The PDF to write.",
+          "required": true,
+          "output": true
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "analysis run",
+      "summary": "Run the analysis of a document; long analyses continue as a long job.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "document",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--depth",
+          "type": "integer",
+          "summary": "How many passes to run."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back",
+        "job_status",
+        "cancel"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "axis move",
+      "summary": "Move a machine axis to a position.",
+      "effects": [
+        "physical"
+      ],
+      "modes": [
+        "device"
+      ],
+      "target_kind": "axis",
+      "flags": [
+        {
+          "name": "--device",
+          "type": "string",
+          "summary": "The device ID."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The axis.",
+          "required": true
+        },
+        {
+          "name": "--position",
+          "type": "quantity",
+          "summary": "The target position.",
+          "quantity": "length",
+          "coordinate_system": "machine: origin at the home position, axes as labelled on the machine"
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    },
+    {
+      "path": "cycle stop",
+      "summary": "Stop the running machine cycle.",
+      "effects": [
+        "lifecycle"
+      ],
+      "modes": [
+        "device"
+      ],
+      "target_kind": "device",
+      "flags": [
+        {
+          "name": "--device",
+          "type": "string",
+          "summary": "The device ID."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": true,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    }
+  ]
+}

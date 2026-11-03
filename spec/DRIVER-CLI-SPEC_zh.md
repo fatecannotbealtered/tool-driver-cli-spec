@@ -145,7 +145,7 @@
 
 ### DCLI-005 命名与取值
 
-- 所有键必须用 snake_case，`data` 和 `details` 里的键也一样。
+- 所有键必须用 snake_case，`data` 和 `details` 里的键也一样。只有两类键保持原样：回执 `observed` 的键，它们是目标键或对象名（DCLI-061）；作为数据携带的 JSON Schema 的关键字，如 `reference` 里的 `output_schema`（DCLI-031）。
 - ID 必须是字符串。
 - 时间必须是带 `Z` 后缀的 ISO 8601 UTC 时间，放在以 `_at` 结尾的键下；不带时刻的日期必须放在以 `_on` 结尾的键下。
 - 枚举值必须用小写 snake_case。
@@ -197,7 +197,7 @@
 运行时为 Agent 生成的每条命令，无论在 `next_action`、`resume`、`lookup` 还是 `poll` 里，都必须完整：写明它需要的会话、文档和每个 ID（`--session`、`--doc`、`--id`、`--job`），以后原样运行也不会出错。含有空格或以 `-` 开头的参数都必须加引号。嵌有不可信值的生成命令列入 `meta.untrusted`（DCLI-004）。
 
 为什么：出错后 Agent 先要知道有没有发出去，再要知道接下来运行什么；依赖默认实例的命令，以后可能作用到另一个实例上。
-检查：🤖 通用一致性测试 R03 和 R04。
+检查：🤖 通用一致性测试 G01、R03 和 R04。
 
 ### DCLI-012 固定的 details 字段
 
@@ -373,10 +373,10 @@
 | `--output` | `<path>` | 把结果或完整的预览写到本地文件，响应里只给摘要（DCLI-008、DCLI-054） |
 | `--input` | `<path\|->` | 从文件或 stdin 读入全部参数，格式为一个 JSON 对象；`{"items": [...]}` 为批量中的每个对象各给一组值（DCLI-064） |
 
-时长必须写作 `<n>ms`、`<n>s`、`<n>min` 或 `<n>h`。带单位的物理量参数见 DCLI-082。
+时长属于 `time` 物理量：必须写作 `<n>ms`、`<n>s`、`<n>min` 或 `<n>h`，不带单位的数按 DCLI-082 拒绝。其他物理量参数见 DCLI-082。
 
 为什么：同一功能在每个工具里都用同一个参数，Agent 不用再查。
-检查：👀 评审 `reference` 里每个命令的参数。
+检查：🤖 驱动一致性测试 D13 检查时长；👀 评审 `reference` 里每个命令的参数。
 
 ### DCLI-027 目标参数
 
@@ -425,7 +425,7 @@
 | `effects` | 命令的效果（DCLI-051） |
 | `modes` | 命令支持的模式（DCLI-201） |
 | `target_kind` | 命令作用的对象类型，也就是目标键里的类型（DCLI-028） |
-| `flags` | 每个参数，各带类型、物理量参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`（DCLI-051） |
+| `flags` | 每个参数，各带类型（`string`、`integer`、`number`、`boolean`、`quantity` 或 `path`；DCLI-026 的共享参数还有 `list`、`input` 和 `duration`），`quantity` 类型参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`，此时类型为 `path`（DCLI-051） |
 | `untrusted_fields` | 存放不可信文字的输出字段（DSEC-021） |
 | `adapter_capabilities` | 命令调用的适配能力（DCLI-260），`reference` 会列出 |
 | `survey_ids` | 命令实现的、能力调查中的能力编号（DREPO-061） |
@@ -438,7 +438,7 @@
 运行时必须拒绝违反这些规则的登记，比如没有声明物理量的物理量参数（DCLI-085）；确认级别必须由运行时根据登记推导，禁止由作者指定（DCLI-052）。`reference` 由登记生成（DCLI-031）。工具项目里的 `contract/commands.json` 必须由登记生成，并由 `contract/schemas/commands.schema.json` 校验。
 
 为什么：每个命令只有一份声明，`reference`、确认级别、授权范围检查、机密遮盖和读回都从它来，彼此就不会对不上。
-检查：🤖 `check_project` 用 `commands.schema.json` 校验 `contract/commands.json`；驱动一致性测试 D13 检查没有单位的参数会被拒绝。
+检查：🤖 `check_project` 用 `commands.schema.json` 校验 `contract/commands.json`；运行时单元测试检查运行时会拒绝违反规则的登记。
 
 ## 内置命令
 
@@ -654,6 +654,7 @@
 | `command` | 命令路径 |
 | `inputs` | 规范化后的全部输入 |
 | `target` | 目标键 |
+| `changes` | 预览列出的修改，每项带修改前后的值 |
 | `session_id` | 会话 ID |
 | `session_generation` | 会话代际（DCLI-203） |
 | `document_revision` | 文档版本（DCLI-210） |
@@ -668,7 +669,7 @@
 - 全局参数（DCLI-025），如 `--dangerous`、`--format`、`--quiet`，不属于输入，不绑定。
 
 为什么：令牌绑定了预览里的一切，就不能被挪用到另一次改动上；什么都没改的拒绝，也不会逼 Agent 从头再来。
-检查：🤖 通用一致性测试 G03、G04 和 G05。
+检查：🤖 通用一致性测试 G03、G04 和 G05；驱动一致性测试 D04 和 D23。
 
 ### DCLI-056 确认时的复查
 
@@ -684,7 +685,7 @@
 | `5` | 会话还在，代际不变 | `session_changed` |
 | `6` | 文档版本和未保存状态不变 | `document_changed` |
 | `7` | 宿主组件版本不变 | `plugin_changed` |
-| `8` | 重新计算预览，仍然可以执行 | `blocked` |
+| `8` | 重新计算预览，修改与原来相同，且仍然可以执行 | `preview_changed`、`blocked` |
 
 直接执行级的命令没有令牌，派发前必须同样做第 3 至 8 项检查，比较的基准是运行时生成预览时记下的状态。对停止命令，第 3 项只要求授权范围覆盖它的目标（DSEC-018），第 4 项不适用（DCLI-060）。
 
@@ -756,7 +757,8 @@
 
 - `operation_id`、`command`、`target`（没有目标对象的命令没有这一项，DCLI-054）、`effects`、`tier`；
 - `outcome`，即下表的五个维度；
-- `observed` 和 `mismatched`：读回的值（包括生成的每个文件的路径、大小和 SHA-256），以及不一致的字段；
+- `observed`：读回的值，每个键一项：适配层 `read_back` 报告的每个目标键（DCLI-260）；生成的每个文件，键为 `file:///<path>`，带 `path`、`bytes` 和 `sha256`；没有目标对象的命令，键为对象名，如 `session`、`document` 或 `plugin`；
+- `mismatched`：每个不一致的字段，写成 `<field>@<key>`，`<key>` 是它在 `observed` 里的键；
 - `session` `{id, generation}` 和 `document` `{id, revision, dirty}`；
 - `failed_stage`：失败或中断时所在的阶段：`apply`、`deliver`、`persist` 或 `verify`；
 - `notes`：补充说明；
@@ -774,7 +776,7 @@
 五个维度必须分开报告，禁止合并成一个成功标记。
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"x_mm":12.5,"y_mm":30.0},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
 ```
 
 为什么：执行了、改了、送达了、存了、核实了是不同的事实，Agent 必须逐一如实报告。
@@ -822,12 +824,12 @@
 - 批量操作成功时必须返回 `data` = `{operation_id, items, summary}`。每项是精简的 `{target, operation_id, ok, code}`，被跳过的对象为 `{target, ok: false, skipped: true}`；某一项的完整回执用 `operation get --id <operation_id>` 获取。`summary` 为 `{total, succeeded, failed, unknown, skipped}`。批量没有全部成功时，`error.details.batch` 里放同样的对象。
 - 全部对象成功才算成功。否则：有对象结果未知的，错误码必须为 `E_OUTCOME_UNKNOWN`，`lookup` 为 `operation list --state unknown --batch <operation_id>`；没有结果未知、但有对象已生效的，为 `E_PARTIAL`；都不是时，取第一个失败对象的错误码。
 - `--continue-on-error` 默认必须为 `true`，危险级命令默认必须为 `false`。批量停下后，剩余对象必须报告为已跳过，并计入 `summary.skipped`。
-- 会话变为 `busy`、`unresponsive`、`blocked` 或 `lost`（DCLI-204）时，不论 `--continue-on-error` 怎么设，批量都必须停下，剩余对象记为跳过。只要没有对象结果未知，错误码就是该状态对应的错误码，`details.resume` 给出只覆盖未完成对象的命令。
+- 会话变为 `busy`、`unresponsive`、`blocked` 或 `lost`（DCLI-204）时，不论 `--continue-on-error` 怎么设，批量都必须停下，剩余对象记为跳过。只要没有对象结果未知：已有对象生效时错误码为 `E_PARTIAL`，否则为该状态对应的错误码；`details.resume` 给出只覆盖未完成对象的命令。
 - 工具禁止声称软件没有提供的「要么全成、要么全不成」。
 - 同一类操作经常要对多个对象做时（如移动器件、改属性、删除），工具应该提供批量形式。
 
 为什么：一次调用处理多个对象能省调用；逐个对象报告结果，部分失败时报告也是实话；软件不再响应时整批立刻停下，而不是一个对象一个对象地失败。
-检查：🤖 驱动一致性测试 D24；运行时单元测试。
+检查：🤖 驱动一致性测试 D06、D08 和 D24；运行时单元测试。
 
 ### DCLI-065 长任务
 
@@ -835,7 +837,7 @@
 
 - 提交长任务是一次普通的写操作（DCLI-050），通常是动词为 `run` 的命令（DCLI-022）。它的回执报告 `execution: completed` 和 `change: not_applicable`，因为它做的只是启动任务。`data.result.job` 必须为 `{id, state, poll}`，`poll` 是查询这个任务的确切命令，如 `job get --job 7 --wait 60s`。
 - 任务结束之前，目标一直锁着（DCLI-060）。
-- 任务进入终态时，运行时必须为这个任务的操作记录补上完整的回执：读回产出，任务生成的每个文件都记下大小和 SHA-256（DCLI-057）。之后 `job get` 返回这份 `receipt`、`result`，以及由回执推导出的 `ok`（DCLI-062）。
+- 任务进入终态时，运行时必须为这个任务的操作记录补上完整的回执：读回产出，任务生成的每个文件都记下大小和 SHA-256（DCLI-057）。之后 `job get` 按 DCLI-220 返回这个任务。
 - 以 `unknown` 结束的任务，与其他结果未知的写操作一样，用 `operation resolve` 查清（DCLI-063）。
 
 为什么：一次调用挂上几分钟，在 Agent 看来就和工具死掉一样；长任务的真实结果，也要和其他写操作一样认真报告。
@@ -1026,7 +1028,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 物理量参数必须带单位给出，如 `--x 100mil` 或 `--x 2.54mm`，由运行时换算成标准单位。不带单位的数必须以 `E_USAGE` 拒绝，`problem` 必须列出该参数可接受的单位。只接受 DCLI-080 为该物理量列出的单位，其他单位属于无效的参数值（`E_USAGE`）。
 
 为什么：用户和手册混用各种单位，一个光秃秃的 `100` 可能是毫米也可能是 mil；要求写明单位、在一处统一换算，每个工具都不会算错单位。
-检查：🤖 运行时单元测试。
+检查：🤖 驱动一致性测试 D13；运行时单元测试。
 
 ### DCLI-083 显示单位
 
@@ -1047,7 +1049,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 没有声明所属物理量的物理量参数，必须在命令登记时就被拒绝（DCLI-029）。
 
 为什么：未声明的单位在工具发布前就被发现，而不是等写错了数值才发现。
-检查：🤖 驱动一致性测试 D13。
+检查：🤖 运行时单元测试；`check_project` 用 `commands.schema.json` 校验 `contract/commands.json`，它要求每个 `quantity` 类型的参数都写明物理量。
 
 ## 模式与会话
 
@@ -1109,7 +1111,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 运行中的实例已经打开了某个文件时，对它的文件模式写入必须被拒绝，返回 `E_CONFLICT`，`conflict` 为 `file_open_in_session`。`reference` 分模式给出确认级别（DCLI-031）。
 
 为什么：模式决定了以哪里的数据为准、保存意味着什么，每次写入因此知道该从哪里读回；同一个文件一边在内存里改、一边在磁盘上改，两边会互相抹掉对方的修改。
-检查：🤖 通用一致性测试 R01 检查 `reference` 里的模式声明。
+检查：🤖 通用一致性测试 R01 检查 `reference` 里的模式声明；驱动一致性测试 D03 检查 `file_open_in_session`。
 
 ### DCLI-202 选定会话
 
@@ -1181,6 +1183,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 - `id`；
 - `path`：文件路径；从未保存过的新文档为 `null`；
+- `key`：只用于没有路径的文档，即它的目标键 `untitled:<session-id>/<n>`（DCLI-028）。适配层必须给出，因为 `<n>` 只有适配层知道。有路径的文档没有 `key`，目标键就是 `file:///<path>`；
 - `session`：文档所在的会话；文件模式下为 `null`；
 - `revision`：由适配层给出的不透明字符串，每次修改和每次保存都会变；文件模式下是文件内容的哈希；
 - `dirty`：有没有未保存的修改；
@@ -1205,7 +1208,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 对 `readonly: true` 的文档写入，必须被拒绝，返回 `E_VALIDATION`。有未保存的修改（`dirty: true`）本身不拒绝任何操作；关闭或放弃这些修改按 DCLI-212 处理。`doc list` 和 `doc get` 把这些值作为数据报告（DCLI-204）。
 
 为什么：保存绝不能悄悄覆盖别人的修改，也不能悄悄重建已被移走或删除的文件。
-检查：🤖 运行时单元测试。
+检查：🤖 驱动一致性测试 D03；运行时单元测试。
 
 ### DCLI-212 文档命令
 
@@ -1233,7 +1236,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 长任务至少必须有以下字段：`id`、`operation_id`、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
 
-`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态时，`job get` 必须同时返回它的 `receipt`、`result`，以及由回执推导出的 `ok`（DCLI-065）。
+`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态（`completed`、`failed`、`partial`、`unknown` 或 `cancelled`）时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。这些都是 `data` 里的字段：`job get` 本身是成功的，DCLI-062 所说的 `error.details.receipt` 属于写操作，不属于 `job get`。
 
 `job list` 列出所有会话的长任务。`job get --job <id> --wait <duration>` 必须在任务结束或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
 
@@ -1242,7 +1245,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-221 取消长任务
 
-`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。
+`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。按请求取消的任务，执行维度记为 `interrupted`，原因码为 `E_INTERRUPTED`（DCLI-062）。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。
 
 为什么：软件还没停就报告「已取消」，旧任务还在跑，Agent 就可能开始新的工作。
 检查：🤖 驱动一致性测试 D11。
@@ -1299,12 +1302,13 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `read` | 实例端 | 必需 | 必需 | 必需 | 执行只读命令 |
 | `preview` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 生成预览，带软件将会存下的值 |
 | `apply` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 执行修改，并报告发生了什么 |
-| `read_back` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 读回被改的字段 |
+| `read_back` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 按目标键读回被改的字段 |
 | `job_status` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 查询长任务的状态 |
 | `cancel` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 取消长任务 |
 | `devices` | CLI 端 | — | — | 必需 | 列出设备及其状态 |
 | `plugin_status` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 报告宿主组件的版本 |
 | `plugin_install` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 安装宿主组件 |
+| `plugin_remove` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 卸载宿主组件 |
 
 - 标为「必需」的能力，支持该模式的每个工具都必须实现。「有写命令时」表示工具有写命令时必需；「有长任务时」「有宿主组件时」同理。「可选」的能力可以不实现。「—」表示该模式用不到这项能力。
 - CLI 端的能力在 CLI 进程里运行。实例端的能力在适配层里运行，或作为宿主方法在宿主组件里运行（DCLI-262、DCLI-274）。

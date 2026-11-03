@@ -145,7 +145,7 @@ Check: 🤖 General conformance test R04.
 
 ### DCLI-005 Names and values
 
-- Every key MUST be snake_case, including the keys inside `data` and `details`.
+- Every key MUST be snake_case, including the keys inside `data` and `details`. Only two kinds of key keep their own spelling: the keys of a receipt's `observed`, which are target keys or object names (DCLI-061), and the keywords of a JSON Schema carried as data, such as `output_schema` in `reference` (DCLI-031).
 - IDs MUST be strings.
 - Times MUST be UTC in ISO 8601 with a `Z` suffix, under keys that end in `_at`. Dates without a time of day MUST be under keys that end in `_on`.
 - Enum values MUST be lower snake_case.
@@ -197,7 +197,7 @@ Check: 🤖 General conformance test R04.
 Every command the runtime writes for the Agent to run, in `next_action`, `resume`, `lookup` or `poll`, MUST be complete: it names the session, the document and every ID it needs (`--session`, `--doc`, `--id`, `--job`), so that it runs unchanged later. Every argument that contains a space or starts with `-` MUST be quoted. A generated command that embeds an untrusted value is listed in `meta.untrusted` (DCLI-004).
 
 Why: After a failure the Agent's first question is whether anything was sent, and the second is what to run next; a command that relies on a default instance can run against another one later.
-Check: 🤖 General conformance tests R03 and R04.
+Check: 🤖 General conformance tests G01, R03 and R04.
 
 ### DCLI-012 Fixed details fields
 
@@ -373,10 +373,10 @@ When a command offers one of these functions, it MUST use this flag name and mea
 | `--output` | `<path>` | Write the result, or the full preview, to a local file and return only a summary (DCLI-008, DCLI-054) |
 | `--input` | `<path\|->` | Read all parameters as one JSON object from a file or from stdin; `{"items": [...]}` gives each object of a batch its own values (DCLI-064) |
 
-A duration MUST be written as `<n>ms`, `<n>s`, `<n>min` or `<n>h`. Physical quantities with units follow DCLI-082.
+A duration is a `time` quantity: it MUST be written as `<n>ms`, `<n>s`, `<n>min` or `<n>h`, and a bare number is refused as DCLI-082 sets. Other physical quantities follow DCLI-082.
 
 Why: The same function under the same flag in every tool means the Agent does not have to look it up again.
-Check: 👀 Review of each command's flags in `reference`.
+Check: 🤖 Driver conformance test D13 for durations; 👀 review of each command's flags in `reference`.
 
 ### DCLI-027 Target flags
 
@@ -425,7 +425,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `effects` | Its effects (DCLI-051) |
 | `modes` | The modes it supports (DCLI-201) |
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
-| `flags` | Every flag, each with its type, the unit quantity of a physical parameter (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true` when it names a file the command creates (DCLI-051) |
+| `flags` | Every flag, each with its type (`string`, `integer`, `number`, `boolean`, `quantity` or `path`, and `list`, `input` or `duration` for the shared flags of DCLI-026), the unit quantity of a `quantity` flag (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true`, with the type `path`, when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
 | `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
 | `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |
@@ -438,7 +438,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a unit quantity (DCLI-085), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
 
 Why: One declaration per command feeds `reference`, the tier, the scope check, the masking of secrets and the read-back, so none of them can disagree.
-Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; driver conformance test D13 checks that a parameter without a unit is rejected.
+Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; runtime unit tests check that the runtime rejects a registration that breaks a rule.
 
 ## Built-in Commands
 
@@ -654,6 +654,7 @@ The confirm token MUST bind these values. When any of them changes, the token MU
 | `command` | The command path |
 | `inputs` | All inputs, after normalization |
 | `target` | The target key |
+| `changes` | The changes the preview showed, each with its value before and after |
 | `session_id` | The session ID |
 | `session_generation` | The session generation (DCLI-203) |
 | `document_revision` | The document revision (DCLI-210) |
@@ -668,7 +669,7 @@ The confirm token MUST bind these values. When any of them changes, the token MU
 - Global flags (DCLI-025), such as `--dangerous`, `--format` and `--quiet`, are not inputs and are not bound.
 
 Why: A token that binds everything it previewed cannot be spent on a different change, and a refusal that changed nothing does not force the Agent to start over.
-Check: 🤖 General conformance tests G03, G04 and G05.
+Check: 🤖 General conformance tests G03, G04 and G05; driver conformance tests D04 and D23.
 
 ### DCLI-056 Confirm-time review
 
@@ -684,7 +685,7 @@ When a command runs with `--confirm`, the runtime MUST look the token up in the 
 | `5` | The session still exists, with the same generation | `session_changed` |
 | `6` | The document revision and unsaved state are unchanged | `document_changed` |
 | `7` | The host component version is unchanged | `plugin_changed` |
-| `8` | The preview, computed again, can still be applied | `blocked` |
+| `8` | The preview, computed again, shows the same changes and can still be applied | `preview_changed`, `blocked` |
 
 A direct-tier command has no token. It MUST run steps 3 to 8 before dispatch, comparing with the state the runtime captured when it built the preview. For a halt command, step 3 asks only that the scope covers its target (DSEC-018), and step 4 does not apply (DCLI-060).
 
@@ -756,7 +757,8 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 
 - `operation_id`, `command`, `target` (absent for a command with no target object, DCLI-054), `effects` and `tier`;
 - `outcome`, with the five dimensions below;
-- `observed` and `mismatched`: the values read back, including every produced file with its path, size and SHA-256, and the fields that do not match;
+- `observed`: the values read back, one entry per key: each target key the adapter's `read_back` reports (DCLI-260); each produced file under `file:///<path>`, with `path`, `bytes` and `sha256`; or, for a command with no target object, the object's name, such as `session`, `document` or `plugin`;
+- `mismatched`: each field that does not match, written `<field>@<key>`, where `<key>` is its key in `observed`;
 - `session` `{id, generation}` and `document` `{id, revision, dirty}`;
 - `failed_stage`: where the write failed or was interrupted: `apply`, `deliver`, `persist` or `verify`;
 - `notes`: extra remarks;
@@ -774,7 +776,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 The five dimensions MUST be reported separately and MUST NOT be merged into one success flag.
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"x_mm":12.5,"y_mm":30.0},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
 ```
 
 Why: Ran, changed, delivered, saved and verified are different facts, and the Agent must report each one truthfully.
@@ -822,12 +824,12 @@ Check: 🤖 Driver conformance tests D06 and D21.
 - A batch that succeeds MUST return `data` = `{operation_id, items, summary}`. Each item is compact, `{target, operation_id, ok, code}`, and a skipped object is `{target, ok: false, skipped: true}`; the full receipt of an item comes from `operation get --id <operation_id>`. `summary` is `{total, succeeded, failed, unknown, skipped}`. When the batch does not fully succeed, `error.details.batch` holds the same object.
 - The batch succeeds only when every object succeeds. Otherwise the code MUST be `E_OUTCOME_UNKNOWN` when any object is outcome unknown, with `lookup` set to `operation list --state unknown --batch <operation_id>`; else `E_PARTIAL` when any object took effect; else the code of the first failed object.
 - `--continue-on-error` MUST default to `true`, and to `false` for dangerous commands. When the batch stops, the remaining objects MUST be reported as skipped and counted in `summary.skipped`.
-- When the session becomes `busy`, `unresponsive`, `blocked` or `lost` (DCLI-204), the batch MUST stop whatever `--continue-on-error` says, and the remaining objects are skipped. Unless an object's outcome is unknown, the code is the one that state gives, and `details.resume` gives the command that covers only the unfinished objects.
+- When the session becomes `busy`, `unresponsive`, `blocked` or `lost` (DCLI-204), the batch MUST stop whatever `--continue-on-error` says, and the remaining objects are skipped. Unless an object's outcome is unknown, the code is `E_PARTIAL` when an object took effect, and otherwise the one that state gives; `details.resume` gives the command that covers only the unfinished objects.
 - A tool MUST NOT claim an all-or-nothing result that the application does not provide.
 - When the same operation is often needed on several objects, such as moving parts, changing properties or deleting, the tool SHOULD offer a batch form.
 
 Why: One call for many objects saves calls, a result per object keeps the report honest when some of them fail, and an application that stops answering stops the batch at once instead of failing it object by object.
-Check: 🤖 Driver conformance test D24; runtime unit tests.
+Check: 🤖 Driver conformance tests D06, D08 and D24; runtime unit tests.
 
 ### DCLI-065 Long jobs
 
@@ -835,7 +837,7 @@ A call that does work MUST return within 60 seconds. Work that can take longer M
 
 - Submitting a job is a normal write (DCLI-050), usually a command with the verb `run` (DCLI-022). Its receipt reports `execution: completed` and `change: not_applicable`, because what it did was start the job. `data.result.job` MUST be `{id, state, poll}`, where `poll` is the exact command that checks the job, such as `job get --job 7 --wait 60s`.
 - The target stays locked until the job ends (DCLI-060).
-- When the job reaches a final state, the runtime MUST complete the job's operation record with a full receipt: the outputs are read back, and every file the job produced is recorded with its size and SHA-256 (DCLI-057). `job get` then returns this `receipt`, the `result` and the `ok` derived from the receipt (DCLI-062).
+- When the job reaches a final state, the runtime MUST complete the job's operation record with a full receipt: the outputs are read back, and every file the job produced is recorded with its size and SHA-256 (DCLI-057). `job get` then returns the job as DCLI-220 sets.
 - A job that ends in `unknown` is settled like any outcome-unknown write, with `operation resolve` (DCLI-063).
 
 Why: A call that hangs for minutes looks to the Agent like a dead tool, and the real outcome of a job must be reported as carefully as that of any other write.
@@ -1026,7 +1028,7 @@ Check: 👀 Review of the output schemas in `reference`.
 A parameter for a physical quantity MUST be given with a unit, such as `--x 100mil` or `--x 2.54mm`; the runtime converts it to the standard unit. A bare number MUST be refused with `E_USAGE`, and `problem` MUST list the units the parameter accepts. Only the units listed for the quantity in DCLI-080 are accepted; any other unit is an invalid value (`E_USAGE`).
 
 Why: Users and manuals mix units, and a bare `100` can mean millimetres or mils; asking for the unit and converting in one place prevents unit mistakes in every tool.
-Check: 🤖 Runtime unit tests.
+Check: 🤖 Driver conformance test D13; runtime unit tests.
 
 ### DCLI-083 Display units
 
@@ -1047,7 +1049,7 @@ Check: 👀 Review of `reference`.
 A physical parameter without a declared unit quantity MUST be rejected when the command is registered (DCLI-029).
 
 Why: An undeclared unit is caught before the tool ships, not after a wrong value is written.
-Check: 🤖 Driver conformance test D13.
+Check: 🤖 Runtime unit tests; `check_project` validates `contract/commands.json` against `commands.schema.json`, which needs a quantity for every flag of type `quantity`.
 
 ## Modes and Sessions
 
@@ -1109,7 +1111,7 @@ When a command supports both file and session mode, the runtime MUST choose the 
 A write in file mode to a file that a running instance has open MUST be refused with `E_CONFLICT` and `conflict` `file_open_in_session`. `reference` shows the tier of each mode (DCLI-031).
 
 Why: The mode decides where the truth lives and what saving means, so every write knows where to read back; two writers on one file, one in memory and one on disk, would undo each other.
-Check: 🤖 General conformance test R01 checks the mode declarations in `reference`.
+Check: 🤖 General conformance test R01 checks the mode declarations in `reference`; driver conformance test D03 checks `file_open_in_session`.
 
 ### DCLI-202 Selecting a session
 
@@ -1181,6 +1183,7 @@ A document MUST have at least these fields; the full definition is in the contra
 
 - `id`;
 - `path`: the file path, or `null` for a new document that has never been saved;
+- `key`: only for a document without a path: its target key `untitled:<session-id>/<n>` (DCLI-028). The adapter MUST give it, because only the adapter knows `<n>`. A document with a path has no `key`; its target key is `file:///<path>`;
 - `session`: the session that holds it, or `null` in file mode;
 - `revision`: an opaque string, supplied by the adapter, that changes with every change and every save; in file mode it is a hash of the file content;
 - `dirty`: whether it has unsaved changes;
@@ -1205,7 +1208,7 @@ Writes MUST react to a document's `disk` value as this table says:
 A write to a document with `readonly: true` MUST be refused with `E_VALIDATION`. Unsaved changes (`dirty: true`) refuse nothing by themselves; closing or discarding them follows DCLI-212. `doc list` and `doc get` report these values as data (DCLI-204).
 
 Why: A save must never silently overwrite someone else's edits or recreate a file that was moved or deleted.
-Check: 🤖 Runtime unit tests.
+Check: 🤖 Driver conformance test D03; runtime unit tests.
 
 ### DCLI-212 Document commands
 
@@ -1233,7 +1236,7 @@ Check: 👀 Review of the adapter.
 
 A job MUST have at least these fields: `id`, `operation_id`, `state`, `cancel_requested`, `started_at` and `finished_at` (`null` until the job ends). When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
 
-`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state, `job get` MUST also return its `receipt`, its `result` and the `ok` derived from the receipt (DCLI-065).
+`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state (`completed`, `failed`, `partial`, `unknown` or `cancelled`), `job get` MUST also return its `receipt`, its `result`, and `ok`, derived from the receipt as DCLI-062 sets, with the error code in `code` when `ok` is `false` (DCLI-065). These are fields of `data`: `job get` itself succeeds, and the `error.details.receipt` of DCLI-062 belongs to the write, not to `job get`.
 
 `job list` lists the long jobs of every session. `job get --job <id> --wait <duration>` MUST return when the job ends or the time runs out, whichever comes first. `--wait` MAY be up to 600 seconds, because waiting is not work (DCLI-065); a longer value returns `E_USAGE`. `job get` MUST return `poll_after_ms`, the time after which asking again is useful.
 
@@ -1242,7 +1245,7 @@ Check: 🤖 Driver conformance test D11.
 
 ### DCLI-221 Cancelling a job
 
-`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`.
+`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. A job cancelled on request ends with the execution `interrupted`, and its cause is `E_INTERRUPTED` (DCLI-062). When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`.
 
 Why: Reporting "cancelled" before the application stops would let the Agent start new work while the old job still runs.
 Check: 🤖 Driver conformance test D11.
@@ -1299,12 +1302,13 @@ Besides the domain commands, the tool author writes only the adapter capabilitie
 | `read` | instance | required | required | required | Runs a read-only command |
 | `preview` | instance | with writes | with writes | with writes | Builds the preview, with the values the application will store |
 | `apply` | instance | with writes | with writes | with writes | Applies the change and reports what happened |
-| `read_back` | instance | with writes | with writes | with writes | Reads back the changed fields |
+| `read_back` | instance | with writes | with writes | with writes | Reads back the changed fields, per target key |
 | `job_status` | instance | with long jobs | with long jobs | with long jobs | Reports the state of a long job |
 | `cancel` | instance | with long jobs | with long jobs | with long jobs | Cancels a long job |
 | `devices` | CLI | — | — | required | Lists devices and their states |
 | `plugin_status` | CLI | with a host component | with a host component | with a host component | Reports the host component versions |
 | `plugin_install` | CLI | with a host component | with a host component | with a host component | Installs the host component |
+| `plugin_remove` | CLI | with a host component | with a host component | with a host component | Removes the host component |
 
 - A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with long jobs" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
 - CLI-side capabilities run in the CLI process. Instance-side capabilities run in the adapter or, as host methods, in a host component (DCLI-262, DCLI-274).

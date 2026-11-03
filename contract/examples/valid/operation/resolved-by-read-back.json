@@ -19,8 +19,10 @@
     "outcome": "not_applied",
     "resolved_by": "read_back",
     "observed": {
-      "x_mm": 20.0,
-      "y_mm": 30.0
+      "file:///D:/proj/board.kicad_pcb#/footprints/R2": {
+        "x_mm": 20.0,
+        "y_mm": 30.0
+      }
     },
     "resolved_at": "2026-11-02T08:41:00Z"
   }

@@ -175,7 +175,7 @@ A command with no target object, such as `session open`, `doc create`, `plugin i
 In a batch, every object MUST be covered; one object that is not covered blocks the whole batch (DCLI-064). The runtime MUST NOT widen a prefix, guess a target or match by object name.
 
 Why: The three conditions bound the change only together; any one alone leaves a gap, such as the right effect on the wrong file.
-Check: 🤖 Runtime unit tests; driver conformance test D14.
+Check: 🤖 Runtime unit tests; general conformance test G07; driver conformance test D14.
 
 ### DSEC-015 Refusing writes
 
@@ -204,7 +204,7 @@ The runtime MUST report the scope status in the `authorization` key of `context`
 Commands that need no scope (DSEC-017) run whatever the status.
 
 Why: The Agent learns in one read call whether it may write at all, instead of finding out from a refused write.
-Check: 🤖 General conformance test R05 runs `context` on an empty state; runtime unit tests cover each status.
+Check: 🤖 General conformance tests G07 and R05; runtime unit tests cover each status.
 
 ### DSEC-017 Scope for records and settings
 
@@ -230,7 +230,7 @@ Halt commands only stop work that is running: the commands with the verb `stop` 
 A halt command still checks the scope's targets, keeps an operation record and returns a receipt (DCLI-050).
 
 Why: A person or an Agent that needs to stop a machine or a runaway job must be able to do it at once; a confirmation or a missing permission at that moment is itself the danger.
-Check: 🤖 Driver conformance test D25; runtime unit tests; 👀 review of the commands registered with `halt: true`.
+Check: 🤖 Driver conformance tests D11 and D25; runtime unit tests; 👀 review of the commands registered with `halt: true`.
 
 ## Untrusted Content
 
@@ -254,7 +254,7 @@ Check: 👀 Review of each command's output fields against this list.
 Every envelope that carries untrusted content MUST list the JSON path of each untrusted value in `meta.untrusted`; when there is none, the key is omitted (DCLI-004). The runtime marks the values it produces itself: native error messages; dialog titles and text, in the `details` of `E_HUMAN_REQUIRED` (DCLI-066) and in the `blocker` of a blocked session; team knowledge fields; and any text of its own that embeds untrusted values, such as the preview's `action` and target `label`, and generated commands such as `resume` and `lookup`. For domain commands, the tool declares which result fields hold untrusted content when it registers the command (DCLI-029), and the runtime lists them.
 
 Why: An Agent can keep data apart from instructions only when the output says, field by field, which text came from outside.
-Check: 🤖 Driver conformance test D19 for team knowledge; 👀 review of the untrusted fields declared for domain commands.
+Check: 🤖 General conformance tests G02 and R04; driver conformance test D19 for team knowledge; 👀 review of the untrusted fields declared for domain commands.
 
 ### DSEC-022 Never instructions
 
@@ -298,7 +298,7 @@ Check: 🤖 Runtime unit tests; 👀 review of tool code for direct writes to th
 Only the current user may read or write the state directory. On macOS and Linux its mode MUST be `0700`. On Windows its ACL MUST grant access to the current user only. The runtime sets this when it creates the directory. `context` MUST report the protection actually in place (DCLI-032): `posix_0700`, `windows_acl` or `none`, never the protection intended.
 
 Why: The directory holds the default scope file, the record of every change with its confirm token, and the locks; another user who could write there could plant a token, release a lock or widen the scope.
-Check: 🤖 Runtime unit tests.
+Check: 🤖 General conformance test R05; runtime unit tests.
 
 ### DSEC-033 Confirm tokens
 
@@ -353,7 +353,7 @@ Check: 👀 Review of the network code in the runtime and the adapter.
 
 ### DSEC-050 Installing host components
 
-A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
+A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). `plugin remove` removes every installed version that no running instance has loaded; a loaded version stays on disk until no instance has it loaded (DSEC-051). An instance keeps the version it loaded, and while no version is on disk, DSEC-053 does not refuse its writes. `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
 
 Why: A host component runs inside the person's application with the application's full rights; putting it there changes the environment, which the person must allow and see. A host that wrote its discovery file elsewhere would be invisible to the CLI.
 Check: 🤖 Runtime unit tests; 👀 review that `update` and the npm packages install no host component.

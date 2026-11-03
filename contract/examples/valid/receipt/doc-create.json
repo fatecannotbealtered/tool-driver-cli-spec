@@ -15,7 +15,10 @@
       "verification": "passed"
     },
     "observed": {
-      "exists": true
+      "document": {
+        "id": "doc_2",
+        "exists": true
+      }
     },
     "mismatched": [],
     "session": {

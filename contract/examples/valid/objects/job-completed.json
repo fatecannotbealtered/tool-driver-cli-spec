@@ -30,13 +30,12 @@
       "verification": "passed"
     },
     "observed": {
-      "files": [
-        {
-          "path": "D:/proj/drc-report.json",
-          "bytes": 18234,
-          "sha256": "9f2c4e7a1b3d5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8091a2b3c4d5e6f7"
-        }
-      ]
+      "file:///D:/proj/drc-report.json": {
+        "exists": true,
+        "path": "D:/proj/drc-report.json",
+        "bytes": 18234,
+        "sha256": "9f2c4e7a1b3d5f60718293a4b5c6d7e8f9012a3b4c5d6e7f8091a2b3c4d5e6f7"
+      }
     },
     "mismatched": [],
     "session": {
@@ -52,5 +51,6 @@
   "result": {
     "report": "D:/proj/drc-report.json",
     "violations": 3
-  }
+  },
+  "ok": true
 }
