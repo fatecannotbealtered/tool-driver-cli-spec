@@ -3,8 +3,8 @@
 一套开发「驱动工具」的规范。驱动工具是让 AI Agent 操作专业桌面软件和设备的命令行工具。
 
 [![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
-![Spec](https://img.shields.io/badge/spec-1.0.0--rc.1-blue)
-![Status](https://img.shields.io/badge/status-release%20candidate-yellow)
+![Spec](https://img.shields.io/badge/spec-1.0.0-blue)
+![Status](https://img.shields.io/badge/status-stable-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
 [English](README.md) | 中文
@@ -38,7 +38,7 @@
 
 ## 状态
 
-1.0.0-rc.1 是候选发布版：规范、驱动运行时、一致性测试、项目模板、评测套件、开发用 Skill 和接入指南都已完成，工具现在就可以采用。工具试用之后再发布 1.0.0。
+1.0.0 已发布：规范、驱动运行时、一致性测试、项目模板、评测套件、开发用 Skill 和接入指南都已完成，工具现在就可以采用。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
@@ -47,7 +47,7 @@
 | 3 | 模拟宿主，也是宿主协议的参考实现 | 完成 |
 | 4 | Python 驱动运行时、两组一致性测试和项目模板 | 完成 |
 | 5 | 评测套件、Skill 与知识库模板、开发用 Skill、接入指南 | 完成 |
-| 6 | 发布 1.0.0-rc.1，然后发布 1.0.0 | 进行中 |
+| 6 | 发布 1.0.0 | 完成 |
 
 ## 仓库结构
 

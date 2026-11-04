@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-REPO-SPEC_zh.md)
 
-> Version 1.0.0-rc.1 · Clauses DREPO-001 to DREPO-062
+> Version 1.0.0 · Clauses DREPO-001 to DREPO-062
 
 ## How to Read
 

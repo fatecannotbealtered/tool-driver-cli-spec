@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-SKILL-SPEC_zh.md)
 
-> Version 1.0.0-rc.1 · Clauses DSKL-001 to DSKL-127
+> Version 1.0.0 · Clauses DSKL-001 to DSKL-127
 
 ## How to Read
 
