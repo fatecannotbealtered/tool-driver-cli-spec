@@ -38,14 +38,14 @@ Every value a tool or a test can read as data lives in [`contract/driver-contrac
 
 ## Status
 
-Version 1.0.0-rc.1 is in development. Nothing is released yet, and tools cannot adopt the specification until the driver runtime exists.
+Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtime, the conformance suites and the project template exist; tools can adopt the specification once 1.0.0-rc.1 is released.
 
 | Phase | Content | State |
 |---|---|---|
 | 1 | Design | Done |
 | 2 | Specifications, contract, schemas, checks | Done |
 | 3 | Fake host, the reference implementation of the host protocol | Done |
-| 4 | Python driver runtime, the two conformance suites and the project template | In progress |
+| 4 | Python driver runtime, the two conformance suites and the project template | Done |
 | 5 | Skill and knowledge templates, development Skill, onboarding guide | Planned |
 | 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
 
