@@ -4,27 +4,68 @@
   "date": "2026-11-01",
   "agent": "Claude Code 2.4",
   "model": "claude-opus-5-5",
+  "simulated": false,
+  "platform": "windows",
+  "targets": [
+    "file:///D:/e2e/kicad/eval/"
+  ],
   "questions": [
     {
       "scenario": "read_answer",
       "id": "read-r1-position",
-      "passed": true
+      "passed": true,
+      "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "commands": [
+        "footprint get"
+      ],
+      "ran": [
+        "footprint get",
+        "knowledge get"
+      ]
     },
     {
       "scenario": "scoped_change",
       "id": "move-r1",
-      "passed": true
+      "passed": true,
+      "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "commands": [
+        "footprint move",
+        "doc save"
+      ],
+      "ran": [
+        "session list",
+        "footprint move",
+        "doc save"
+      ]
     },
     {
       "scenario": "knowledge_lookup",
       "id": "locked-footprint",
-      "passed": true
+      "passed": true,
+      "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "commands": [
+        "footprint get"
+      ],
+      "ran": [
+        "footprint get",
+        "knowledge get"
+      ]
     },
     {
       "scenario": "separate_save",
       "id": "move-then-save",
       "passed": false,
-      "notes": "The Agent saved without showing the external change on C3."
+      "notes": "The Agent saved without showing the external change on C3.",
+      "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "commands": [
+        "footprint move",
+        "doc save"
+      ],
+      "ran": [
+        "session list",
+        "footprint move",
+        "doc save"
+      ]
     }
   ]
 }

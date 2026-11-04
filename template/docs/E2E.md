@@ -25,6 +25,8 @@ To run a behavior matrix on the real {{application}}:
 5. A row that cannot be caused on demand on the real {{application}}, such as `disconnect`, may be marked `unrunnable` with the reason; the `normal`, `dialog` and `read_back_mismatch` rows never may.
 6. Run `python scripts/spec.py generate` to update the support matrix and the index below, then commit the records with the matrices.
 
+To run the evaluation questions on the real {{application}}, a person lists a folder for the evaluation workspaces under Authorized Targets, together with any other target a question's `SCOPE` names, such as a device. Then run `python scripts/spec.py eval --workspace-root <folder>`. The runner writes each question's scope file itself, granting only the question's documents and the targets its `SCOPE` names, and writes the evaluation report to `docs/evidence/`.
+
 A live record counts as evidence only while its tool version has the same major and minor version as {{tool}}. Records never hold secrets, and arguments that carry secrets show as `***`.
 
 ## Evidence Records

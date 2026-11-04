@@ -46,7 +46,7 @@
 | 2 | 五份规范、契约、Schema、检查脚本 | 完成 |
 | 3 | 模拟宿主，也是宿主协议的参考实现 | 完成 |
 | 4 | Python 驱动运行时、两组一致性测试和项目模板 | 完成 |
-| 5 | Skill 与知识库模板、开发用 Skill、接入指南 | 计划中 |
+| 5 | 评测套件、Skill 与知识库模板、开发用 Skill、接入指南 | 进行中 |
 | 6 | 发布 1.0.0-rc.1，然后发布 1.0.0 | 计划中 |
 
 ## 仓库结构
@@ -56,11 +56,11 @@ tool-driver-cli-spec/
 ├── spec/        五份规范，中英文各一份
 ├── contract/    driver-contract.json、schemas/、examples/
 ├── sdk/python/  _driver/，每个工具原样复制的驱动运行时（DREPO-032）
-├── conformance/ fakehost/，模拟宿主（DVER-020）；suites/，两组一致性测试（DVER-001）
+├── conformance/ fakehost/，模拟宿主（DVER-020）；suites/，两组一致性测试（DVER-001）；eval/，评测题（DSKL-041）
 ├── template/    项目模板，新工具从它生成（DREPO-062）
-├── scripts/     check_spec.py、build_spec_bundle.py；给工具项目用的 instantiate.py、sync_spec.py、check_project.py、run_matrix.py
+├── scripts/     check_spec.py、build_spec_bundle.py；给工具项目用的 instantiate.py、sync_spec.py、check_project.py、run_matrix.py、run_eval.py
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       脚本、模拟宿主和运行时的单元测试；sample/，一致性测试所测的示例工具；e2e_template.py
+└── tests/       脚本、模拟宿主和运行时的单元测试；sample/，一致性测试所测的示例工具；e2e_template.py、eval_template.py
 ```
 
 第 5 阶段会加上 `skills/`。
@@ -81,6 +81,13 @@ python -m suites --project ../tests/sample -- python -m sample_cli
 ```bash
 python -m pip install --require-hashes --no-deps -r template/requirements-dev.txt
 python tests/e2e_template.py
+```
+
+评测套件用模板工具在模拟宿主上跑全部场景。CI 用脚本代理检查每个评分程序；每次发布之前，用真实的 Agent（Claude Code）跑一遍，每道题都必须通过：
+
+```bash
+python tests/eval_template.py
+python tests/eval_template.py --agent claude --report eval-report.json
 ```
 
 新工具项目从发布包开始生成：

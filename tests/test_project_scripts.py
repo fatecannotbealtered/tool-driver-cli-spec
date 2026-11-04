@@ -374,22 +374,64 @@ class ProjectTest(unittest.TestCase):
         problems = [p.message for p in self.problems() if p.clause == "DVER-030"]
         self.assertTrue(any("row conflict applies only when writes" in m for m in problems), problems)
 
+    def question(self, name: str, scenario: str, commands: list[str]) -> None:
+        folder = self.project / "tests" / "eval"
+        folder.mkdir(parents=True, exist_ok=True)
+        text = (f'"""A question."""\nSCENARIO = {scenario!r}\nCOMMANDS = {commands!r}\nTURNS = ["Do it."]\n\n\n'
+                'def grade(run):\n    pass\n')
+        (folder / f"{name}.py").write_text(text, encoding="utf-8")
+
+    def report(self, name: str, **change) -> dict:
+        """An evaluation report from the real application of every current question, all passed."""
+        folder = self.project / "tests" / "eval"
+        questions = []
+        for path in sorted(folder.glob("*.py")):
+            commands = ["part move"] if path.stem == "move-r1" else ["part get"]
+            questions.append({"scenario": "scoped_change" if path.stem == "move-r1" else path.stem, "id": path.stem,
+                              "passed": True, "sha256": check_project.digest(path), "commands": commands, "ran": commands})
+        data = {"tool": "demo-cli", "tool_version": "0.1.0", "date": "2026-11-01", "agent": "a", "model": "m",
+                "simulated": False, "platform": "windows", "targets": ["file:///D:/e2e/demo/eval/"], "questions": questions}
+        data.update(change)
+        (self.project / "docs" / "evidence" / name).write_text(json.dumps(data), encoding="utf-8")
+        return data
+
     def test_stable_needs_an_evaluation(self):
         self.authorize("file:///D:/e2e/demo/")
         ref = self.record("2026-11-01-move.json")
-        report = self.project / "docs" / "evidence" / "eval-2026-11-01.json"
-        report.write_text(json.dumps({"tool": "demo-cli", "tool_version": "0.1.0", "date": "2026-11-01", "agent": "a",
-                                      "model": "m", "questions": [{"scenario": "read_answer", "id": "q1", "passed": False}]}),
-                          encoding="utf-8")
         self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01.json"], f"live:{ref}#normal")
         found = self.clauses()
         self.assertTrue({"DSKL-043", "DREPO-004", "DSKL-042"} <= found, found)
-        (self.project / "tests" / "eval").mkdir()
-        for scenario in ("read_answer", "scoped_change", "knowledge_lookup", "separate_save"):
-            (self.project / "tests" / "eval" / f"{scenario}.json").write_text(json.dumps({"scenario": scenario, "id": scenario}),
-                                                                              encoding="utf-8")
-        report.write_text(report.read_text(encoding="utf-8").replace('"passed": false', '"passed": true'), encoding="utf-8")
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        data = self.report("eval-2026-11-01.json")
         self.assertEqual([p.text() for p in self.problems()], [])
+        moved = [dict(q, ran=[]) if q["id"] == "move-r1" else q for q in data["questions"]]
+        cases = {"simulated": {"simulated": True},
+                 "a question failed": {"questions": [dict(q, passed=q["id"] != "read_answer") for q in data["questions"]]},
+                 "a question is missing": {"questions": [q for q in data["questions"] if q["id"] != "separate_save"]},
+                 "a question changed since": {"questions": [dict(q, sha256="0" * 64) if q["id"] == "read_answer" else q
+                                                            for q in data["questions"]]},
+                 "the command never ran": {"questions": moved}}
+        for what, change in cases.items():
+            with self.subTest(what=what):
+                self.report("eval-2026-11-01.json", **change)
+                self.expect("DSKL-043")
+        self.report("eval-2026-11-01.json")
+        self.report("eval-2026-11-02.json", date="2026-11-02",
+                    questions=[dict(q, passed=False) for q in data["questions"]])
+        problems = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("not the newest" in m for m in problems), problems)
+        (self.project / "docs" / "evidence" / "eval-2026-11-02.json").unlink()
+        self.report("eval-2026-11-01.json", targets=["file:///D:/elsewhere/"])
+        self.expect("DVER-050")
+
+    def test_question_files_are_checked(self):
+        self.question("move-r1", "made_up", ["part move"])
+        self.question("get-r1", "read_answer", ["part fly"])
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-044"]
+        self.assertTrue(any("made_up" in m for m in messages), messages)
+        self.assertTrue(any("`part fly`" in m for m in messages), messages)
 
     def test_corrupt_runtime_manifest(self):
         (self.project / "demo_cli" / "_driver" / "MANIFEST.json").write_text("garbage", encoding="utf-8")

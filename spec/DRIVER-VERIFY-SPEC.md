@@ -28,7 +28,7 @@ This specification applies to every driver tool and to the driver runtime. It co
 
 It does not repeat the rules being tested. Each test names the clauses it checks.
 
-Two kinds of runs test a tool, and each proves something different. The conformance suites, run on the fake host, prove that the runtime handles every situation correctly for the tool. A live run exercises the tool's real adapter with the real application. Only live runs, and the evaluation with Agents, count as evidence for a command's maturity (DVER-021, DVER-040).
+Two kinds of runs test a tool, and each proves something different. The conformance suites, run on the fake host, prove that the runtime handles every situation correctly for the tool. A live run exercises the tool's real adapter with the real application. Only live runs, and the evaluation with Agents on the real application, count as evidence for a command's maturity (DVER-021, DVER-040).
 
 One idea runs through this specification: only what is tested counts. Not run is not passed. Simulated is not real. Not verified is not success.
 
@@ -211,7 +211,7 @@ Check: 🤖 `check_project`: no command and no support matrix row is marked `ver
 
 ### DVER-022 Fake host in the specification repository's CI
 
-The tool-driver-cli-spec repository MUST run the driver runtime, the project template and both conformance suites with the fake host in CI on Windows, macOS and Linux, on every merge and every release. It MUST also run every evaluation scenario of DSKL-040 there, with the template tool; a tool's own evaluation covers only the scenarios whose result depends on text its author wrote (DSKL-042). The runtime's unit tests MUST run in the same CI, on the same three systems. Like the two conformance suites, they are a required check: a failure blocks the merge and the release. They cover the built-in commands and every rule whose check line cites runtime unit tests.
+The tool-driver-cli-spec repository MUST run the driver runtime, the project template and both conformance suites with the fake host in CI on Windows, macOS and Linux, on every merge and every release. It MUST also run the evaluation suite of DSKL-041 there with its scripted agents. A tool's own evaluation covers only the scenarios whose result depends on text its author wrote (DSKL-042). The runtime's unit tests MUST run in the same CI, on the same three systems. Like the two conformance suites, they are a required check: a failure blocks the merge and the release. They cover the built-in commands and every rule whose check line cites runtime unit tests.
 
 Why: Every tool copies the runtime unchanged. A fault found here is fixed once instead of in every tool.
 Check: 👀 Review of the tool-driver-cli-spec repository's CI workflow.
@@ -295,7 +295,7 @@ An evidence reference has the form `<kind>:<path>[#<anchor>]`. The `path` is rel
 | Kind | What it shows | Where the file is |
 |---|---|---|
 | `live` | The command ran on the real application, with the real adapter | A live record in `docs/evidence/` (DVER-042) |
-| `eval` | Agents completed the tool's evaluation questions with its Skills | An eval report `docs/evidence/eval-*.json` for the questions in `tests/eval/` (DSKL-043) |
+| `eval` | Agents completed the tool's evaluation questions with its Skills, on the real application | An eval report `docs/evidence/eval-*.json` for the questions in `tests/eval/` (DSKL-043) |
 
 Each file MUST validate against its schema in `contract/schemas/`: a behavior matrix against `behavior-matrix.schema.json`, a live record against `evidence.schema.json` and an eval report against `eval-report.schema.json`.
 

@@ -47,7 +47,7 @@ Command output, writes, security, tests and project layout follow the clauses th
 | authorization scope | The grant a person writes in the scope file: which effects, on which targets, until when (DSEC-012). |
 | untrusted content | Text that comes from documents, the application, devices or team knowledge, not from the tool or the person (DSEC-020). |
 | evaluation | An Agent with the tool's Skills does a real task, and a grader checks the result. |
-| grader | The program that decides whether an evaluation task passed, from the real state of the application or the files. |
+| grader | The program that decides whether an evaluation task passed, from the real state of the application or the files and the runs of the tool, never from what the Agent says it did. |
 | knowledge base | The facts, rules and resources a tool offers the Agent through the knowledge commands. |
 | knowledge entry | One item of knowledge, with an ID and a kind (DSKL-101). |
 | builtin knowledge | Entries shipped in the tool package under `knowledge/`. |
@@ -71,7 +71,7 @@ Command output, writes, security, tests and project layout follow the clauses th
 | Command map | A generator that writes the map into each Skill and the README from the command registration (DSKL-006) | Registers commands; never edits the map |
 | Skill checks | `check_project`: length, front matter, versions, command ownership, directory contents, no write-recipe or STOP text in domain Skills | Fixes what the checks report |
 | Release and sync | `update` syncs installed Skills; doctor compares the CLI and Skill versions (DSKL-031) | Ships the Skills in `skills/` of the npm package |
-| Evaluation | The suite for every scenario, run with the fake host and the template tool (DSKL-041) | Writes questions and graders in `tests/eval/` for the per-tool scenarios before marking a command stable (DSKL-042, DSKL-043) |
+| Evaluation | The suite for every scenario, run with the fake host and the template tool (DSKL-041); the evaluation runner `run_eval`, which records every run of the tool and writes the report (DSKL-044) | Writes questions and graders in `tests/eval/` for the per-tool scenarios before marking a command stable, and runs them with a real Agent on the real application (DSKL-042 to DSKL-044) |
 | Knowledge commands | `knowledge list`, `get`, `search`, `create` and `delete`; the registration file; link checks; untrusted marking; knowledge in `context` and doctor (DSKL-123 to DSKL-125) | Nothing |
 | Builtin knowledge | The `knowledge/` template, the index generator and the knowledge checks (DSKL-121, DSKL-127) | Writes the entries (DSKL-126); names each command's related entries and the entries for errors the adapter recognizes (DSKL-124) |
 | Team knowledge | Stores registered links only (DSKL-105) | Nothing; teams keep their documents in Feishu, and the Agent reads them with lark-cli |
@@ -328,7 +328,7 @@ Check: 🤖 `check_project` and the npm package content check (DREPO-041).
 
 ### DSKL-040 Evaluation scenarios
 
-In an evaluation, an Agent with the tool's Skills does a real task, and a grader checks the result in the application or the files (DSKL-042). The scenarios come in two groups, general and driver. For each scenario the contract lists, under `skill.eval_scenarios.general[]` and `skill.eval_scenarios.driver[]`:
+In an evaluation, an Agent with the tool's Skills does a real task, and a grader checks the real result (DSKL-042). The scenarios come in two groups, general and driver. For each scenario the contract lists, under `skill.eval_scenarios.general[]` and `skill.eval_scenarios.driver[]`:
 
 - `applies_when`: when the scenario applies. The values mean what they mean for driver conformance tests (DVER-010), and a scenario applies when any of its values holds.
 - `per_tool`: whether the result depends on text the tool author wrote, such as the command map, the domain playbooks or the knowledge entries. The last column of the tables shows it.
@@ -370,24 +370,67 @@ Check: 🤖 `check_spec` compares both tables with the contract; the suites of D
 
 ### DSKL-041 Repository evaluation suite
 
-The tool-driver-cli-spec repository MUST keep an evaluation suite with questions for every scenario of DSKL-040, run with the fake host and the template tool. Its CI runs the suite as DVER-022 sets out. For the scenarios without `per_tool`, this suite is the evaluation of every tool.
+The tool-driver-cli-spec repository MUST keep an evaluation suite with at least one question for every scenario of DSKL-040, in the format of DSKL-044, run with the fake host and the template tool. For the scenarios without `per_tool`, this suite is the evaluation of every tool.
 
-Why: The fixed Skill text and the runtime serve every tool, so a change to them can mislead Agents in all tools at once, and one suite run here covers them for all.
-Check: 👀 Review of the tool-driver-cli-spec repository's CI workflow.
+- Every question MUST have a `right` scripted agent, which does what the scenario requires, and at least one `wrong` scripted agent, which makes a mistake typical of the scenario.
+- CI MUST run the scripted agents as DVER-022 sets out. Each grader MUST pass `right` and fail every `wrong`; a scripted agent that breaks fails the check.
+- Before each release, the suite MUST run with a real Agent, and every question MUST pass. The evaluation report MUST be published with the release.
+
+Why: The fixed Skill text and the runtime serve every tool, so a change to them can mislead Agents in all tools at once; one suite run here covers them for all. Scripted agents cost nothing and always act the same, so they can guard every merge and show that each grader catches the mistake it is meant to catch. A real Agent costs money and acts a little differently each time, so it runs once per release.
+Check: 🤖 `tests/eval_template.py` runs the scripted agents in the repository's CI; 👀 review of each release checks the real Agent's report.
 
 ### DSKL-042 Tool evaluation questions
 
-A tool's evaluation questions MUST live in `tests/eval/`. They MUST include at least one question for every scenario that has `per_tool: true` and applies to the tool by its `applies_when` (DSKL-040). Whether a scenario applies follows from the command registration, not from the author's choice; a scenario that does not apply, or that is not per tool, needs no question here. Graders MUST decide from the real result in the application or the files, never from what the Agent says it did. A tool needs evaluation questions once it marks a command stable (DSKL-043).
+A tool's evaluation questions MUST live in `tests/eval/`, in the format of DSKL-044. They MUST include at least one question for every scenario that has `per_tool: true` and applies to the tool by its `applies_when` (DSKL-040). Whether a scenario applies follows from the command registration, not from the author's choice; a scenario that does not apply, or that is not per tool, needs no question here. A grader MUST decide what was done from the real result in the application or the files and from the runs of the tool that the runner recorded, never from what the Agent says it did. What the Agent tells the person, such as its report or a question, is judged from its messages, in either language. A tool needs evaluation questions once it marks a command stable (DSKL-043).
 
 Why: An Agent can claim a success it did not achieve; only the real result shows what happened.
 Check: 🤖 `check_project` checks that `tests/eval/` covers every per-tool scenario that applies; 👀 review checks the graders.
 
 ### DSKL-043 Evaluation for stable
 
-A command MUST NOT be marked stable unless evaluation questions cover it and a current evaluation report exists (DVER-041, DVER-043). Other maturity levels do not need evaluation. An evaluation report is a JSON file `docs/evidence/eval-*.json` that `contract/schemas/eval-report.schema.json` validates; it records the tool version, the date, the Agent and model, and the result of each question. An `eval:` evidence reference points to it (DVER-041).
+A command MUST NOT be marked stable unless its `eval:` evidence names an evaluation report that the runner wrote on the real application (DSKL-044), and that report:
 
-Why: Stable promises that Agents use the command correctly, and only evaluation shows that.
-Check: 🤖 `check_project` checks that every stable command has a current `eval:` evidence reference.
+- is the newest such report for the tool's current minor version (DVER-043);
+- holds a result for every question in `tests/eval/`, run from the question file as it is now;
+- shows that every question passed;
+- holds a question that lists the command in `COMMANDS` and ran it.
+
+Other maturity levels do not need evaluation. An evaluation report is a JSON file `docs/evidence/eval-*.json` that `contract/schemas/eval-report.schema.json` validates. It records the tool version, the date, the Agent and model, the platform, whether the fake host stood in for the application, the workspace root and the other scope targets, and for each question its result, the SHA-256 of its file, its `COMMANDS` and the commands the Agent ran. A report with `simulated: true` never supports a maturity level (DVER-021). The targets of every other report MUST be listed under Authorized Targets (DVER-050). An `eval:` evidence reference points to the report (DVER-041).
+
+Why: Stable promises that Agents use the command correctly. Only a full, current run on the real application shows that, and a report tied to the question files cannot be reused once a question changes.
+Check: 🤖 `check_project` checks the report behind every stable command against these conditions, and the targets of every report.
+
+### DSKL-044 Question files and the runner
+
+Each evaluation question MUST be one Python file named after the question's ID: lowercase words joined by hyphens or underscores. Files whose names start with `_` are not questions; questions MAY import shared helpers from them. Folders next to the questions MAY hold their documents. A question file defines these names; the values MUST be literals, so that `check_project` reads them without running the file:
+
+<!-- contract:eval_question -->
+| Name | Required | Content |
+|---|---|---|
+| `SCENARIO` | yes | The scenario of DSKL-040 the question covers |
+| `COMMANDS` | yes | The command paths the question shows in use; they also set the default scope |
+| `TURNS` | yes | What the user says, one text per turn |
+| `SCOPE` | no | Scope file fields that replace the defaults below, or `None` for no scope file |
+| `FILES` | no | A folder next to the question; its files are the question's documents |
+| `FAKE_HOST` | no | The fake host's world, for a run with the fake host |
+| `before` | no | `before(run, turn)` prepares the application before a turn, such as a dialog a person then closes |
+| `after` | no | `after(run)` puts the application back after the question, even when it failed |
+| `grade` | yes | `grade(run)` decides the result; each failed `run.check` records a failure, and a question without failures passed |
+| `right` | no | `right(agent, turn)`, a scripted agent that does what the scenario requires |
+| `wrong` | no | `wrong(agent, turn)` and any `wrong_<name>`, scripted agents that make a mistake the grader must catch |
+
+The evaluation runner `run_eval`, which comes with this specification, runs the questions with an Agent. For each question it MUST:
+
+- make a fresh workspace, the Agent's working folder, with the tool's Skills and the scope file;
+- keep the question's documents in a folder beside the workspace, so that the Agent reaches them only through the tool; `{documents}` in `TURNS` and in scope targets stands for that folder;
+- write the scope file. By default it grants the documents folder, the effects of the commands in `COMMANDS`, and `dangerous` only when one of them needs it; `SCOPE` replaces any of these fields. A question whose commands only read gets no scope file;
+- put the tool on `PATH` behind a shim that records every run, hand the turns to the Agent one by one, call `before` before each turn and `grade` after the last, and always call `after`;
+- let the Agent run nothing but the tool in its shell, and use its file tools only inside the workspace.
+
+On the real application the runner MUST run only when the workspace root and every scope target are listed under Authorized Targets (DVER-050). There the tool keeps the person's environment, so it finds the running application. On the fake host the tool gets a home and a state directory of its own. With `--check` the runner runs the scripted agents in place of the Agent.
+
+Why: One file format and one runner let every tool's questions run the same way. With the documents outside the workspace and every run of the tool recorded, the Agent can reach the result only through the tool, and the grader sees what really ran.
+Check: 🤖 `check_project` checks every question file; the repository's unit tests check the runner.
 
 ## Knowledge Sources
 
@@ -679,6 +722,7 @@ Check: 🤖 `check_project`.
 - [ ] DSKL-041 Repository evaluation suite
 - [ ] DSKL-042 Tool evaluation questions
 - [ ] DSKL-043 Evaluation for stable
+- [ ] DSKL-044 Question files and the runner
 - [ ] DSKL-100 Purpose of the knowledge base
 - [ ] DSKL-101 Knowledge kinds
 - [ ] DSKL-102 Two sources

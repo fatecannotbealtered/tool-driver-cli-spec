@@ -102,6 +102,7 @@ MARKERS = {
     "driver_playbooks": lambda c: list(c["skill"]["driver_playbooks"]),
     "eval_scenarios_general": lambda c: [x["scenario"] for x in c["skill"]["eval_scenarios"]["general"]],
     "eval_scenarios_driver": lambda c: [x["scenario"] for x in c["skill"]["eval_scenarios"]["driver"]],
+    "eval_question": lambda c: [x["name"] for x in c["skill"]["eval_question"]],
     "knowledge_kinds": lambda c: list(c["knowledge"]["kinds"]),
     "knowledge_sources": lambda c: list(c["knowledge"]["sources"]),
     "knowledge_builtin_fields": lambda c: (
@@ -206,6 +207,16 @@ def extra_row_checks(name: str, contract: dict, key: str, cells: list[str], lang
         entry = next(x for x in contract["compatibility_labels"] if x["label"] == key)
         if entry["emoji"] not in row:
             problems.append(f"{key}: row must show {entry['emoji']}")
+    elif name in ("eval_scenarios_general", "eval_scenarios_driver"):
+        group = contract["skill"]["eval_scenarios"][name.rsplit("_", 1)[1]]
+        want = LANG[lang]["yes"] if next(s for s in group if s["scenario"] == key)["per_tool"] else LANG[lang]["no"]
+        if cells[-1].strip() != want:
+            problems.append(f"{key}: the per-tool column must be '{want}'")
+    elif name == "eval_question":
+        entry = next(x for x in contract["skill"]["eval_question"] if x["name"] == key)
+        want = LANG[lang]["yes"] if entry["required"] else LANG[lang]["no"]
+        if len(cells) < 2 or cells[1].strip() != want:
+            problems.append(f"{key}: the required column must be '{want}'")
     return problems
 
 

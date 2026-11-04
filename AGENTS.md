@@ -15,12 +15,13 @@ This repository holds tool-driver-cli-spec: five specifications, a machine contr
 | `sdk/python/_driver/` | The driver runtime every tool copies unchanged; Python standard library only |
 | `conformance/fakehost/` | The fake host and reference implementation of the host protocol; Python standard library only |
 | `conformance/suites/` | The general and driver conformance suites; they start a tool as a process against the fake host |
+| `conformance/eval/` | The evaluation questions of every scenario, each with a grader and a right and a wrong scripted agent |
 | `template/` | The project template; `{{name}}` marks a value `instantiate` fills in, `{{fill: ...}}` a text the tool author writes |
 | `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
 | `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
-| `scripts/instantiate.py`, `sync_spec.py`, `check_project.py`, `run_matrix.py` | The scripts tool projects run from the release bundle: generate a project, pin a release, check a project and write its generated content, run a behavior matrix on the real application |
+| `scripts/instantiate.py`, `sync_spec.py`, `check_project.py`, `run_matrix.py`, `run_eval.py` | The scripts tool projects run from the release bundle: generate a project, pin a release, check a project and write its generated content, run a behavior matrix on the real application, run evaluation questions with an Agent |
 | `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
-| `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against; `tests/e2e_template.py` runs the template end to end |
+| `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against; `tests/e2e_template.py` runs the template end to end; `tests/eval_template.py` runs the evaluation suite with the template tool |
 
 ## Changing the specification
 
@@ -34,7 +35,7 @@ python -m unittest discover -s tests -v
 cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
 
-A change to the runtime, the template or the project scripts also runs `python tests/e2e_template.py`, with the dependencies of `template/requirements-dev.txt` and npm.
+A change to the runtime, the template or the project scripts also runs `python tests/e2e_template.py`, with the dependencies of `template/requirements-dev.txt` and npm. A change to the runtime, the fake host, the Skill template, `scripts/run_eval.py`, the question checks of `check_project` or the evaluation questions also runs `python tests/eval_template.py`.
 
 ## Clause format
 
@@ -137,6 +138,7 @@ A table that repeats contract values is marked with a comment on the line before
 
 - Work on a branch and merge through a pull request. Publishing, tagging and pushing need the maintainer's explicit approval.
 - Every released change gets a new version, an annotated tag and a CHANGELOG entry. One version number has one content.
+- Before each release, run `python tests/eval_template.py --agent claude --report <file>`. Every question must pass with the real Agent, and the report is attached to the release.
 - Never commit secrets, real license data or project files you are not allowed to share.
 - Tests against real applications run only on authorized targets and workspaces. The checks in this repository never need a real application.
 - Scripts and tests that start subprocesses on Windows use `CREATE_NO_WINDOW`.

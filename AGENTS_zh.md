@@ -15,12 +15,13 @@
 | `sdk/python/_driver/` | 驱动运行时，每个工具原样复制；只用 Python 标准库 |
 | `conformance/fakehost/` | 模拟宿主，也是宿主协议的参考实现；只用 Python 标准库 |
 | `conformance/suites/` | 通用和驱动两组一致性测试；以进程方式启动工具，接模拟宿主 |
+| `conformance/eval/` | 每个场景的评测题，各带一个评分程序，以及一个对的和一个错的脚本代理 |
 | `template/` | 项目模板；`{{name}}` 是 `instantiate` 填入的值，`{{fill: ...}}` 是工具作者要写的内容 |
 | `scripts/check_spec.py` | 检查条款格式、编号、中英文对应、契约表格、Schema 和示例 |
 | `scripts/build_spec_bundle.py` | 生成发布用的 ZIP 和它的 SHA-256 文件 |
-| `scripts/instantiate.py`、`sync_spec.py`、`check_project.py`、`run_matrix.py` | 工具项目从发布包里运行的脚本：生成项目、钉住某个发布、检查项目并写入生成内容、在真实软件上运行行为矩阵 |
+| `scripts/instantiate.py`、`sync_spec.py`、`check_project.py`、`run_matrix.py`、`run_eval.py` | 工具项目从发布包里运行的脚本：生成项目、钉住某个发布、检查项目并写入生成内容、在真实软件上运行行为矩阵、让 Agent 运行评测题 |
 | `docs/OPEN-QUESTIONS.md` | 开放问题；规范正文里不放开放问题 |
-| `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具；`tests/e2e_template.py` 端到端地跑一遍模板 |
+| `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具；`tests/e2e_template.py` 端到端地跑一遍模板；`tests/eval_template.py` 用模板工具运行评测套件 |
 
 ## 修改规范
 
@@ -34,7 +35,7 @@ python -m unittest discover -s tests -v
 cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
 
-改了运行时、模板或项目脚本，还要运行 `python tests/e2e_template.py`；它需要 `template/requirements-dev.txt` 里的依赖和 npm。
+改了运行时、模板或项目脚本，还要运行 `python tests/e2e_template.py`；它需要 `template/requirements-dev.txt` 里的依赖和 npm。改了运行时、模拟宿主、Skill 模板、`scripts/run_eval.py`、`check_project` 对题目的检查或评测题，还要运行 `python tests/eval_template.py`。
 
 ## 条款格式
 
@@ -137,6 +138,7 @@ cd conformance && python -m suites --project ../tests/sample -- python -m sample
 
 - 在分支上开发，通过 PR 合并。发布、打标签和推送需要维护者明确同意。
 - 每次发布的变化都形成新版本，打带注释的标签，写进 CHANGELOG。一个版本号只对应一份内容。
+- 每次发布之前，运行 `python tests/eval_template.py --agent claude --report <file>`。用真实的 Agent 跑时每道题都必须通过，报告附在发布上。
 - 不得提交密钥、真实许可数据，或无权分享的工程文件。
 - 对真实软件的测试只在已授权的目标和工作区里进行。本仓库的检查从不需要真实软件。
 - 在 Windows 上启动子进程的脚本和测试使用 `CREATE_NO_WINDOW`。
