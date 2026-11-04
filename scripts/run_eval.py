@@ -374,6 +374,7 @@ class Session:
         if self.host is not None:
             self.host.stop()
         if self.keep:
+            (self.tmp / "messages.json").write_text(json.dumps(self.messages, indent=2, ensure_ascii=False), encoding="utf-8")
             print(f"   kept {self.tmp}")
         else:
             shutil.rmtree(self.tmp, ignore_errors=True)
