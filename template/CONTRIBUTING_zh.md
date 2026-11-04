@@ -40,6 +40,7 @@ python scripts/spec.py check
 | `python scripts/spec.py suites` | 用模拟宿主代替 {{application}}，对 {{tool}} 运行两套一致性测试 |
 | `python scripts/spec.py sync <version>` | 用 tool-driver-cli-spec 另一个发布里的副本替换固定副本 |
 | `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` | 在真实的 {{application}} 上、在授权目标上运行一个命令的行为矩阵，并写下真实软件记录 |
+| `python scripts/spec.py eval --workspace-root <folder>` | 在授权的文件夹里，用 Claude Code 在真实的 {{application}} 上运行 `tests/eval/` 里的评测题，并写出评测报告；加 `--check --fake-host` 时，用脚本代理检查每个评分程序 |
 | `python -m unittest discover -s tests` | 运行单元测试 |
 | `python scripts/build.py` | 为本机构建原生程序和平台包 |
 | `python scripts/pack.py` | 构建 npm 包，并做包内容检查 |
@@ -80,7 +81,35 @@ python scripts/spec.py check
 
 **真实软件记录。** `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` 在真实的 {{application}} 上运行一个矩阵，矩阵用到的每个占位符各给一个 `--set`，占位符名不带花括号，如 `--set doc=<file>`；每个值都必须是授权目标。它把真实软件记录写进 `docs/evidence/`，并填上每一行的实际结果和 `live:` 证据引用。具体步骤见 `docs/E2E_zh.md`。无法按需制造的行，如 `disconnect`，可以标为 `unrunnable` 并写明原因；`normal`、`dialog` 和 `read_back_mismatch` 这三行不可以。
 
-**评测。** 命令标为 stable 之前，`tests/eval/` 里要有覆盖它的评测题，评分程序根据 {{application}} 或文件里的真实结果判定；`docs/evidence/` 里还要有一份当前的评测报告 `eval-<date>.json`。
+**评测。** 命令标为 stable 之前，`tests/eval/` 里要为每个适用于 {{tool}}、需要工具自测的场景各出一题，`docs/evidence/` 里还要有一份在真实 {{application}} 上得到的最新评测报告：它覆盖了现在的每道题，每道题都通过了，并且有一道题在 `COMMANDS` 里列出了这条命令、实际运行了它。每道题是一个以题目 ID 命名的 Python 文件；名为 `_*.py` 的文件放各题共用的辅助代码。
+
+```python
+"""Move one footprint inside the scope."""
+SCENARIO = "scoped_change"
+COMMANDS = ["footprint move"]
+TURNS = ["Move footprint R1 in {documents}/board.kicad_pcb to x 12.5 mm, y 30 mm."]
+FILES = "boards"          # copied into the question's documents folder
+
+
+def grade(run):
+    part = run.tool("footprint", "get", "--doc", str(run.documents / "board.kicad_pcb"), "--id", "R1")["data"]["items"][0]
+    run.check(part["x_mm"] == 12.5, "R1 did not move")
+    run.check(len([c for c in run.write_calls() if c.ok]) == 1, "not exactly one write")
+```
+
+`python scripts/spec.py eval --workspace-root <folder>` 用 Claude Code 在真实的 {{application}} 上运行这些题目并写出报告；这个文件夹必须列在 `docs/E2E_zh.md` 的「授权目标」一节里。运行器为每道题在这个文件夹里新建一个工作目录，放进 Skill 和授权范围文件，把文档放在旁边的文件夹里，并记下 {{tool}} 的每次运行；Agent 的 shell 只能运行 {{tool}}，文件工具只能用在工作目录里。`TURNS` 和授权范围目标里的 `{documents}` 代表文档所在的文件夹。默认的授权范围授予这个文件夹、`COMMANDS` 里命令的效果，只有其中某条命令需要时才授予 `dangerous`；`SCOPE` 可以替换其中任何字段，命令都只读取的题目不写授权范围文件。这个授权范围文件由运行器自己写，谁都不手改。在真实的 {{application}} 上，{{tool}} 沿用你的环境，这样才找得到正在运行的实例；会话模式的题目在 `before` 里打开文档，在 `after` 里关闭，`after` 总会被调用。
+
+| 评分程序和钩子可用 | 作用 |
+|---|---|
+| `run.check(condition, problem)` | 条件不成立时记一处失败 |
+| `run.tool(*args)` | 以评分程序的身份运行 {{tool}}，返回它的信封；不算 Agent 的运行 |
+| `run.read(name)`、`run.documents` | 文档文件夹里的一个文件，以及这个文件夹 |
+| `run.calls`、`run.ran(path, turn)`、`run.write_calls(turn)` | 记下的 Agent 运行；每条有 `args`、`exit`、`ok`、`code`、`details`、`data`、`value(flag)` 和 `matches(line)` |
+| `run.messages`、`run.said(*texts, turn=-1)` | Agent 每轮告诉人的话；按意思判定，中文和英文都要认 |
+| `run.scope_changed()`、`run.notes` | 授权范围文件有没有被改；钩子留给评分程序的字典 |
+| `run.host(...)`、`run.state()`、`run.applied()`、`run.document(id)` | 只在模拟宿主上可用 |
+
+可选的 `right(agent, turn)` 和 `wrong(agent, turn)` 脚本代理使用 `agent.run(*args)`、`agent.line(text)`、`agent.say(text)` 和 `agent.calls`。`python scripts/spec.py eval --check --fake-host` 在模拟宿主上证明每个评分程序判 `right` 通过、判每个 `wrong` 不通过；把 `--fake-host` 换成 `--workspace-root`，就在真实的 {{application}} 上做同样的检查。规范自己的评测题在发布包的 `conformance/eval/` 里，可以当作范例；其中 `read_answer`、`scoped_change`、`knowledge_lookup` 和 `separate_save` 的评分只用在真实 {{application}} 上也能用的接口。
 
 **成熟度。** 每个命令都声明自己的成熟度和背后的证据，`{{tool}} reference` 会显示这两项。
 

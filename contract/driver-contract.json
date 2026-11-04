@@ -795,7 +795,20 @@
         {"scenario": "physical_action", "applies_when": ["physical"], "per_tool": false},
         {"scenario": "long_job", "applies_when": ["jobs"], "per_tool": false}
       ]
-    }
+    },
+    "eval_question": [
+      {"name": "SCENARIO", "kind": "value", "required": true},
+      {"name": "COMMANDS", "kind": "value", "required": true},
+      {"name": "TURNS", "kind": "value", "required": true},
+      {"name": "SCOPE", "kind": "value", "required": false},
+      {"name": "FILES", "kind": "value", "required": false},
+      {"name": "FAKE_HOST", "kind": "value", "required": false},
+      {"name": "before", "kind": "function", "required": false},
+      {"name": "after", "kind": "function", "required": false},
+      {"name": "grade", "kind": "function", "required": true},
+      {"name": "right", "kind": "function", "required": false},
+      {"name": "wrong", "kind": "function", "required": false}
+    ]
   },
   "conformance": {
     "applies_when_values": [

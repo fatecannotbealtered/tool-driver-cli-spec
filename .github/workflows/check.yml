@@ -38,6 +38,22 @@ jobs:
       - name: Build specification bundle
         run: python scripts/build_spec_bundle.py
 
+  eval:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install check dependencies
+        run: python -m pip install --require-hashes --no-deps -r requirements-dev.txt
+      - name: Every evaluation scenario, with the template tool and the scripted agents
+        run: python tests/eval_template.py
+
   template:
     strategy:
       fail-fast: false

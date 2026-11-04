@@ -46,7 +46,7 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtim
 | 2 | Specifications, contract, schemas, checks | Done |
 | 3 | Fake host, the reference implementation of the host protocol | Done |
 | 4 | Python driver runtime, the two conformance suites and the project template | Done |
-| 5 | Skill and knowledge templates, development Skill, onboarding guide | Planned |
+| 5 | Evaluation suite, Skill and knowledge templates, development Skill, onboarding guide | In progress |
 | 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
 
 ## Repository Layout
@@ -56,11 +56,11 @@ tool-driver-cli-spec/
 ├── spec/        the five specifications, English and Chinese
 ├── contract/    driver-contract.json, schemas/, examples/
 ├── sdk/python/  _driver/, the driver runtime every tool copies (DREPO-032)
-├── conformance/ fakehost/, the fake host (DVER-020); suites/, the two conformance suites (DVER-001)
+├── conformance/ fakehost/, the fake host (DVER-020); suites/, the two conformance suites (DVER-001); eval/, the evaluation questions (DSKL-041)
 ├── template/    the project template a new tool is generated from (DREPO-062)
-├── scripts/     check_spec.py, build_spec_bundle.py; instantiate.py, sync_spec.py, check_project.py, run_matrix.py for tool projects
+├── scripts/     check_spec.py, build_spec_bundle.py; instantiate.py, sync_spec.py, check_project.py, run_matrix.py, run_eval.py for tool projects
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against; e2e_template.py
+└── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against; e2e_template.py, eval_template.py
 ```
 
 Phase 5 adds `skills/`.
@@ -81,6 +81,13 @@ The template end-to-end run needs the template's dependencies (they add PyInstal
 ```bash
 python -m pip install --require-hashes --no-deps -r template/requirements-dev.txt
 python tests/e2e_template.py
+```
+
+The evaluation suite runs every scenario with the template tool on the fake host. CI checks each grader with the scripted agents; before each release the suite runs with a real Agent, Claude Code, and every question must pass:
+
+```bash
+python tests/eval_template.py
+python tests/eval_template.py --agent claude --report eval-report.json
 ```
 
 A new tool project starts from the release bundle:

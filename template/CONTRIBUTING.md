@@ -40,6 +40,7 @@ On Windows, activate the environment with `.venv\Scripts\activate` instead. `req
 | `python scripts/spec.py suites` | Runs both conformance suites against {{tool}}, with the fake host in place of {{application}} |
 | `python scripts/spec.py sync <version>` | Replaces the pinned copies with those of another tool-driver-cli-spec release |
 | `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` | Runs the behavior matrix of one command on the real {{application}}, on authorized targets, and writes a live record |
+| `python scripts/spec.py eval --workspace-root <folder>` | Runs the evaluation questions in `tests/eval/` with Claude Code on the real {{application}}, in an authorized folder, and writes an evaluation report; with `--check --fake-host`, checks each grader against the scripted agents |
 | `python -m unittest discover -s tests` | Runs the unit tests |
 | `python scripts/build.py` | Builds the native program and the platform package for this machine |
 | `python scripts/pack.py` | Builds the npm packages and runs the package content check |
@@ -80,7 +81,35 @@ The pinned copies are `.agent/`, `contract/driver-contract.json`, `{{pkg}}/_driv
 
 **Live records.** `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` runs one matrix on the real {{application}}, with one `--set` for each placeholder the matrix uses, named without braces, such as `--set doc=<file>`; each value is an authorized target. It writes a live record to `docs/evidence/` and fills in the actual result and the `live:` evidence reference of each row. `docs/E2E.md` describes the procedure. A row that cannot be caused on demand, such as `disconnect`, may be marked `unrunnable` with the reason; the `normal`, `dialog` and `read_back_mismatch` rows never may.
 
-**Evaluation.** Before a command is marked stable, `tests/eval/` holds evaluation questions for it, with graders that decide from the real result in {{application}} or the files, and `docs/evidence/` holds a current evaluation report `eval-<date>.json`.
+**Evaluation.** Before a command is marked stable, `tests/eval/` holds a question for every per-tool scenario that applies to {{tool}}, and `docs/evidence/` holds the newest evaluation report from the real {{application}}: it covers every question as the files are now, every question passed, and one question lists the command in `COMMANDS` and ran it. Each question is one Python file named after its ID; files named `_*.py` hold helpers the questions share.
+
+```python
+"""Move one footprint inside the scope."""
+SCENARIO = "scoped_change"
+COMMANDS = ["footprint move"]
+TURNS = ["Move footprint R1 in {documents}/board.kicad_pcb to x 12.5 mm, y 30 mm."]
+FILES = "boards"          # copied into the question's documents folder
+
+
+def grade(run):
+    part = run.tool("footprint", "get", "--doc", str(run.documents / "board.kicad_pcb"), "--id", "R1")["data"]["items"][0]
+    run.check(part["x_mm"] == 12.5, "R1 did not move")
+    run.check(len([c for c in run.write_calls() if c.ok]) == 1, "not exactly one write")
+```
+
+`python scripts/spec.py eval --workspace-root <folder>` runs the questions with Claude Code on the real {{application}} and writes the report; the folder must be listed under Authorized Targets in `docs/E2E.md`. For each question the runner makes a workspace inside that folder with the Skills and the scope file, keeps the documents in a folder beside it, and records every run of {{tool}}; the Agent's shell runs only {{tool}}, and its file tools reach only the workspace. `{documents}` in `TURNS` and in scope targets stands for the documents folder. By default the scope grants that folder, the effects of the commands in `COMMANDS` and `dangerous` only when one of them needs it; `SCOPE` replaces any of these fields, and a question whose commands only read gets no scope file. The runner writes that scope file itself; nobody edits it. On the real {{application}}, {{tool}} keeps your environment, so it finds the running instances; a session-mode question opens its document in `before` and closes it in `after`, which always runs.
+
+| A grader or hook uses | What it gives |
+|---|---|
+| `run.check(condition, problem)` | Records a failure when the condition does not hold |
+| `run.tool(*args)` | Runs {{tool}} as the grader and returns its envelope; not one of the Agent's runs |
+| `run.read(name)`, `run.documents` | A file in the documents folder, and the folder |
+| `run.calls`, `run.ran(path, turn)`, `run.write_calls(turn)` | The Agent's recorded runs; each has `args`, `exit`, `ok`, `code`, `details`, `data`, `value(flag)` and `matches(line)` |
+| `run.messages`, `run.said(*texts, turn=-1)` | What the Agent told the person in each turn; judge meaning, in English and Chinese |
+| `run.scope_changed()`, `run.notes` | Whether the scope file changed; a dict a hook fills for the grader |
+| `run.host(...)`, `run.state()`, `run.applied()`, `run.document(id)` | The fake host only |
+
+Optional `right(agent, turn)` and `wrong(agent, turn)` scripted agents use `agent.run(*args)`, `agent.line(text)`, `agent.say(text)` and `agent.calls`. `python scripts/spec.py eval --check --fake-host` shows that each grader passes `right` and fails every `wrong` on the fake host; with `--workspace-root` in place of `--fake-host`, it does so on the real {{application}}. The specification's own questions, in `conformance/eval/` of the release, are worked examples; `read_answer`, `scoped_change`, `knowledge_lookup` and `separate_save` grade only through what also works on the real {{application}}.
 
 **Maturity.** Each command declares its maturity level and the evidence behind it, and `{{tool}} reference` shows both.
 

@@ -6,6 +6,10 @@
     python scripts/spec.py suites [--only G01]   both conformance suites, against the fake host
     python scripts/spec.py matrix --command "<path>" --set doc=<file> [...]
                                                  run a behavior matrix on the real application
+    python scripts/spec.py eval --workspace-root <folder> [--only <id>]
+                                                 run the evaluation questions with Claude Code
+    python scripts/spec.py eval --check --fake-host
+                                                 check each grader against its scripted agents
     python scripts/spec.py sync <version>        pin another specification release
 
 The scripts come from the release named in .agent/SPEC_VERSION (for sync, the new one). It is
@@ -92,7 +96,7 @@ def run(cmd: list[str], cwd: Path | None = None) -> int:
 
 
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("check", "generate", "suites", "matrix", "sync"):
+    if not argv or argv[0] not in ("check", "generate", "suites", "matrix", "eval", "sync"):
         print(__doc__, file=sys.stderr)
         return 2
     action, rest = argv[0], argv[1:]
@@ -118,6 +122,8 @@ def main(argv: list[str]) -> int:
         return run([python, str(spec / "scripts" / "check_project.py"), str(ROOT), "--fix", *rest])
     if action == "matrix":
         return run([python, str(spec / "scripts" / "run_matrix.py"), str(ROOT), *rest])
+    if action == "eval":
+        return run([python, str(spec / "scripts" / "run_eval.py"), str(ROOT), *rest])
     tool = next(iter(json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["bin"]))
     return run([python, "-m", "suites", "--project", str(ROOT), *rest, "--", python, "-m", tool.replace("-", "_")],
                cwd=spec / "conformance")

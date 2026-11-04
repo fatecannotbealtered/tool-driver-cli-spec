@@ -25,6 +25,8 @@
 5. 在真实的 {{application}} 上无法按需制造的行，如 `disconnect`，可以标为 `unrunnable` 并写明原因；`normal`、`dialog` 和 `read_back_mismatch` 这三行不可以。
 6. 运行 `python scripts/spec.py generate` 更新支持矩阵和下面的索引，再把记录和矩阵一起提交。
 
+要在真实的 {{application}} 上运行评测题，由人在「授权目标」里列出一个放评测工作目录的文件夹，以及题目的 `SCOPE` 用到的其他目标，比如设备。然后运行 `python scripts/spec.py eval --workspace-root <folder>`。运行器自己为每道题写授权范围文件，只授予这道题的文档和它的 `SCOPE` 列出的目标，并把评测报告写进 `docs/evidence/`。
+
 真实软件记录只在它记录的工具版本与 {{tool}} 的主版本和次版本都相同时才算作证据。记录里从不出现机密，带机密的参数显示为 `***`。
 
 ## 证据记录

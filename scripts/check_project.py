@@ -19,6 +19,7 @@ The project's own Python runs the tool once, to read its command registration an
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -768,6 +769,7 @@ class Checker:
         self.contract = facts.contract
         self.problems: list[Problem] = []
         self._validators: dict[str, Any] = {}
+        self._questions: dict[str, tuple[dict[str, Any], str]] | None = None
 
     def add(self, clause: str, path: str, message: str, line: int | None = None) -> None:
         self.problems.append(Problem(clause, path, message, line))
@@ -1423,7 +1425,7 @@ class Checker:
             for message in problems:
                 self.add("DVER-042" if schema == "evidence.schema.json" else "DVER-041", rel,
                          f"does not validate against {schema}: {message}")
-            if schema == "evidence.schema.json" and not problems:
+            if not problems and not data.get("simulated"):
                 for target in data["targets"]:
                     if not any(target_covered(target, t) for t in authorized):
                         self.add("DVER-050", rel, f"target {target} is not listed under Authorized Targets in docs/E2E.md")
@@ -1446,11 +1448,12 @@ class Checker:
                 self.matrix_passed(command)
             if level == "stable":
                 stable = True
-                if not any(r.startswith("eval:") and not self.eval_problem(r) for r in refs):
+                reasons = [self.eval_problem(r, command["path"]) for r in refs if r.startswith("eval:")]
+                if not reasons or all(reasons):
                     self.add("DSKL-043", "contract/commands.json", f"`{command['path']}` is stable, which needs a current "
-                             "`eval:` report in which every question passed")
-        if stable:
-            self.eval_questions()
+                             "`eval:` report from the real application of every question in tests/eval/, all passed, "
+                             f"among them one that lists and ran the command ({'; '.join(reasons) or 'none named'})")
+        self.eval_questions(stable)
 
     def reference_problem(self, where: str, ref: str) -> None:
         match = re.fullmatch(r"([a-z]+):([^#]+)(?:#(.+))?", str(ref))
@@ -1495,12 +1498,53 @@ class Checker:
             return f"{ref!r} records a failed run of `{command}`"
         return None
 
-    def eval_problem(self, ref: str) -> str | None:
+    def eval_problem(self, ref: str, command: str) -> str | None:
+        """Why an `eval:` reference does not show that Agents use this command correctly: the
+        report must be the newest from the real application, cover every current question
+        unchanged, pass all of them, and hold a question that lists and ran the command."""
         data, _, problem = self._evidence_file(str(ref), "eval")
         if problem:
             return problem
+        if data["simulated"]:
+            return f"{ref!r} is a run on the fake host; a simulated result is never evidence (DVER-021)"
         failed = [q["id"] for q in data["questions"] if not q["passed"]]
-        return f"{ref!r}: questions failed: {', '.join(failed)}" if failed else None
+        if failed:
+            return f"{ref!r}: questions failed: {', '.join(failed)}"
+        asked = {q["id"]: q for q in data["questions"]}
+        for question_id, (_, digest) in self.questions().items():
+            if question_id not in asked:
+                return f"{ref!r} has no result for the question {question_id} in tests/eval/"
+            if asked[question_id]["sha256"] != digest:
+                return f"{ref!r} ran an earlier version of the question {question_id}; run the evaluation again"
+        if not any(command in q["commands"] and command in q["ran"] for q in data["questions"]):
+            return f"{ref!r} has no question that lists `{command}` in COMMANDS and ran it"
+        newer = self.newer_report(Path(str(ref)[len("eval:"):].split("#")[0]), data)
+        return f"{ref!r} is not the newest evaluation report; {newer} is" if newer else None
+
+    def newer_report(self, path: Path, data: dict[str, Any]) -> str | None:
+        """A later report from the real application for the same minor version, if any."""
+        mine = (data["date"], path.name)
+        for other in sorted((self.root / "docs" / "evidence").glob("eval-*.json")):
+            try:
+                found = json.loads(read(other))
+            except (OSError, ValueError):
+                continue
+            if self.validate(found, "eval-report.schema.json") or found["simulated"] or found["tool"] != self.facts.tool:
+                continue
+            if current(found["tool_version"], self.facts.version) and (found["date"], other.name) > mine:
+                return other.relative_to(self.root).as_posix()
+        return None
+
+    def questions(self) -> dict[str, tuple[dict[str, Any], str]]:
+        """The well-formed evaluation questions in tests/eval/, with their values and file hashes."""
+        if self._questions is None:
+            self._questions = {}
+            for path in sorted((self.root / "tests" / "eval").glob("*.py")):
+                if not path.name.startswith("_"):
+                    values, _, problems = question_facts(path, self.contract)
+                    if not problems:
+                        self._questions[path.stem] = (values, digest(path))
+        return self._questions
 
     def matrix_passed(self, command: dict[str, Any]) -> None:
         path = self.root / "tests" / "matrix" / (command["path"].replace(" ", "-") + ".json")
@@ -1518,9 +1562,24 @@ class Checker:
                 self.add("DVER-040", path.relative_to(self.root).as_posix(), f"`{command['path']}` is "
                          f"{command.get('maturity')}, but row {row['row']} has no current passing run")
 
-    def eval_questions(self) -> None:
-        """tests/eval/ covers every per-tool scenario that applies to the tool (DSKL-042)."""
+    def eval_questions(self, stable: bool) -> None:
+        """Every question in tests/eval/ is well formed (DSKL-044); once a command is stable, the
+        questions cover every per-tool scenario that applies to the tool (DSKL-042)."""
         facts = self.facts
+        paths = {c["path"] for c in facts.commands}
+        for path in sorted((self.root / "tests" / "eval").glob("*.py")):
+            if not path.name.startswith("_"):
+                for message in question_facts(path, self.contract)[2]:
+                    self.add("DSKL-044", path.relative_to(self.root).as_posix(), message)
+        covered = set()
+        for question_id, (values, _) in self.questions().items():
+            for command in values["COMMANDS"]:
+                if command not in paths:
+                    self.add("DSKL-044", f"tests/eval/{question_id}.py", f"COMMANDS names `{command}`, which is not a "
+                             "command of the tool")
+            covered.add(values["SCENARIO"])
+        if not stable:
+            return
         holds = {"always": True, "writes": any(any(e != "observe" for e in c.get("effects", [])) for c in facts.commands
                                                if c["path"] in facts.domain_paths),
                  "session": "session" in facts.modes, "device": "device" in facts.modes,
@@ -1530,18 +1589,61 @@ class Checker:
         scenarios = self.contract["skill"]["eval_scenarios"]
         wanted = [s["scenario"] for group in scenarios.values() for s in group
                   if s.get("per_tool") and any(holds.get(w) for w in s["applies_when"])]
-        covered = set()
-        for path in sorted((self.root / "tests" / "eval").glob("*.json")):
-            try:
-                question = json.loads(read(path))
-            except (OSError, ValueError):
-                self.add("DSKL-042", path.relative_to(self.root).as_posix(), "cannot read the question")
-                continue
-            if isinstance(question, dict) and isinstance(question.get("scenario"), str):
-                covered.add(question["scenario"])
         for scenario in wanted:
             if scenario not in covered:
                 self.add("DSKL-042", "tests/eval/", f"no evaluation question covers the scenario {scenario}")
+
+
+QUESTION_ID = re.compile(r"[a-z0-9]+([-_][a-z0-9]+)*")
+
+
+def question_facts(path: Path, contract: dict[str, Any]) -> tuple[dict[str, Any], set[str], list[str]]:
+    """The values and functions an evaluation question defines, read without running it, and
+    what is wrong with them (DSKL-044)."""
+
+    try:
+        tree = ast.parse(read(path), filename=str(path))
+    except (OSError, SyntaxError, ValueError) as exc:
+        return {}, set(), [f"cannot read the question: {exc}"]
+    spec = contract["skill"]["eval_question"]
+    names = {n["name"] for n in spec if n["kind"] == "value"}
+    values: dict[str, Any] = {}
+    functions: set[str] = set()
+    problems = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id in names:
+            try:
+                values[node.targets[0].id] = ast.literal_eval(node.value)
+            except ValueError:
+                problems.append(f"{node.targets[0].id} must be a literal value")
+        elif isinstance(node, ast.FunctionDef):
+            functions.add(node.name)
+    for item in spec:
+        if item["required"] and item["name"] not in (values if item["kind"] == "value" else functions):
+            problems.append(f"the question defines no {item['name']}")
+    if not QUESTION_ID.fullmatch(path.stem):
+        problems.append("the file name is the question ID: lowercase words joined by hyphens or underscores")
+    scenarios = [s["scenario"] for group in contract["skill"]["eval_scenarios"].values() for s in group]
+    if "SCENARIO" in values and values["SCENARIO"] not in scenarios:
+        problems.append(f"SCENARIO {values['SCENARIO']!r} is not one of {scenarios}")
+    for name in ("COMMANDS", "TURNS"):
+        value = values.get(name)
+        if name in values and not (isinstance(value, list) and value and all(isinstance(v, str) and v.strip() for v in value)):
+            problems.append(f"{name} is a list of one or more texts")
+    scope = values.get("SCOPE")
+    if "SCOPE" in values and scope is not None and not isinstance(scope, dict):
+        problems.append("SCOPE is an object of scope file fields, or None for no scope file")
+    elif isinstance(scope, dict) and set(scope) - set(contract["scope_file"]["fields"]):
+        problems.append(f"SCOPE holds fields a scope file does not have: {sorted(set(scope) - set(contract['scope_file']['fields']))}")
+    if "FAKE_HOST" in values and not isinstance(values["FAKE_HOST"], dict):
+        problems.append("FAKE_HOST is an object")
+    if "FILES" in values:
+        files = values["FILES"]
+        folder = path.parent / files if isinstance(files, str) else None
+        if folder is None or not folder.is_dir() or not folder.resolve().is_relative_to(path.parent.resolve()):
+            problems.append("FILES names a folder next to the question")
+    return values, functions, problems
 
 
 def authorized_targets(root: Path) -> list[str]:
