@@ -4,7 +4,7 @@ A specification for driver tools: command-line tools that let AI Agents operate 
 
 [![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
 ![Spec](https://img.shields.io/badge/spec-1.0.0--rc.1-blue)
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Status](https://img.shields.io/badge/status-release%20candidate-yellow)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
 English | [中文](README_zh.md)
@@ -38,7 +38,7 @@ Every value a tool or a test can read as data lives in [`contract/driver-contrac
 
 ## Status
 
-Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide exist; tools can adopt the specification once 1.0.0-rc.1 is released.
+Version 1.0.0-rc.1 is the release candidate: the specifications, the driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide are complete, and tools can adopt it now. Version 1.0.0 follows once tools have tried it.
 
 | Phase | Content | State |
 |---|---|---|
@@ -47,7 +47,7 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtim
 | 3 | Fake host, the reference implementation of the host protocol | Done |
 | 4 | Python driver runtime, the two conformance suites and the project template | Done |
 | 5 | Evaluation suite, Skill and knowledge templates, development Skill, onboarding guide | Done |
-| 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
+| 6 | Release 1.0.0-rc.1, then 1.0.0 | In progress |
 
 ## Repository Layout
 

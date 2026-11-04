@@ -4,6 +4,8 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-04
+
 ### Added
 
 - Five specifications, each in English and Chinese: DRIVER-CLI-SPEC, DRIVER-SEC-SPEC, DRIVER-SKILL-SPEC, DRIVER-VERIFY-SPEC and DRIVER-REPO-SPEC.
