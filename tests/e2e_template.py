@@ -70,7 +70,28 @@ def generate(work: Path, modes: str, host: bool) -> Path:
     if other or not problems:
         raise SystemExit(f"FAILED: right after instantiate, check_project must report only placeholders: {other or 'none'}")
     print(f"   {len(problems)} things to fill in, nothing else")
+    ship_this_machine(project)
     return project
+
+
+def ship_this_machine(project: Path) -> None:
+    """The generated tool ships x64 packages; on an arm64 machine, such as an Apple silicon
+    runner, the author adds that platform package and the survey row says the CPU too."""
+    import platform
+
+    system = {"win32": "win32", "darwin": "darwin"}.get(sys.platform, "linux")
+    cpu = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
+    package = json.loads((project / "package.json").read_text(encoding="utf-8"))
+    name = f"{package['name']}-{system}-{cpu}"
+    if name in package["optionalDependencies"]:
+        return
+    package["optionalDependencies"][name] = package["version"]
+    (project / "package.json").write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8", newline="\n")
+    row = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}[system]
+    for survey in (project / "docs" / "APPLICATION.md", project / "docs" / "APPLICATION_zh.md"):
+        text = survey.read_text(encoding="utf-8").replace(f"| {row} | x64 |", f"| {row} | x64, {cpu} |")
+        survey.write_text(text, encoding="utf-8", newline="\n")
+    run([sys.executable, str(REPO / "scripts" / "check_project.py"), str(project), "--fix"], REPO, check=False)
 
 
 COMMANDS = '''"""The domain commands of demo-cli."""
