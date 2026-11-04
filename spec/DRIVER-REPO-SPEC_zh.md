@@ -2,7 +2,7 @@
 
 [English](DRIVER-REPO-SPEC.md) | 中文
 
-> 版本 1.0.0-rc.1 · 条款 DREPO-001 至 DREPO-062
+> 版本 1.0.0 · 条款 DREPO-001 至 DREPO-062
 
 ## 怎么读
 

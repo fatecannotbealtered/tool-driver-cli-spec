@@ -4,7 +4,7 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
-## [1.0.0-rc.1] - 2026-11-04
+## [1.0.0] - 2026-11-04
 
 ### Added
 
