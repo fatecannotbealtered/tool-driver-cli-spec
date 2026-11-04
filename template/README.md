@@ -35,10 +35,10 @@ English | [中文](README_zh.md)
 
    ```powershell
    New-Item -ItemType Directory -Force "$HOME\.agents\skills" | Out-Null
-   Copy-Item -Recurse "$(npm root -g)\{{package}}\skills\*" "$HOME\.agents\skills\"
+   Copy-Item -Recurse -Force "$(npm root -g)\{{package}}\skills\*" "$HOME\.agents\skills\"
    ```
 
-   Other Agent Skill folders, such as `~/.claude/skills/`, work the same way. Later runs of `{{tool}} update` keep the copies in those folders in step with the tool.
+   Other Agent Skill folders work the same way. Later runs of `{{tool}} update` keep the copies in step with the tool in these folders: `~/.agents/skills/`, `~/.claude/skills/`, `~/.codex/skills/`, `~/.cursor/skills/` and `~/.gemini/skills/`. A copy anywhere else is not updated.
 {{#host_component}}
 
 4. Install the host component into {{application}}. This is a two-step write that needs a scope file allowing `configure` (see Authorization). The first call changes nothing and returns a preview and a confirm token; the second call installs:
@@ -170,6 +170,8 @@ Do the same in every other Agent Skill folder you copied them to, such as `~/.cl
 ```bash
 npm uninstall -g {{package}}
 ```
+
+On Windows, also delete the folder `.{{tool}}-trash` in npm's global `node_modules` folder (`npm root -g`) if it exists; `update` keeps earlier program files there until its next run when the state directory is on another disk.
 
 Last, delete the state directory: `~/.{{tool}}`, or the folder that `{{PREFIX}}_STATE_DIR` names. It holds the operation records, the locks, the default scope file and the team knowledge registrations, so keep it if you want the records.
 

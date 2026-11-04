@@ -40,7 +40,7 @@ def sync(project: Path) -> list[str]:
     pkg = package_dir(project)
     release = bundle_version()
     wanted = {dest: source for source, dest in pinned_files(pkg)}
-    keep = set(wanted) | {".agent/SPEC_VERSION", f"{pkg}/_driver/MANIFEST.json"}
+    keep = set(wanted) | {".agent/SPEC_VERSION", ".agent/SPEC_SHA256", f"{pkg}/_driver/MANIFEST.json"}
     changed = []
     for folder in (".agent", "licenses", f"{pkg}/_driver"):
         base = project / folder

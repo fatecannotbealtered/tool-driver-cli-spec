@@ -81,7 +81,14 @@ jobs:
           name: main-package
           path: dist
       - name: Build the native program and the platform package
+        if: matrix.os != 'linux'
         run: python scripts/build.py
+      - name: Build the native program on Debian 11 (glibc 2.31), so it runs on older Linux systems too
+        if: matrix.os == 'linux'
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work
+          python:3.12-bullseye@sha256:7cc929040c5e8cf6036c5099d62a83708427c131fb7a7c965b5ba51e995eea1c
+          sh -c "python -m pip install --user --require-hashes --no-deps -r requirements-dev.txt && python scripts/build.py"
       - name: Pack and check the platform package
         run: python scripts/pack.py --platform
       - name: Platform delivery, from a clean npm prefix
@@ -103,7 +110,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -111,13 +118,18 @@ jobs:
       - name: Every platform package passed platform delivery
         run: python3 scripts/release_gate.py artifacts
       - name: Publish the platform packages, then the main package, with provenance
+        # Trusted publishing when the package has it set up on npmjs.com, otherwise the NPM_TOKEN secret.
+        # A prerelease goes to the npm tag next, so that update does not install it by default.
         run: |
+          case "${GITHUB_REF_NAME}" in *-*) tag=next ;; *) tag=latest ;; esac
           for tarball in $(python3 scripts/release_gate.py artifacts --order); do
-            npm publish "$tarball" --provenance --access public
+            npm publish "$tarball" --provenance --access public --tag "$tag"
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: GitHub release with the notes from CHANGELOG.md
-        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --notes "$(python3 scripts/release_gate.py --notes)"
+        run: |
+          case "${GITHUB_REF_NAME}" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "${GITHUB_REF_NAME}" --verify-tag $pre --notes "$(python3 scripts/release_gate.py --notes)"
         env:
           GH_TOKEN: ${{ github.token }}

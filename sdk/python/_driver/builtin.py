@@ -298,8 +298,12 @@ def _skills_version(run: Run) -> dict[str, Any]:
                       "Copy the Skills from the installed npm package, as the Install section of the README shows.")
     wrong = {k: v for k, v in versions.items() if v != run.tool.version}
     if wrong:
-        return _check("version", "fail", f"Installed Skills at another version than the CLI {run.tool.version}: {wrong}.",
-                      f"Run `{run.tool.name} update` to sync the Skills.")
+        links = [k for k in wrong if self_update._is_link(Path(k))]
+        fix = f"Run `{run.tool.name} update` to sync the Skills."
+        if links:
+            fix += (f" {', '.join(links)} {'is a link' if len(links) == 1 else 'are links'}, which update leaves alone: "
+                    "update the folder a link points to, or copy the Skill from the installed npm package.")
+        return _check("version", "fail", f"Installed Skills at another version than the CLI {run.tool.version}: {wrong}.", fix)
     return _check("version", "pass", f"The CLI and {len(versions)} installed Skill copies are at {run.tool.version}.")
 
 
@@ -313,11 +317,26 @@ def _plugin_check(run: Run) -> dict[str, Any]:
     on_disk = plugin.get("version_on_disk")
     if not on_disk:
         return _check("plugin", "warn", "The host component is not installed.", f"Run `{run.tool.name} plugin install`.")
+    bundled = bundled_plugin_version(run.tool)
+    if bundled and bundled != on_disk:
+        return _check("plugin", "warn", f"Version {on_disk} of the host component is installed, but this CLI brings {bundled}.",
+                      f"Run `{run.tool.name} plugin install`.")
     stale = [f"{i['session']} has {i['version']}" for i in plugin.get("loaded", []) if i["version"] != on_disk]
     if stale:
         return _check("plugin", "fail", f"Version {on_disk} is on disk, but {'; '.join(stale)} loaded.",
                       "Ask the person to restart or reload those instances.")
     return _check("plugin", "pass", f"Version {on_disk} is on disk and loaded in every instance.")
+
+
+def bundled_plugin_version(tool: Tool) -> str | None:
+    """The host component version this CLI installs, from its plugin manifest."""
+    if tool.plugin_manifest is None:
+        return None
+    try:
+        version = json.loads(tool.plugin_manifest.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return version if isinstance(version, str) else None
 
 
 def _sessions_check(run: Run) -> dict[str, Any]:
@@ -336,32 +355,27 @@ def _sessions_check(run: Run) -> dict[str, Any]:
 # ------------------------------------------------------------------ update notices (DCLI-079)
 
 
-def query_registry(run: Run, timeout: float) -> dict[str, Any]:
-    """Ask the npm registry for the latest version; only update and doctor do this."""
-    data = self_update.packument(run, timeout)
-    latest = data.get("dist-tags", {}).get("latest")
-    versions = data.get("versions", {})
-    deprecated = bool(isinstance(versions.get(run.tool.version), dict) and versions[run.tool.version].get("deprecated"))
-    return {"checked_at": utc_now(), "latest": latest, "deprecated": deprecated}
-
-
 def _cache_path(run: Run) -> Path:
     return run.state.path / "cache" / "update.json"
 
 
 def _update_check(run: Run) -> dict[str, Any]:
+    """Ask the registry through npm, waiting at most the contract's time; a failure is a warning (DCLI-079)."""
+    npm = self_update.find_npm(run.env)
+    if npm is None:
+        return _check("update", "warn", "npm was not found on PATH, so newer versions cannot be looked up.",
+                      "Install Node.js with npm.")
     try:
-        info = query_registry(run, run.contract["update"]["doctor_registry_timeout_ms"] / 1000)
-    except (OSError, ValueError) as exc:
-        return _check("update", "warn", f"The npm registry at {self_update.registry_url(run.env)} could not be reached "
-                      f"({type(exc).__name__}).",
-                      f"Check the network, then run `{run.tool.name} update --check`.")
-    old = _read_cache(run)
-    info["notified_at"] = old.get("notified_at")
-    _write_cache(run, info)
-    latest = info.get("latest")
+        info = self_update.query(run, npm, run.contract["update"]["doctor_registry_timeout_ms"] / 1000)
+    except DriverError as exc:
+        return _check("update", "warn", exc.message, f"Check the network and npm's registry setting, then run "
+                      f"`{run.tool.name} update --check`.")
+    latest = info["latest"]
+    self_update.write_cache(run, info, latest)
     if latest and newer(latest, run.tool.version):
         return _check("update", "warn", f"Version {latest} is available; this is {run.tool.version}.", f"Run `{run.tool.name} update`.")
+    if info["deprecated"]:
+        return _check("update", "warn", f"Version {run.tool.version} is deprecated on npm.", f"Run `{run.tool.name} update`.")
     return _check("update", "pass", f"{run.tool.version} is the latest version.")
 
 
@@ -388,15 +402,17 @@ def update_notice(run: Run) -> None:
                             "message": f"{run.tool.prefix}_FAKE_HOST is set: the application is the fake host at {run.fake}, and results are simulated."})
     cache = _read_cache(run)
     latest = cache.get("latest")
-    if not latest or not (newer(latest, run.tool.version) or cache.get("deprecated")):
+    deprecated = cache.get("deprecated_version") == run.tool.version
+    if not (latest and newer(latest, run.tool.version)) and not deprecated:
         return
     last = cache.get("notified_at")
     hours = run.contract["update"]["notice_interval_hours"]
     if last and parse_utc(last) > datetime.now(timezone.utc) - timedelta(hours=hours):
         return
-    major = newer(latest, run.tool.version) and latest.split(".")[0] != run.tool.version.split(".")[0]
-    severity = "warning" if major or cache.get("deprecated") else "info"
-    what = f"Version {latest} is available" if newer(latest, run.tool.version) else f"Version {run.tool.version} is deprecated"
+    available = bool(latest and newer(latest, run.tool.version))
+    major = available and latest.split(".")[0] != run.tool.version.split(".")[0]
+    severity = "warning" if major or deprecated else "info"
+    what = f"Version {latest} is available" if available else f"Version {run.tool.version} is deprecated"
     run.notices.append({"type": run.contract["update"]["notice_type"], "severity": severity,
                         "message": f"{what}; run `{run.tool.name} update`."})
     cache["notified_at"] = utc_now()

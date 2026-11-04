@@ -54,12 +54,14 @@ def main() -> int:
     out = ROOT / "dist" / "npm" / name.replace("/", "__")
     shutil.rmtree(out, ignore_errors=True)
     shutil.copytree(build / "pyinstaller" / tool, out / "bin")
-    shutil.copyfile(ROOT / "LICENSE", out / "LICENSE")
+    for document in ("LICENSE", "NOTICE.md"):
+        shutil.copyfile(ROOT / document, out / document)
+    shutil.copytree(ROOT / "licenses", out / "licenses")  # the runtime's license and notice (DREPO-033)
     (out / "README.md").write_text(f"# {name}\n\nThe native program of `{package['name']}` for {system} {cpu}. "
                                    f"Install `{package['name']}` instead; npm picks this package.\n", encoding="utf-8")
     manifest = {"name": name, "version": package["version"], "description": f"The native program of {package['name']} for {system} {cpu}.",
                 "license": package.get("license"), "repository": package.get("repository"), "os": [system], "cpu": [cpu],
-                "files": ["bin/"]}
+                "files": ["bin/", "licenses/", "NOTICE.md"]}
     (out / "package.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     program = out / "bin" / (tool + (".exe" if system == "win32" else ""))
     reply = subprocess.run([str(program), "--version"], capture_output=True, text=True, encoding="utf-8",

@@ -139,10 +139,10 @@
 
 `{{tool}} update` 是 {{tool}} 更新自己的唯一途径。它：
 
-- 从 npm 仓库查询版本，按 semver 校验每个版本号，除非同时给出 `--target-version` 和 `--allow-downgrade`，否则拒绝降级；`update --check` 只查询，什么都不装；
-- 在 Windows 上，调用 npm 之前把正在运行的原生程序移到状态目录的 `trash/` 里，下次运行时删除；
+- 通过 npm 查询 npm 仓库，所以 npm 自己的仓库、代理和证书设置都生效；按 semver 校验每个版本号，除非同时给出 `--target-version` 和 `--allow-downgrade`，否则拒绝降级；`update --check` 只查询，什么都不装；
+- 在 Windows 上，调用 npm 之前把正在运行的原生程序的文件移到状态目录的 `trash/` 里；状态目录在另一块磁盘上时，移到 npm 全局 `node_modules` 文件夹里的 `.{{tool}}-trash`；下次运行时删除；
 - 调用在 PATH 上按绝对路径找到的 npm，从不经过 shell，也从不调用当前目录里的同名文件，npm 的参数只用校验过的包名和版本号拼成；
-- 安装后运行 `{{tool}} --version`，只有它报告的是目标版本才算成功；然后核对已安装的包的来源证明：核对确实做了并且通过才报告 `verified`，没法核对时报告 `not_checked`，核对没通过时返回 `E_INTEGRITY`；
+- 安装后运行 `{{tool}} --version`，只有它报告的是目标版本、并且 PATH 上的 `{{tool}}` 就是 npm 刚改的那一个，才算成功；否则把原来的版本放回去。然后核对已安装的包的来源证明：核对确实做了并且通过才报告 `verified`，没法核对时报告 `not_checked`，核对没通过时返回 `E_INTEGRITY`；核对失败会被记下，再运行 `update` 也不会用那个包去修改命令入口或同步 Skill；
 - 把命令入口指向原生程序（`entry: direct`），npm 启动器保留作后备；
 - 从新包同步已经装在 Agent Skill 目录里的 Skill，不动符号链接，也不新建原本没装的 Skill；
 - 从不安装或改动宿主组件；宿主组件需要重新安装时，给出 `plugin install` 命令。

@@ -139,10 +139,10 @@ Every output that carries untrusted content lists the JSON path of each such val
 
 `{{tool}} update` is the only way {{tool}} updates itself. It:
 
-- queries the npm registry, validates every version string as semver, and refuses a downgrade unless both `--target-version` and `--allow-downgrade` are given; `update --check` only queries and installs nothing;
-- on Windows, moves the running native program aside into `trash/` in the state directory before npm runs, and deletes it on its next run;
+- asks the npm registry through npm, so npm's own registry, proxy and certificate settings apply; validates every version string as semver, and refuses a downgrade unless both `--target-version` and `--allow-downgrade` are given; `update --check` only queries and installs nothing;
+- on Windows, before npm runs, moves the files of the running native program aside into `trash/` in the state directory, or into `.{{tool}}-trash` in npm's global `node_modules` folder when the state directory is on another disk, and deletes them on its next run;
 - runs the npm found by absolute path on PATH, never through a shell and never a file of that name in the current directory, with arguments built only from the validated package name and version;
-- after installing, runs `{{tool}} --version` and succeeds only when it reports the target version, then checks the provenance of the installed package: `verified` only when the check ran and passed, `not_checked` when it could not run, and `E_INTEGRITY` when it failed;
+- after installing, runs `{{tool}} --version` and succeeds only when it reports the target version, and only when the `{{tool}}` on PATH is the one npm changed; otherwise it puts the earlier version back. Then it checks the provenance of the installed package: `verified` only when the check ran and passed, `not_checked` when it could not run, and `E_INTEGRITY` when it failed; a failed check is remembered, and running `update` again does not finish the command entries or the Skills from that package;
 - points the command entries at the native program (`entry: direct`) and keeps the npm launcher as a fallback;
 - syncs the Skills already installed in the Agent Skill folders from the new package, leaves symbolic links alone and adds no Skill that was not installed;
 - never installs or changes a host component; when one needs installing again, it gives the `plugin install` command.

@@ -4,7 +4,7 @@
 // The launcher: runs the native program from the platform package npm installed for this
 // machine. `{{tool}} update` points the command entry at the native program directly, which
 // starts much faster; this launcher then stays as the fallback (DCLI-075).
-const { spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const path = require("path");
 
 const root = require("../package.json");
@@ -26,12 +26,32 @@ try {
   process.exit(1);
 }
 
-const result = spawnSync(program, process.argv.slice(2), { stdio: "inherit", windowsHide: true });
-if (result.error) {
-  process.stderr.write(`${tool}: cannot start ${program}: ${result.error.message}\n`);
+const child = spawn(program, process.argv.slice(2), { stdio: "inherit", windowsHide: true });
+
+// A signal for the launcher is meant for the program: pass it on and wait, so the program can
+// finish its write and report it. On Windows, Ctrl+C already reaches the program itself.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    if (process.platform !== "win32") {
+      try {
+        child.kill(signal);
+      } catch {
+        // the program has already ended
+      }
+    }
+  });
+}
+
+child.on("error", (error) => {
+  process.stderr.write(`${tool}: cannot start ${program}: ${error.message}\n`);
   process.exit(1);
-}
-if (result.signal) {
-  process.kill(process.pid, result.signal);
-}
-process.exit(result.status === null ? 1 : result.status);
+});
+
+child.on("exit", (code, signal) => {
+  if (signal) {
+    process.removeAllListeners(signal);
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code === null ? 1 : code);
+});

@@ -24,9 +24,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -50,7 +47,7 @@ CHECK_TIMEOUT_S = 120
 # ------------------------------------------------------------------ versions
 
 
-SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
+SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\Z")
 
 
 def semver_key(version: str) -> tuple[Any, ...] | None:
@@ -72,37 +69,55 @@ def newer(a: str, b: str) -> bool:
     return ka is not None and (kb is None or ka > kb)
 
 
-def registry_url(env: Any) -> str:
-    base = env.get("npm_config_registry") or env.get("NPM_CONFIG_REGISTRY") or "https://registry.npmjs.org/"
-    return base if base.endswith("/") else base + "/"
+NETWORK_CODES = ("ETIMEDOUT", "ESOCKETTIMEDOUT", "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH",
+                 "ENETUNREACH", "EPIPE", "E429", "E500", "E502", "E503", "E504", "EPROXY")
 
 
-def packument(run: Run, timeout: float) -> dict[str, Any]:
-    """The package's versions and dist-tags from the registry. Raises the network errors."""
-    url = registry_url(run.env) + urllib.parse.quote(run.tool.package, safe="@")
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.npm.install-v1+json"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - https unless the user set a registry
-        data = json.loads(response.read().decode("utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("the registry answer is not an object")
-    return data
+def query(run: Run, npm: list[str], timeout: float) -> dict[str, Any]:
+    """The published versions, the dist-tags and whether the running version is deprecated,
+    asked through npm so that npm's own registry, proxy and certificate settings apply.
+    ``timeout`` bounds the whole query. Raises ``DriverError``: ``E_NETWORK`` when the
+    registry cannot be reached, ``E_CONFIG`` when it has no such package."""
+    package, version = run.tool.package, run.tool.version
+    data = _view(run, npm, [f"{package}@{version}", "deprecated", "versions", "dist-tags"], timeout)
+    if data is None:  # this version is not published, such as a development build
+        data = _view(run, npm, [package, "versions", "dist-tags"], timeout) or {}
+        data.pop("deprecated", None)
+    versions = data.get("versions")
+    versions = [versions] if isinstance(versions, str) else versions
+    tags = data.get("dist-tags")
+    return {"versions": [v for v in versions or [] if isinstance(v, str) and semver_key(v) is not None],
+            "latest": tags.get("latest") if isinstance(tags, dict) and semver_key(str(tags.get("latest"))) else None,
+            "deprecated": bool(data.get("deprecated"))}
 
 
-def _query(run: Run) -> dict[str, Any]:
+def _view(run: Run, npm: list[str], args: list[str], timeout: float) -> dict[str, Any] | None:
     try:
-        return packument(run, 30)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            exc.close()
-            raise DriverError("E_CONFIG", f"The npm registry at {registry_url(run.env)} has no package {run.tool.package}.",
-                              next_action="Check npm_config_registry, then run `update` again.") from None
-        retry = exc.headers.get("Retry-After") if exc.headers else None
-        exc.close()
-        raise DriverError("E_NETWORK", f"The npm registry answered HTTP {exc.code}; nothing was changed.",
-                          retry_after_ms=int(retry) * 1000 if retry and retry.isdigit() else 30000) from None
-    except (OSError, ValueError) as exc:
-        raise DriverError("E_NETWORK", f"The npm registry at {registry_url(run.env)} could not be reached "
-                          f"({type(exc).__name__}); nothing was changed.", retry_after_ms=30000) from None
+        out = _run(npm + ["view", *args, "--json"], run.env, timeout)
+    except subprocess.TimeoutExpired:
+        raise DriverError("E_NETWORK", f"The npm registry did not answer within {timeout:g} s; nothing was changed.",
+                          retry_after_ms=30000) from None
+    except OSError as exc:
+        raise DriverError("E_CONFIG", f"npm could not be started: {exc}.",
+                          next_action="Install Node.js with npm, then run `update` again.") from None
+    try:
+        data = json.loads(out.stdout) if out.stdout.strip() else {}
+    except ValueError:
+        data = {}
+    if out.returncode == 0 and isinstance(data, dict):
+        return data
+    error = data.get("error") if isinstance(data, dict) and isinstance(data.get("error"), dict) else {}
+    code, summary = str(error.get("code", "")), str(error.get("summary") or out.stderr.strip()[-300:])
+    if code == "E404" and "No match found for version" in summary:
+        return None
+    if code == "E404":
+        raise DriverError("E_CONFIG", f"The npm registry has no package {run.tool.package}: {summary}",
+                          next_action="Check the registry npm uses (`npm config get registry`), then run `update` again.")
+    if code in NETWORK_CODES or code.startswith("E5") or not code:
+        raise DriverError("E_NETWORK", f"The npm registry could not be reached ({code or 'no answer'}: {summary}); "
+                          "nothing was changed.", retry_after_ms=60000 if code == "E429" else 30000)
+    raise DriverError("E_CONFIG", f"npm could not read the registry ({code}: {summary}); nothing was changed.",
+                      next_action="Fix the npm configuration (registry, sign-in, certificates), then run `update` again.")
 
 
 # ------------------------------------------------------------------ npm
@@ -111,9 +126,9 @@ def _query(run: Run) -> dict[str, Any]:
 def find_npm(env: Any) -> list[str] | None:
     """The npm on PATH, by absolute path, never a file in the current directory (DCLI-073).
     On Windows ``npm.cmd`` would need cmd.exe, so npm's own script runs under node instead."""
-    cwd = os.path.normcase(os.path.abspath(os.getcwd()))
+    cwd = _real(os.getcwd())
     for folder in (env.get("PATH") or "").split(os.pathsep):
-        if not folder or not os.path.isabs(folder) or os.path.normcase(os.path.abspath(folder)) == cwd:
+        if not folder or not os.path.isabs(folder) or _real(folder) == cwd:
             continue
         if WINDOWS:
             exe = os.path.join(folder, "npm.exe")
@@ -132,9 +147,15 @@ def find_npm(env: Any) -> list[str] | None:
     return None
 
 
+def _real(path: str) -> str:
+    """A folder as the file system resolves it, so that a link to the current directory is
+    still the current directory."""
+    return os.path.normcase(os.path.realpath(path))
+
+
 def _which(name: str, env: Any, cwd: str) -> str | None:
     for folder in (env.get("PATH") or "").split(os.pathsep):
-        if folder and os.path.isabs(folder) and os.path.normcase(os.path.abspath(folder)) != cwd:
+        if folder and os.path.isabs(folder) and _real(folder) != cwd:
             path = os.path.join(folder, name)
             if os.path.isfile(path):
                 return path
@@ -203,7 +224,7 @@ class Install:
             cmd = RUNNER + [str(program), "--version"]
         else:
             launcher = self.launcher()
-            node = _which("node.exe" if WINDOWS else "node", self.run.env, os.path.normcase(os.path.abspath(os.getcwd())))
+            node = _which("node.exe" if WINDOWS else "node", self.run.env, _real(os.getcwd()))
             if not launcher or not launcher.is_file() or not node:
                 return None
             cmd = [node, str(launcher), "--version"]
@@ -214,6 +235,43 @@ class Install:
             return version if isinstance(version, str) else None
         except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
             return None
+
+    def npm_install(self, version: str) -> str | None:
+        """Install one version of the tool; ``None`` when npm succeeded, else what it said."""
+        spec = f"{self.run.tool.package}@{version}"
+        try:
+            out = _run(self.npm + ["install", "-g", spec, "--include=optional", "--no-fund", "--no-audit"], self.run.env,
+                       NPM_TIMEOUT_S)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return str(exc)
+        return None if out.returncode == 0 else ((out.stderr or out.stdout).strip()[-600:] or f"exit {out.returncode}")
+
+    def roll_back(self, version: str, moved: list[tuple[Path, Path]], published: bool) -> str | None:
+        """Bring back the version that ran before a failed update: install it again when it is
+        published, else put the moved program back. Returns the version that now runs."""
+        if published and self.npm_install(version) is None and self.installed_version() == version:
+            return version
+        if not self.program.exists():
+            put_back(moved)
+        return self.installed_version()
+
+    def check_path(self, version: str) -> None:
+        """``<tool>`` as the shells find it on PATH must be the install npm just changed;
+        otherwise the version it reports is not the one that runs (DCLI-074)."""
+        name = self.run.tool.name
+        names = [f"{name}.exe", f"{name}.cmd", f"{name}.ps1", name] if WINDOWS else [name]
+        cwd = _real(os.getcwd())
+        mine = _real(str(self.entries()[0].parent))
+        for folder in (self.run.env.get("PATH") or "").split(os.pathsep):
+            if not folder or not os.path.isabs(folder) or _real(folder) == cwd:
+                continue
+            if any(os.path.isfile(os.path.join(folder, n)) for n in names):
+                if _real(folder) != mine:
+                    raise DriverError("E_IO", f"{name} on PATH is the one in {folder}, not the one npm installed in "
+                                      f"{self.entries()[0].parent}; that one is at {version}, the other is not updated.",
+                                      current_version=version, next_action=f"Remove the other {name} from PATH or "
+                                      f"uninstall it, then run `{name} update` again.")
+                return
 
     # -------------------------------------------------------------- command entries (DCLI-075)
 
@@ -425,9 +483,10 @@ def provenance(install: Install, version: str) -> str:
     return "verified"
 
 
-def _integrity(run: Run, problem: str) -> DriverError:
+def _integrity(run: Run, problem: str, **details: Any) -> DriverError:
+    problem = problem.removeprefix("The provenance check of the installed package failed: ").rstrip(".")
     return DriverError("E_INTEGRITY", f"The provenance check of the installed package failed: {problem}.",
-                       next_action="Do not retry; report the failed provenance check to the user.")
+                       next_action="Do not retry; report the failed provenance check to the user.", **details)
 
 
 # ------------------------------------------------------------------ Skill sync (DCLI-076)
@@ -450,7 +509,7 @@ def _same_tree(a: Path, b: Path) -> bool:
 
 def sync_skills(run: Run, source: Path) -> tuple[str, list[str]]:
     """Replace each installed copy of the package's Skills with the new one. Symbolic links
-    are left alone and a Skill that was not installed is not created."""
+    and junctions are left alone, and a Skill that was not installed is not created."""
     if not source.is_dir():
         return "skipped", []
     names = sorted(p.name for p in source.iterdir() if (p / "SKILL.md").is_file())
@@ -458,13 +517,14 @@ def sync_skills(run: Run, source: Path) -> tuple[str, list[str]]:
     for folder in skill_dirs(run):
         for name in names:
             target = folder / name
+            _restore_interrupted(folder, name)
             if _is_link(target) or not target.is_dir():
                 continue
+            fresh = folder / f".{name}.new-{os.getpid()}"
+            old = folder / f".{name}.old-{os.getpid()}"
             try:
                 if _same_tree(source / name, target):
                     continue
-                fresh = folder / f".{name}.new-{os.getpid()}"
-                old = folder / f".{name}.old-{os.getpid()}"
                 shutil.rmtree(fresh, ignore_errors=True)
                 shutil.copytree(source / name, fresh)
                 os.replace(target, old)
@@ -477,9 +537,25 @@ def sync_skills(run: Run, source: Path) -> tuple[str, list[str]]:
                 synced += 1
             except OSError as exc:
                 failed.append(f"{target}: {exc.strerror or exc}")
+            finally:
+                shutil.rmtree(fresh, ignore_errors=True)
     if failed:
         return "failed", failed
     return ("synced" if synced else "not_needed"), []
+
+
+def _restore_interrupted(folder: Path, name: str) -> None:
+    """An earlier sync that stopped between its two renames left the installed copy aside;
+    put it back, so it counts as installed again."""
+    target = folder / name
+    if target.exists() or _is_link(target) or not folder.is_dir():
+        return
+    for old in sorted(folder.glob(f".{name}.old-*")):
+        try:
+            os.replace(old, target)
+            return
+        except OSError:
+            continue
 
 
 # ------------------------------------------------------------------ the command
@@ -496,44 +572,50 @@ def update(run: Run) -> Result:
         raise usage("--allow-downgrade goes with --target-version.", "--allow-downgrade")
     if check_only and allow_downgrade:
         raise usage("--check installs nothing, so --allow-downgrade has no effect.", "--allow-downgrade")
-
-    info = _query(run)
-    versions = [v for v in (info.get("versions") or {}) if isinstance(v, str) and semver_key(v) is not None]
-    latest = (info.get("dist-tags") or {}).get("latest")
-    if not isinstance(latest, str) or semver_key(latest) is None:
-        stable = [v for v in versions if "-" not in v.split("+", 1)[0]]
-        latest = max(stable, key=semver_key) if stable else None  # type: ignore[arg-type]
-    _cache(run, info, latest)
-    current = tool.version
-    target = target_flag or latest
-    if target is None:
-        raise DriverError("E_CONFIG", f"The npm registry lists no valid version of {tool.package}.",
-                          next_action="Check npm_config_registry, then run `update` again.")
-    if target not in versions:
-        raise usage(f"Version {target} of {tool.package} is not published.", "--target-version",
-                    f"Run `{tool.name} update --check` to see the latest version.")
-    data: dict[str, Any] = {"current_version": current, "target_version": target,
-                            "update_available": bool(latest and newer(latest, current))}
-
-    if check_only:
-        status = "available" if newer(target, current) else "up_to_date"
-        npm = find_npm(run.env)
-        entry = Install(run, npm).entry_state() if npm else "launcher"
-        if status == "available":
-            data["update_available"] = True
-        return Result({"status": status, **data, "entry": entry})
-
-    if newer(current, target) and not allow_downgrade:
-        raise usage(f"{target} is older than the installed {current}; a downgrade needs --target-version and "
-                    "--allow-downgrade.", "--target-version")
     npm = find_npm(run.env)
     if npm is None:
         raise DriverError("E_CONFIG", "npm was not found on PATH; nothing was changed.",
                           next_action="Install Node.js with npm, then run `update` again.")
+
+    info = query(run, npm, NPM_TIMEOUT_S)
+    versions, latest = info["versions"], info["latest"]
+    if latest is None:
+        stable = [v for v in versions if "-" not in v.split("+", 1)[0]]
+        latest = max(stable, key=semver_key) if stable else None  # type: ignore[arg-type]
+    write_cache(run, info, latest)
+    current = tool.version
+    # Without --target-version, a version newer than the latest one, such as a prerelease,
+    # stays where it is: update never steers toward a downgrade.
+    target = target_flag or (current if latest is None or newer(current, latest) else latest)
+    if target != current and target not in versions:
+        raise usage(f"Version {target} of {tool.package} is not published.", "--target-version",
+                    f"Run `{tool.name} update --check` to see the latest version.")
+    data: dict[str, Any] = {"current_version": current, "target_version": target,
+                            "update_available": bool(latest and newer(latest, current))}
     install = Install(run, npm)
+
+    if check_only:
+        status = "available" if newer(target, current) else "up_to_date"
+        if status == "available":
+            data["update_available"] = True
+        return Result({"status": status, **data, "entry": install.entry_state()})
+
+    if newer(current, target) and not allow_downgrade:
+        raise usage(f"{target} is older than the installed {current}; only a deliberate downgrade, with both "
+                    "--target-version and --allow-downgrade, installs it.", "--target-version",
+                    f"Nothing needs doing: {current} is installed. Downgrade only when the user asks for {target}.")
     install.empty_trash()
 
     if target == current:
+        failed_check = read_integrity(run)
+        if failed_check and failed_check.get("version") == current:
+            raise _integrity(run, str(failed_check.get("problem")), current_version=current)
+        if install.installed_version() != current:
+            run.notices.append({"type": "update", "severity": "warning",
+                                "message": f"The {tool.name} that runs is not the one npm installed in {install.prefix}; "
+                                           "the command entries and Skills were left as they are."})
+            return Result({"status": "up_to_date", **data, "skill_sync_status": "skipped", "entry": install.entry_state()})
+        install.check_path(current)
         entry = install.point_entries()
         sync, failed = sync_skills(run, install.main / "skills")
         result = {"status": "up_to_date", **data, "skill_sync_status": sync, "entry": entry}
@@ -544,35 +626,36 @@ def update(run: Run) -> Result:
     moved = install.move_aside()
     spec = f"{tool.package}@{target}"
     manual = f"npm install -g {spec}"
-    try:
-        out = _run(npm + ["install", "-g", spec, "--include=optional", "--no-fund", "--no-audit"], run.env, NPM_TIMEOUT_S)
-        failure = None if out.returncode == 0 else (out.stderr or out.stdout).strip()[-600:]
-    except (OSError, subprocess.SubprocessError) as exc:
-        failure = str(exc)
+    failure = install.npm_install(target)
     if failure is not None:
-        if not install.program.exists():
-            put_back(moved)
+        put_back(moved)
         raise DriverError("E_IO", f"npm could not install {spec}: {failure}", install_command=manual,
+                          current_version=install.installed_version(),
                           next_action=f"Run `{manual}` by hand, then `{tool.name} update` to finish.")
     installed = install.installed_version()
     if installed != target:
-        raise DriverError("E_IO", f"After installing {spec}, the program reports version {installed or 'nothing'}.",
-                          install_command=manual, current_version=installed,
+        now = install.roll_back(current, moved, current in versions)
+        back = f"version {now} was put back" if now else "the earlier version could not be put back"
+        raise DriverError("E_IO", f"After installing {spec}, the program reports version {installed or 'nothing'}; {back}.",
+                          install_command=manual, current_version=now,
                           next_action=f"Run `{manual}` by hand, then `{tool.name} update` to finish.")
-    entry = install.point_entries()
+    install.check_path(installed)
     result = {"status": "updated", "current_version": installed, "target_version": target, "previous_version": current,
-              "update_available": bool(latest and newer(latest, installed)), "entry": entry}
+              "update_available": bool(latest and newer(latest, installed))}
     try:
         result["provenance_status"] = provenance(install, installed)
     except DriverError as exc:
+        write_integrity(run, installed, exc.message)
         exc.details.update(current_version=installed, previous_version=current)
         raise
+    write_integrity(run, None, None)
+    result["entry"] = install.point_entries()
     sync, failed = sync_skills(run, install.main / "skills")
     result["skill_sync_status"] = sync
     if tool.host_component:
         run.notices.append({"type": "plugin", "severity": "warning",
-                            "message": f"update never replaces the host component; run `{tool.name} doctor`, and when "
-                                       f"it reports the host component outdated, run `{tool.name} plugin install`."})
+                            "message": f"update never replaces the host component; when `{tool.name} doctor` reports it "
+                                       f"older than the one this version brings, run `{tool.name} plugin install`."})
     if failed:
         raise _sync_failed(run, result, failed)
     return Result(result)
@@ -584,10 +667,37 @@ def _sync_failed(run: Run, result: dict[str, Any], failed: list[str]) -> DriverE
                        next_action=f"Close programs that use those Skill folders, then run `{run.tool.name} update` again.")
 
 
-def _cache(run: Run, info: dict[str, Any], latest: str | None) -> None:
+def write_cache(run: Run, info: dict[str, Any], latest: str | None) -> None:
+    """What the registry said, for the update notices of other commands (DCLI-079).
+    ``deprecated_version`` names the version the deprecation applies to."""
     from .builtin import _read_cache, _write_cache
 
-    current = (info.get("versions") or {}).get(run.tool.version)
     old = _read_cache(run)
     _write_cache(run, {"checked_at": utc_now(), "latest": latest, "notified_at": old.get("notified_at"),
-                       "deprecated": bool(isinstance(current, dict) and current.get("deprecated"))})
+                       "deprecated_version": run.tool.version if info.get("deprecated") else None})
+
+
+def _integrity_path(run: Run) -> Path:
+    return run.state.path / "cache" / "integrity.json"
+
+
+def read_integrity(run: Run) -> dict[str, Any] | None:
+    try:
+        data = json.loads(_integrity_path(run).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def write_integrity(run: Run, version: str | None, problem: str | None) -> None:
+    """Remember a failed provenance check, so that running update again does not finish
+    the entries and the Skills from a package that failed it."""
+    path = _integrity_path(run)
+    try:
+        if version is None:
+            path.unlink(missing_ok=True)
+        else:
+            run.state.sub("cache")
+            path.write_text(json.dumps({"version": version, "problem": problem, "checked_at": utc_now()}), encoding="utf-8")
+    except (OSError, DriverError):
+        pass

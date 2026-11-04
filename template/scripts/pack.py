@@ -4,8 +4,8 @@
     python scripts/pack.py [--main | --platform]
 
 The main package holds only the launcher, skills/ and the list of platform packages, besides
-package.json, README.md and LICENSE. Each platform package, built by scripts/build.py, holds
-the native program. Both are packed with npm into dist/; then every tarball is checked: only
+package.json, README.md, LICENSE and NOTICE.md. Each platform package, built by scripts/build.py,
+holds the native program with the licenses and notices of what it bundles. Both are packed with npm into dist/; then every tarball is checked: only
 the allowed files, no install scripts, Skill directories with only SKILL.md and references/.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-ALWAYS = {"package/package.json", "package/README.md", "package/LICENSE"}
+ALWAYS = {"package/package.json", "package/README.md", "package/LICENSE", "package/NOTICE.md"}
 
 
 def npm() -> str:
@@ -37,7 +37,7 @@ def main_package(package: dict, tool: str) -> Path:
     (out / "bin").mkdir(parents=True)
     shutil.copyfile(ROOT / "bin" / f"{tool}.js", out / "bin" / f"{tool}.js")
     shutil.copytree(ROOT / "skills", out / "skills")
-    for name in ("README.md", "LICENSE"):
+    for name in ("README.md", "LICENSE", "NOTICE.md"):
         shutil.copyfile(ROOT / name, out / name)
     shutil.copyfile(ROOT / "package.json", out / "package.json")
     return out
@@ -55,7 +55,7 @@ def check(tarball: Path, main: bool, tool: str) -> list[str]:
             continue
         if main and re.fullmatch(r"package/skills/[^/]+/(SKILL\.md|references/[^/]+)", name):
             continue
-        if not main and name.startswith("package/bin/"):
+        if not main and (name.startswith("package/bin/") or name.startswith("package/licenses/")):
             continue
         problems.append(f"{tarball.name}: {name} may not be in this package")
     for hook in ("preinstall", "install", "postinstall", "prepare"):

@@ -50,3 +50,14 @@ jobs:
         run: python scripts/build.py
       - name: Pack the npm packages and check their content
         run: python scripts/pack.py
+
+  # The one required status check: it fails unless every check passed on every shipped system,
+  # also when a job before it failed or was skipped.
+  passed:
+    name: merge gate passed
+    needs: [systems, gate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every check passed
+        run: test "${{ needs.systems.result }}" = success && test "${{ needs.gate.result }}" = success

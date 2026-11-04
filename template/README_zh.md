@@ -35,10 +35,10 @@
 
    ```powershell
    New-Item -ItemType Directory -Force "$HOME\.agents\skills" | Out-Null
-   Copy-Item -Recurse "$(npm root -g)\{{package}}\skills\*" "$HOME\.agents\skills\"
+   Copy-Item -Recurse -Force "$(npm root -g)\{{package}}\skills\*" "$HOME\.agents\skills\"
    ```
 
-   其他 Agent 的 Skill 目录，如 `~/.claude/skills/`，做法相同。以后运行 `{{tool}} update` 时，这些目录里的副本会跟着工具一起更新。
+   其他 Agent 的 Skill 目录做法相同。以后运行 `{{tool}} update` 时，这几个目录里的副本会跟着工具一起更新：`~/.agents/skills/`、`~/.claude/skills/`、`~/.codex/skills/`、`~/.cursor/skills/`、`~/.gemini/skills/`。放在别处的副本不会更新。
 {{#host_component}}
 
 4. 把宿主组件装进 {{application}}。这是两步确认的写操作，需要允许 `configure` 的授权范围文件（见「授权」）。第一次调用什么都不改，返回预览和确认令牌；第二次调用才安装：
@@ -170,6 +170,8 @@ Get-ChildItem "$(npm root -g)\{{package}}\skills" | ForEach-Object { Remove-Item
 ```bash
 npm uninstall -g {{package}}
 ```
+
+在 Windows 上，如果 npm 全局 `node_modules` 文件夹（`npm root -g`）里有 `.{{tool}}-trash`，也把它删掉；状态目录在另一块磁盘上时，`update` 会把旧的程序文件放在那里，等下次运行再删。
 
 最后删除状态目录：`~/.{{tool}}`，或 `{{PREFIX}}_STATE_DIR` 指定的文件夹。里面有操作记录、锁、默认位置的授权范围文件和团队知识的登记；想保留记录就留着它。
 

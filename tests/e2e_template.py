@@ -82,9 +82,10 @@ PART = {"type": "object", "properties": {"id": {"type": "string"}, "x_mm": {"typ
 BOARD = "board: origin at the top-left corner, x right, y down"
 
 
-def command(path: str, summary: str, effects: list[str], flags: list[dict[str, Any]], example: str, **extra: Any) -> dict[str, Any]:
+def command(path: str, summary: str, effects: list[str], modes: list[str], flags: list[dict[str, Any]], example: str,
+            **extra: Any) -> dict[str, Any]:
     writes = effects != ["observe"]
-    return {"path": path, "summary": summary, "effects": effects, "modes": ["file", "session"], "target_kind": "part",
+    return {"path": path, "summary": summary, "effects": effects, "modes": modes, "target_kind": extra.get("target_kind", "part"),
             "flags": flags, "untrusted_fields": [], "survey_ids": ["CAP-001"], "irreversible": False, "halt": False,
             "adapter_capabilities": ["read", "preview", "apply", "read_back"] if writes else ["read"],
             "tolerances": extra.get("tolerances", {}), "default_fields": [], "related_knowledge": [],
@@ -92,22 +93,38 @@ def command(path: str, summary: str, effects: list[str], flags: list[dict[str, A
 
 
 ID = {"name": "--id", "type": "string", "summary": "The reference of the part.", "required": True}
-COMMANDS = [
-    command("part get", "Read one part.", ["observe"], [ID], "part get --doc board.fake --id R1"),
-    command("part move", "Move one part.", ["change"],
+DOCUMENTS = MODES_WITH_DOCUMENTS
+COMMANDS = [] if not DOCUMENTS else [
+    command("part get", "Read one part.", ["observe"], DOCUMENTS, [ID], "part get --doc board.fake --id R1"),
+    command("part move", "Move one part.", ["change"], DOCUMENTS,
             [ID, {"name": "--x", "type": "quantity", "quantity": "length", "summary": "X position.", "coordinate_system": BOARD},
              {"name": "--y", "type": "quantity", "quantity": "length", "summary": "Y position.", "coordinate_system": BOARD}],
             "part move --doc board.fake --id R1 --x 12.5mm --y 30mm", tolerances={"x_mm": 0.001, "y_mm": 0.001}),
 ]
+if WITH_DEVICE:
+    COMMANDS.append(command(
+        "axis move", "Move a machine axis to a position.", ["physical"], ["device"],
+        [{**ID, "summary": "The axis."}, {"name": "--position", "type": "quantity", "quantity": "length", "summary": "The target position.",
+                                          "coordinate_system": "machine: origin at the home position"}],
+        "axis move --device cnc-01 --id x --position 10mm", target_kind="axis"))
 '''
 SAMPLES = {"part get": ["--session", "{session}", "--doc", "{doc}", "--id", "R1"],
-           "part move": ["--session", "{session}", "--doc", "{doc}", "--id", "R1", "--x", "12.5mm", "--y", "30mm"]}
+           "part move": ["--session", "{session}", "--doc", "{doc}", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
+           "axis move": ["--device", "{device}", "--id", "x", "--position", "10mm"]}
 
 
-def register(project: Path) -> None:
-    """Step 4 of onboarding: two domain commands, each with its behavior matrix."""
-    (project / PKG / "commands" / "__init__.py").write_text(COMMANDS, encoding="utf-8", newline="\n")
+def register(project: Path, modes: str = "file,session") -> None:
+    """Step 4 of onboarding: domain commands for the tool's modes, each with its behavior matrix."""
+    chosen = modes.split(",")
+    documents = [m for m in ("file", "session") if m in chosen]
+    source = COMMANDS.replace("MODES_WITH_DOCUMENTS", repr(documents)).replace("WITH_DEVICE", repr("device" in chosen))
+    (project / PKG / "commands" / "__init__.py").write_text(source, encoding="utf-8", newline="\n")
+    wanted = (["part get", "part move"] if documents else []) + (["axis move"] if "device" in chosen else [])
     for path, sample in SAMPLES.items():
+        if path not in wanted:
+            continue
+        if path.startswith("part") and "session" not in documents:
+            sample = [a for a in sample if a not in ("--session", "{session}")]
         rows = [{"row": "normal", "applies": True, "arguments": sample, "expected": {"exit": 0}}]
         rows += [{"row": r, "applies": False, "reason": "The demo tool drives no real application."}
                  for r in ["empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog",
@@ -279,7 +296,7 @@ def main() -> int:
         step("instantiate")
         project = generate(work, args.modes, args.host_component)
         step("register commands, fill the placeholders and check")
-        register(project)
+        register(project, args.modes)
         fill(project)
         step("lint and unit tests of the generated project")
         run([sys.executable, "-m", "ruff", "check", "."], project, env)

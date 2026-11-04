@@ -32,19 +32,20 @@ from typing import Any
 
 BUNDLE = Path(__file__).resolve().parents[1]
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
+SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\Z")
 CJK = re.compile(r"[㐀-鿿豈-﫿　-〿＀-￯]")
 LATIN = re.compile(r"[A-Za-z]{3,}")
 VARIABLES = ["tool", "package", "pkg", "PREFIX", "product", "application", "versions", "repo", "author", "year", "modes", "host_component",
              "version", "spec_version"]
 CONDITIONS = ["host_component", "session", "device", "file"]
-LEFTOVER = re.compile(r"\{\{(?:fill:[^}]*|(?:%s)|[#^/](?:%s))\}\}" % ("|".join(VARIABLES), "|".join(CONDITIONS)))
+LEFTOVER = re.compile(r"\{\{fill:[^}]*(?:\}\})?|\{\{(?:(?:%s)|[#^/](?:%s))\}\}" % ("|".join(VARIABLES), "|".join(CONDITIONS)))
 OS_NAMES = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}
 OS_KEYS = {"Windows": "windows", "macOS": "macos", "Linux": "linux"}
 NPM_OS = {"windows": "win32", "macos": "darwin", "linux": "linux"}
 SKIP_DIRS = {".git", "node_modules", "build", "dist", "__pycache__", ".venv", "venv", ".mypy_cache", ".ruff_cache"}
-ROOT_CONFIG = {"pyproject.toml", "setup.cfg", "ruff.toml", "package-lock.json", "npm-shrinkwrap.json", "uv.lock",
-               "poetry.lock", "Pipfile.lock", "requirements.txt", "requirements-dev.txt"}
+ROOT_CONFIG = {"package-lock.json", "npm-shrinkwrap.json", "Pipfile", "go.mod", "go.sum"}
+ROOT_CONFIG_SUFFIXES = (".toml", ".cfg", ".ini", ".lock", ".yaml", ".yml")
+JUNK = {".DS_Store", "Thumbs.db", "desktop.ini"}
 FIXED = {"README.md": ["Install", "How It Works"], "AGENTS.md": ["Bare minimum to obey"],
          "SECURITY.md": ["Write Confirmation", "State Directory", "Untrusted Content", "Supply Chain", "Self-update"]}
 REGIONS = {
@@ -137,7 +138,7 @@ class Facts:
     def repo(self) -> str:
         url = self.package.get("repository")
         url = url.get("url", "") if isinstance(url, dict) else (url or "")
-        match = re.search(r"github\.com[/:]([^/]+/[^/.#]+)", url)
+        match = re.search(r"github\.com[/:]([^/]+/[^/#]+?)(?:\.git)?(?:#.*)?$", url)
         return match.group(1) if match else ""
 
     def platforms(self) -> list[tuple[str, str]]:
@@ -329,6 +330,7 @@ def front_matter(text: str) -> tuple[dict[str, Any], str, int]:
     data: dict[str, Any] = {}
     parent: dict[str, Any] | None = None
     folded: tuple[dict[str, Any], str] | None = None
+    last: tuple[dict[str, Any], str] | None = None
     for raw in lines[1:end]:
         if not raw.strip():
             continue
@@ -340,11 +342,22 @@ def front_matter(text: str) -> tuple[dict[str, Any], str, int]:
         folded = None
         if indent == 0:
             parent = None
+        if raw.lstrip().startswith("#"):
+            continue
+        item = re.match(r"^\s+-\s+(.*)$", raw)
+        if item and last is not None:
+            items = last[0].get(last[1])
+            if items == {}:
+                items = last[0][last[1]] = []  # a block list: the key's value is the items below it
+            if isinstance(items, list):
+                items.append(item.group(1).strip().strip("'\""))
+                continue
         match = re.match(r"^\s*([A-Za-z_][\w-]*):\s*(.*)$", raw)
         if not match:
             raise ValueError(f"cannot read the line {raw.strip()!r}")
         key, value = match.group(1), match.group(2).strip()
         target = parent if indent > 0 and parent is not None else data
+        last = (target, key)
         if value in (">-", ">", "|", "|-"):
             target[key] = ""
             folded = (target, key)
@@ -496,9 +509,16 @@ def live_records(facts: Facts) -> list[tuple[Path, dict[str, Any]]]:
             data = json.loads(read(path))
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict) and data.get("kind") == "live":
+        if live_shape(data):
             out.append((path, data))
     return out
+
+
+def live_shape(data: Any) -> bool:
+    """Enough of evidence.schema.json for the generators; check_project reports the rest."""
+    return (isinstance(data, dict) and data.get("kind") == "live" and isinstance(data.get("application"), dict)
+            and isinstance(data.get("platform"), str) and isinstance(data.get("runs"), list)
+            and all(isinstance(r, dict) for r in data["runs"]) and isinstance(data.get("tool_version"), str))
 
 
 def current(tool_version: Any, version: str) -> bool:
@@ -571,14 +591,25 @@ def evidence_index(facts: Facts, lang: str) -> str:
 
 def knowledge_entries(facts: Facts) -> list[tuple[Path, dict[str, Any], str]]:
     folder = facts.root / "knowledge"
+    parse = runtime_front_matter()
     out = []
     for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
         try:
-            front, body, _ = front_matter(read(path))
+            front, body = parse(read(path))
         except (OSError, ValueError):
             front, body = {}, ""
         out.append((path, front, body))
     return out
+
+
+def runtime_front_matter() -> Any:
+    """The front matter parser of the driver runtime in this release."""
+    sys.path.insert(0, str(BUNDLE / "sdk" / "python"))
+    try:
+        from _driver.knowledge import front_matter as parse
+    finally:
+        sys.path.pop(0)
+    return parse
 
 
 def knowledge_index(facts: Facts) -> str:
@@ -785,7 +816,8 @@ class Checker:
                 self.add("DREPO-002", name, "this root file is missing")
         for entry in sorted(self.root.iterdir()):
             if entry.is_file() and entry.name not in project["root_files"] and not entry.name.startswith(".") \
-                    and entry.name not in ROOT_CONFIG and not entry.name.endswith(".lock"):
+                    and entry.name not in ROOT_CONFIG and not entry.name.endswith(ROOT_CONFIG_SUFFIXES) \
+                    and not re.fullmatch(r"requirements[\w.-]*\.txt", entry.name) and entry.name not in JUNK:
                 self.add("DREPO-003", entry.name, "only the root files, build configuration and tool configuration may sit at the root")
         for name in project["required_paths"]:
             path = self.root / name
@@ -1014,11 +1046,16 @@ class Checker:
             except (OSError, UnicodeDecodeError):
                 continue
             outside = text
-            if rel in ("README.md", "README_zh.md") and get_region(text, "badges") is not None:
-                outside = text.replace(get_region(text, "badges") or "", "")
+            for name in ("badges", "support-matrix"):
+                inside = get_region(text, name)
+                if inside:
+                    outside = outside.replace(inside, "")
+            marks = [f"{c['emoji']} {c['label']}" for c in self.contract["compatibility_labels"]]
             for number, line in enumerate(outside.split("\n"), 1):
-                if re.search(r"!\[[^\]]*\]\([^)]*(shields\.io|badge)[^)]*\)", line):
+                if re.search(r"!\[[^\]]*\]\([^)]*(shields\.io|badge)[^)]*\)|<img[^>]+(shields\.io|badge)", line, re.I):
                     self.add("DREPO-024", rel, "badges appear only in the README badge row", number)
+                elif any(mark in line for mark in marks) and (line.lstrip().startswith("|") or "COMPATIBILITY" not in rel):
+                    self.add("DREPO-022", rel, "compatibility labels appear only in the generated support matrix", number)
 
     # -------------------------------------------------------------- pinned copies (DREPO-030 to DREPO-034)
 
@@ -1041,19 +1078,25 @@ class Checker:
                 self.add(clause, dest, "this pinned file is missing; run `python scripts/spec.py sync <version>`")
             elif digest(path) != digest(source):
                 self.add(clause, dest, f"differs from release {release}; pinned copies are never edited (DREPO-034)")
+        runtime = {digest(source) for source, dest in pinned_files(self.facts.pkg) if dest.endswith(".py")}
+        for path in self.files():
+            rel = path.relative_to(self.root).as_posix()
+            if path.suffix == ".py" and path.stat().st_size > 200 and digest(path) in runtime:
+                self.add("DREPO-034", rel, "a copy of a runtime file outside the pinned runtime; import the runtime from "
+                         f"{self.facts.pkg}/_driver/ instead")
         expected = {dest for _, dest in pinned_files(self.facts.pkg)}
         for folder in (".agent", "licenses", f"{self.facts.pkg}/_driver"):
             base = self.root / folder
             for path in sorted(base.rglob("*")) if base.is_dir() else []:
                 rel = path.relative_to(self.root).as_posix()
-                if path.is_file() and "__pycache__" not in path.parts and rel not in expected \
-                        and rel not in (".agent/SPEC_VERSION", f"{self.facts.pkg}/_driver/MANIFEST.json"):
+                if path.is_file() and "__pycache__" not in path.parts and rel not in expected and path.name not in JUNK \
+                        and rel not in (".agent/SPEC_VERSION", ".agent/SPEC_SHA256", f"{self.facts.pkg}/_driver/MANIFEST.json"):
                     self.add(pinned_clause(rel), rel, "this file is not part of the pinned release")
         manifest_path = self.root / self.facts.pkg / "_driver" / "MANIFEST.json"
         try:
             manifest = json.loads(read(manifest_path))
         except (OSError, ValueError):
-            return
+            manifest = None
         if manifest != runtime_manifest(release):
             self.add("DREPO-032", f"{self.facts.pkg}/_driver/MANIFEST.json", "the manifest does not record the release and "
                      "the hash of every runtime file; run `python scripts/spec.py sync <version>`")
@@ -1167,6 +1210,19 @@ class Checker:
         entry = self.root / "skills" / facts.tool / "SKILL.md"
         if facts.tool and not entry.is_file():
             self.add("DSKL-022", f"skills/{facts.tool}/SKILL.md", "the entry Skill is missing")
+        folder = self.root / "skills"
+        for item in sorted(folder.iterdir()) if folder.is_dir() else []:
+            if item.name in JUNK:
+                continue
+            if not item.is_dir():
+                self.add("DSKL-032", f"skills/{item.name}", "skills/ holds only Skill directories")
+            elif not [p for p in item.iterdir() if p.name == "SKILL.md"]:
+                self.add("DSKL-001", f"skills/{item.name}/", "a Skill directory holds one SKILL.md, spelled so")
+        readme = self.text("README.md")
+        if readme and get_region(readme, "command-map") is not None:
+            capabilities = section_body(readme, "Capabilities") or ""
+            if region("command-map")[0] not in capabilities:
+                self.add("DSKL-006", "README.md", "the command map belongs in the Capabilities section")
         paths = {c["path"] for c in facts.commands}
         claims: dict[str, list[str]] = {}
         recipe = self.entry_template_lines()
@@ -1247,6 +1303,8 @@ class Checker:
                     for line in body.split("\n") if re.match(r"^#{2,4} ", line)}
         for playbook in self.contract["skill"]["driver_playbooks"]:
             if playbook == "physical_effects" and "device" not in self.facts.modes:
+                if playbook in headings:
+                    self.add("DSKL-009", rel, "only a tool with device mode includes the physical_effects playbook")
                 continue
             if playbook not in headings:
                 self.add("DSKL-009", rel, f"the entry Skill needs the driver playbook `{playbook}` as a heading")
@@ -1316,36 +1374,43 @@ class Checker:
             except (OSError, ValueError) as exc:
                 self.add("DVER-030", rel, f"cannot read the matrix: {exc}")
                 continue
-            for message in self.validate(matrix, "behavior-matrix.schema.json"):
+            problems = self.validate(matrix, "behavior-matrix.schema.json")
+            for message in problems:
                 self.add("DVER-041", rel, f"does not validate against behavior-matrix.schema.json: {message}")
-            command = needs.get(matrix.get("command")) if isinstance(matrix, dict) else None
+            if problems:
+                if isinstance(matrix, dict) and isinstance(matrix.get("command"), str):
+                    seen.add(matrix["command"])
+                continue
+            command = needs.get(matrix["command"])
             if command is None:
-                self.add("DVER-030", rel, f"{matrix.get('command') if isinstance(matrix, dict) else '?'} is not a command "
-                         "that needs a behavior matrix")
+                self.add("DVER-030", rel, f"{matrix['command']} is not a command that needs a behavior matrix")
                 continue
             seen.add(command["path"])
             if path.name != command["path"].replace(" ", "-") + ".json":
                 self.add("DVER-030", rel, f"the file is named after the command: {command['path'].replace(' ', '-')}.json")
             facts = command_facts(self.facts, command)
-            for row in matrix.get("rows", []):
-                spec = next((r for r in self.contract["behavior_matrix_rows"] if r["row"] == row.get("row")), None)
-                if spec is None:
-                    continue
+            for row in matrix["rows"]:
+                spec = next(r for r in self.contract["behavior_matrix_rows"] if r["row"] == row["row"])
                 holds = any(facts.get(w) for w in spec["applies_when"])
-                if row.get("applies") and not holds:
+                if row["applies"] and not holds:
                     self.add("DVER-030", rel, f"row {row['row']} applies only when {', '.join(spec['applies_when'])}")
-                if row.get("applies") and "actual" in row and not same_result(row["actual"], row.get("expected")):
+                if row["row"] == "normal" and not row["applies"]:
+                    self.add("DVER-030", rel, "the normal row always applies; for a write command it is the write sample (DVER-002)")
+                if row["applies"] and "actual" in row and not same_result(row["actual"], row.get("expected")):
                     self.add("DVER-030", rel, f"row {row['row']} failed: expected {row.get('expected')}, got {row['actual']}")
                 if row.get("evidence"):
-                    self.reference_problem(rel, row["evidence"])
+                    problem = self.live_problem(row["evidence"], command["path"], row["row"])
+                    if problem:
+                        self.add("DVER-041", rel, f"row {row['row']}: {problem}")
         for path in sorted(set(needs) - seen):
             self.add("DVER-030", f"tests/matrix/{path.replace(' ', '-')}.json", f"`{path}` needs a behavior matrix; "
                      "`python scripts/spec.py generate` writes a first one")
 
-    # -------------------------------------------------------------- evidence and maturity (DVER-040 to DVER-043)
+    # -------------------------------------------------------------- evidence and maturity (DVER-040 to DVER-050)
 
     def evidence(self) -> None:
         folder = self.root / "docs" / "evidence"
+        authorized = authorized_targets(self.root)
         for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
             rel = path.relative_to(self.root).as_posix()
             try:
@@ -1354,26 +1419,38 @@ class Checker:
                 self.add("DVER-042", rel, f"cannot read the record: {exc}")
                 continue
             schema = "eval-report.schema.json" if path.name.startswith("eval-") else "evidence.schema.json"
-            for message in self.validate(data, schema):
+            problems = self.validate(data, schema)
+            for message in problems:
                 self.add("DVER-042" if schema == "evidence.schema.json" else "DVER-041", rel,
                          f"does not validate against {schema}: {message}")
+            if schema == "evidence.schema.json" and not problems:
+                for target in data["targets"]:
+                    if not any(target_covered(target, t) for t in authorized):
+                        self.add("DVER-050", rel, f"target {target} is not listed under Authorized Targets in docs/E2E.md")
         if self.facts.reference is None:
             return
         for command in self.facts.commands:
-            level = command.get("maturity", "draft")
-            refs = command.get("evidence", []) or []
-            for ref in refs:
+            for ref in command.get("evidence", []) or []:
                 self.reference_problem("contract/commands.json", ref)
-            if command["path"] not in self.facts.domain_paths:
+        needs = matrix_commands(self.facts)
+        stable = False
+        for command in self.facts.commands:
+            if command["path"] not in needs:
                 continue
-            need = next((m["evidence"] for m in self.contract["maturity_levels"] if m["level"] == level), [])
-            for kind in need:
-                good = [r for r in refs if r.startswith(kind + ":") and self.current_evidence(r)]
-                if not good:
+            level = command.get("maturity", "draft")
+            refs = [str(r) for r in command.get("evidence", []) or []]
+            if level in ("verified", "stable"):
+                if not any(r.startswith("live:") and not self.live_problem(r, command["path"]) for r in refs):
                     self.add("DVER-040", "contract/commands.json", f"`{command['path']}` is {level}, which needs current "
-                             f"`{kind}:` evidence (DVER-043)")
-            if "live" in need:
+                             "`live:` evidence of a passing run of this command (DVER-043)")
                 self.matrix_passed(command)
+            if level == "stable":
+                stable = True
+                if not any(r.startswith("eval:") and not self.eval_problem(r) for r in refs):
+                    self.add("DSKL-043", "contract/commands.json", f"`{command['path']}` is stable, which needs a current "
+                             "`eval:` report in which every question passed")
+        if stable:
+            self.eval_questions()
 
     def reference_problem(self, where: str, ref: str) -> None:
         match = re.fullmatch(r"([a-z]+):([^#]+)(?:#(.+))?", str(ref))
@@ -1383,29 +1460,106 @@ class Checker:
         elif not (self.root / match.group(2)).is_file():
             self.add("DVER-041", where, f"evidence {ref!r} names a file that does not exist")
 
-    def current_evidence(self, ref: str) -> bool:
+    def _evidence_file(self, ref: str, kind: str) -> tuple[Any, str | None, str | None]:
+        """The data a reference names, its anchor, and what is wrong with it."""
         match = re.fullmatch(r"([a-z]+):([^#]+)(?:#(.+))?", ref)
-        if not match:
-            return False
+        if not match or match.group(1) != kind:
+            return None, None, f"{ref!r} is not `{kind}:` evidence"
+        path = match.group(2)
+        folder = "docs/evidence/"
+        is_eval = Path(path).name.startswith("eval-")
+        if not path.startswith(folder) or "/" in path[len(folder):] or is_eval != (kind == "eval"):
+            return None, None, f"{ref!r} does not name a {'report docs/evidence/eval-*.json' if kind == 'eval' else 'live record in docs/evidence/'}"
         try:
-            data = json.loads(read(self.root / match.group(2)))
+            data = json.loads(read(self.root / path))
         except (OSError, ValueError):
-            return False
-        return isinstance(data, dict) and current(data.get("tool_version"), self.facts.version)
+            return None, None, f"{ref!r} names no readable file"
+        if self.validate(data, "eval-report.schema.json" if kind == "eval" else "evidence.schema.json"):
+            return None, None, f"{ref!r} does not validate against its schema"
+        if data["tool"] != self.facts.tool:
+            return None, None, f"{ref!r} is a record of {data['tool']}, not {self.facts.tool}"
+        if not current(data["tool_version"], self.facts.version):
+            return None, None, f"{ref!r} is from {data['tool_version']}, not the current minor version (DVER-043)"
+        return data, match.group(3), None
+
+    def live_problem(self, ref: str, command: str, row: str | None = None) -> str | None:
+        """Why a `live:` reference does not show a passing run of this command (and row)."""
+        data, anchor, problem = self._evidence_file(str(ref), "live")
+        if problem:
+            return problem
+        wanted = row or anchor
+        runs = [r for r in data["runs"] if r["command"] == command and (wanted is None or r.get("matrix_row") == wanted)]
+        if not runs:
+            return f"{ref!r} has no run of `{command}`{' for row ' + wanted if wanted else ''}"
+        if not all(r["result"] == "pass" for r in runs):
+            return f"{ref!r} records a failed run of `{command}`"
+        return None
+
+    def eval_problem(self, ref: str) -> str | None:
+        data, _, problem = self._evidence_file(str(ref), "eval")
+        if problem:
+            return problem
+        failed = [q["id"] for q in data["questions"] if not q["passed"]]
+        return f"{ref!r}: questions failed: {', '.join(failed)}" if failed else None
 
     def matrix_passed(self, command: dict[str, Any]) -> None:
         path = self.root / "tests" / "matrix" / (command["path"].replace(" ", "-") + ".json")
         try:
-            rows = json.loads(read(path)).get("rows", [])
-        except (OSError, ValueError, AttributeError):
+            matrix = json.loads(read(path))
+        except (OSError, ValueError):
             return
-        for row in rows:
-            if not row.get("applies") or row.get("unrunnable"):
+        if self.validate(matrix, "behavior-matrix.schema.json"):
+            return
+        for row in matrix["rows"]:
+            if not row["applies"] or row.get("unrunnable"):
                 continue
             if "actual" not in row or not same_result(row["actual"], row.get("expected")) \
-                    or not self.current_evidence(str(row.get("evidence", ""))):
+                    or self.live_problem(row.get("evidence", ""), command["path"], row["row"]):
                 self.add("DVER-040", path.relative_to(self.root).as_posix(), f"`{command['path']}` is "
-                         f"{command.get('maturity')}, but row {row.get('row')} has no current passing run")
+                         f"{command.get('maturity')}, but row {row['row']} has no current passing run")
+
+    def eval_questions(self) -> None:
+        """tests/eval/ covers every per-tool scenario that applies to the tool (DSKL-042)."""
+        facts = self.facts
+        holds = {"always": True, "writes": any(any(e != "observe" for e in c.get("effects", [])) for c in facts.commands
+                                               if c["path"] in facts.domain_paths),
+                 "session": "session" in facts.modes, "device": "device" in facts.modes,
+                 "dangerous": any(dangerous(c) for c in facts.commands if c["path"] in facts.domain_paths),
+                 "jobs": any("job_status" in (c.get("capabilities") or []) for c in facts.commands),
+                 "physical": any("physical" in c.get("effects", []) for c in facts.commands)}
+        scenarios = self.contract["skill"]["eval_scenarios"]
+        wanted = [s["scenario"] for group in scenarios.values() for s in group
+                  if s.get("per_tool") and any(holds.get(w) for w in s["applies_when"])]
+        covered = set()
+        for path in sorted((self.root / "tests" / "eval").glob("*.json")):
+            try:
+                question = json.loads(read(path))
+            except (OSError, ValueError):
+                self.add("DSKL-042", path.relative_to(self.root).as_posix(), "cannot read the question")
+                continue
+            if isinstance(question, dict) and isinstance(question.get("scenario"), str):
+                covered.add(question["scenario"])
+        for scenario in wanted:
+            if scenario not in covered:
+                self.add("DSKL-042", "tests/eval/", f"no evaluation question covers the scenario {scenario}")
+
+
+def authorized_targets(root: Path) -> list[str]:
+    """The targets listed under Authorized Targets in docs/E2E.md (DVER-050)."""
+    try:
+        text = read(root / "docs" / "E2E.md")
+    except OSError:
+        return []
+    body = next((b for h, _, b in sections(text) if h == "Authorized Targets"), [])
+    return [m.group(1) for line in body if (m := re.match(r"^\s*[-*]\s+`([^`]+)`", line))]
+
+
+def target_covered(target: str, authorized: str) -> bool:
+    """A file URL inside an authorized folder, or the same target."""
+    a, b = target.rstrip("/"), authorized.rstrip("/")
+    if os.name == "nt" and a.startswith("file:"):
+        a, b = a.lower(), b.lower()
+    return a == b or (authorized.endswith("/") and a.startswith(b + "/"))
 
 
 def same_result(actual: Any, expected: Any) -> bool:

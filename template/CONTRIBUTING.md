@@ -57,7 +57,7 @@ The pinned copies are `.agent/`, `contract/driver-contract.json`, `{{pkg}}/_driv
 
 ## CI Checks
 
-`.github/workflows/ci.yml` runs the merge gate on every change. A failed check blocks the merge and the release.
+`.github/workflows/ci.yml` runs the merge gate on every change. Its last job, `merge gate passed`, succeeds only when every check passed on every shipped system; make it the required status check of the main branch, so that a failed check blocks the merge. The release runs the same checks.
 
 | Check | What it covers | Run it locally |
 |---|---|---|
@@ -68,7 +68,7 @@ The pinned copies are `.agent/`, `contract/driver-contract.json`, `{{pkg}}/_driv
 | Output size check | Every envelope stays within the size limits; general conformance test R04 performs it | `python scripts/spec.py suites` |
 | npm package content check | Each package holds only what it may, with no install scripts | `python scripts/pack.py` |
 
-`.github/workflows/release.yml` runs only when a maintainer pushes a version tag. It runs the same checks, then platform delivery: on the operating system and CPU of each platform package, it installs the packages that will be published into a clean environment, starts {{tool}} and runs one key operation, as `python scripts/smoke.py` does. It publishes to npm, with provenance, only when everything passed for every platform package.
+`.github/workflows/release.yml` runs only when a maintainer pushes a version tag. It runs the same checks, then platform delivery: on the operating system and CPU of each platform package, it installs the packages that will be published into a clean environment, starts {{tool}} and runs one key operation, as `python scripts/smoke.py` does. It publishes to npm, with provenance, only when everything passed for every platform package. A version with a prerelease part, such as `1.2.0-rc.1`, is published under the npm tag `next`, so `update` does not install it by default. Linux packages are built on Debian 11 (glibc 2.31), so they also run on older Linux systems. The workflow publishes through npm trusted publishing when the package has it set up on npmjs.com, otherwise with the `NPM_TOKEN` secret; set up trusted publishing after the first release and then disallow token publishing.
 
 ## Tests and Evidence
 

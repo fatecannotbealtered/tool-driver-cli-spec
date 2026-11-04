@@ -496,7 +496,7 @@ Check: 🤖 `check_project`.
 
 ### DREPO-030 Specification copy
 
-`.agent/` MUST hold the five specifications of one release, each in English and Chinese, exactly as released. `.agent/SPEC_VERSION` MUST hold that release's version number as its only line.
+`.agent/` MUST hold the five specifications of one release, each in English and Chinese, exactly as released. `.agent/SPEC_VERSION` MUST hold that release's version number as its only line. `.agent/SPEC_SHA256` MAY hold the SHA-256 of that release's bundle; the project's scripts then accept only a bundle with that digest.
 
 Why: Agents working on the tool read, offline, exactly the rules the tool was built against.
 Check: 🤖 `check_project` compares hashes (DREPO-034).
@@ -596,7 +596,7 @@ Check: 👀 Review of the README, the release workflow and the release page.
 
 - CI MUST build the tool as a standalone native program for each shipped platform and CPU architecture. Tools written in Python are built the same way. The native program runs without a separately installed language runtime.
 - Each native program ships in its own platform package, named `<package>-<os>-<cpu>`: `<os>` is `win32`, `darwin` or `linux` and `<cpu>` is `x64` or `arm64`, the values npm uses to pick the package. npm installs only the platform package that matches the machine.
-- The main package MUST hold only the launcher, `skills/` (DSKL-030) and the list of platform packages, besides the files npm always includes (`package.json`, README, LICENSE).
+- The main package MUST hold only the launcher, `skills/` (DSKL-030) and the list of platform packages, besides the files npm always includes (`package.json`, README, LICENSE) and `NOTICE.md`. Each platform package also carries `NOTICE.md` and `licenses/` (DREPO-033).
 - Everything the commands read at run time, such as the builtin knowledge and the bundled CHANGELOG (DCLI-034), ships in the platform package with the native program.
 
 Why: A native program starts fast and needs no Python or other runtime on the user's machine, and the main package stays small.

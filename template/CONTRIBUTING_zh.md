@@ -12,7 +12,7 @@
 - Node.js 和 npm，用来构建和测试 npm 包
 - Git
 
-测试和一致性测试从不需要 {{application}}：模拟宿主代替它。只有在授权目标上做真实软件运行时才需要 {{application}}（见 `docs/E2E_zh.md`）。
+测试和一致性测试从不需要 {{application}}：模拟宿主代替它。只有在授权目标上做真实软件运行时才需要 {{application}}（授权目标的清单在 `docs/E2E.md`）。
 
 克隆仓库：
 
@@ -57,7 +57,7 @@ python scripts/spec.py check
 
 ## CI 检查
 
-`.github/workflows/ci.yml` 对每次改动运行合并门槛。任何一项检查失败，都会挡住合并和发布。
+`.github/workflows/ci.yml` 对每次改动运行合并门槛。它的最后一个作业 `merge gate passed` 只在每个出包系统上的每项检查都通过时才成功；把它设为主分支必须通过的状态检查，任何一项检查失败就会挡住合并。发布运行同样的检查。
 
 | 检查 | 检查什么 | 本地怎样运行 |
 |---|---|---|
@@ -68,7 +68,7 @@ python scripts/spec.py check
 | 输出大小检查 | 每个信封都在大小上限之内；由通用一致性测试 R04 执行 | `python scripts/spec.py suites` |
 | npm 包内容检查 | 每个包只含允许的内容，没有安装脚本 | `python scripts/pack.py` |
 
-`.github/workflows/release.yml` 只在维护者推送版本标签时运行。它先跑同样的检查，再做平台交付：在每个平台包对应的操作系统和 CPU 上，把将要发布的包装进干净的环境，启动 {{tool}}，运行一个关键操作，做法与 `python scripts/smoke.py` 相同。只有所有平台包都全部通过，它才带着来源证明发布到 npm。
+`.github/workflows/release.yml` 只在维护者推送版本标签时运行。它先跑同样的检查，再做平台交付：在每个平台包对应的操作系统和 CPU 上，把将要发布的包装进干净的环境，启动 {{tool}}，运行一个关键操作，做法与 `python scripts/smoke.py` 相同。只有所有平台包都全部通过，它才带着来源证明发布到 npm。带预发布部分的版本，如 `1.2.0-rc.1`，以 npm 标签 `next` 发布，`update` 默认不会安装它。Linux 包在 Debian 11（glibc 2.31）上构建，所以较老的 Linux 系统也能运行。包在 npmjs.com 上配好可信发布时，工作流用可信发布，否则用 `NPM_TOKEN` 密钥；首次发布后就配好可信发布，并禁止用令牌发布。
 
 ## 测试与证据
 

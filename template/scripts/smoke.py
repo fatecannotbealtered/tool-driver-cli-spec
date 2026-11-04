@@ -154,7 +154,7 @@ def main(argv: list[str]) -> int:
         updated = step("update", entry(prefix, tool) + ["update"])
         extra = {}
         if fake:
-            spec = bundle(pinned_version())
+            spec, _ = bundle(pinned_version())
             host = subprocess.Popen([sys.executable, "-m", "fakehost", "--state-dir", str(work / "state"),
                                      "--commands", str(ROOT / "contract" / "commands.json")], cwd=spec / "conformance",
                                     stdout=subprocess.PIPE, text=True, creationflags=NO_WINDOW)

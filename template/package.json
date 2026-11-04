@@ -16,7 +16,8 @@
   },
   "files": [
     "bin/{{tool}}.js",
-    "skills/"
+    "skills/",
+    "NOTICE.md"
   ],
   "engines": {
     "node": ">=18"
