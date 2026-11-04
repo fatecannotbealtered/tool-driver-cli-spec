@@ -13,7 +13,7 @@ English | [中文](README_zh.md)
 
 A person sets the scope, the Agent does the work, and the tool makes every step correct and honestly reported.
 
-The specification decides everything a new driver tool would otherwise decide on its own: project skeleton, documents, built-in commands, self-update, the driver model, the write flow, the adapter boundary and the conformance tests. A tool author writes only the domain commands and the adapter. Every tool then behaves the same, so an Agent that knows one knows them all.
+The specification decides everything a new driver tool would otherwise decide on its own: project skeleton, documents, built-in commands, self-update, the driver model, the write flow, the adapter boundary and the conformance tests. A tool author writes only the domain commands, the adapter, the Skills, the knowledge entries and the evaluation questions. Every tool then behaves the same, so an Agent that knows one knows them all.
 
 | Requirement | Meaning |
 |---|---|
@@ -38,7 +38,7 @@ Every value a tool or a test can read as data lives in [`contract/driver-contrac
 
 ## Status
 
-Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtime, the conformance suites and the project template exist; tools can adopt the specification once 1.0.0-rc.1 is released.
+Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide exist; tools can adopt the specification once 1.0.0-rc.1 is released.
 
 | Phase | Content | State |
 |---|---|---|
@@ -46,7 +46,7 @@ Version 1.0.0-rc.1 is in development. Nothing is released yet. The driver runtim
 | 2 | Specifications, contract, schemas, checks | Done |
 | 3 | Fake host, the reference implementation of the host protocol | Done |
 | 4 | Python driver runtime, the two conformance suites and the project template | Done |
-| 5 | Evaluation suite, Skill and knowledge templates, development Skill, onboarding guide | In progress |
+| 5 | Evaluation suite, Skill and knowledge templates, development Skill, onboarding guide | Done |
 | 6 | Release 1.0.0-rc.1, then 1.0.0 | Planned |
 
 ## Repository Layout
@@ -59,11 +59,10 @@ tool-driver-cli-spec/
 ├── conformance/ fakehost/, the fake host (DVER-020); suites/, the two conformance suites (DVER-001); eval/, the evaluation questions (DSKL-041)
 ├── template/    the project template a new tool is generated from (DREPO-062)
 ├── scripts/     check_spec.py, build_spec_bundle.py; instantiate.py, sync_spec.py, check_project.py, run_matrix.py, run_eval.py for tool projects
-├── docs/        OPEN-QUESTIONS.md
+├── skills/      build-driver-cli/, the development Skill that guides an Agent through building a tool (DREPO-062)
+├── docs/        ONBOARDING.md, the guide for a person who wants a new tool; OPEN-QUESTIONS.md
 └── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against; e2e_template.py, eval_template.py
 ```
-
-Phase 5 adds `skills/`.
 
 ## Checks
 
@@ -90,7 +89,7 @@ python tests/eval_template.py
 python tests/eval_template.py --agent claude --report eval-report.json
 ```
 
-A new tool project starts from the release bundle:
+To get a new driver tool, start with the onboarding guide [docs/ONBOARDING.md](docs/ONBOARDING.md): it shows how to install the development Skill `build-driver-cli`, which takes your Agent through every step. A new tool project starts from the release bundle:
 
 ```bash
 python scripts/instantiate.py ../kicad-cli --tool kicad-cli --package @acme/kicad-cli --application KiCad --versions ">=9.0 <11" --modes file,session

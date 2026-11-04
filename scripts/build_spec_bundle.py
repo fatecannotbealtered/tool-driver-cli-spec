@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "tool-driver-cli-spec"
 TOP_FILES = ["README.md", "README_zh.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "VERSION"]
-TREES = ["spec", "contract", "sdk", "conformance", "template", "scripts"]
+TREES = ["spec", "contract", "sdk", "conformance", "template", "scripts", "skills"]
 SKIP = {"__pycache__"}
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)
 

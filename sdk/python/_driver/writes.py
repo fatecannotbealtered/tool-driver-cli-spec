@@ -867,14 +867,16 @@ class Engine:
         run, operation_id = self.run, record["operation_id"]
         lookup = run.cmd("operation resolve", [("--id", operation_id)])
         untrusted = [p[1:] for p in self._receipt_untrusted(".details.receipt")]
+        known = (human or cause).details.get("knowledge") if (human or cause) is not None else None
+        first = f"Read `{run.cmd('knowledge get', [('--id', known[0])])}` first. " if known else ""
         if human is not None:
             # The change opened a dialog: a person deals with it, then the Agent settles the
             # outcome; it never sends the write again (DCLI-066).
             return DriverError(
                 "E_HUMAN_REQUIRED", f"The change was sent, then the application asked for a person; it may have taken effect. {human.message}",
                 dispatch_state="dispatched", action=human.details.get("action", "other"), resume=lookup, receipt=receipt,
-                title=human.details.get("title"), native_message=human.details.get("native_message"),
-                next_action=f"Ask the person to deal with the dialog, then run `{lookup}`; never send the write again.",
+                title=human.details.get("title"), native_message=human.details.get("native_message"), knowledge=known,
+                next_action=f"{first}Ask the person to deal with the dialog, then run `{lookup}`; never send the write again.",
                 untrusted=untrusted + ["message", "details.title", "details.native_message"],
             )
         if code == "E_OUTCOME_UNKNOWN":
@@ -899,6 +901,8 @@ class Engine:
             "E_VERIFY_FAILED": "Read `mismatched` in the receipt and tell the user what the application stored.",
             "E_VERIFY_INCOMPLETE": "Check the target with a read command before you report the change as done.",
         }.get(code)
+        if details_next is None and "knowledge" in extra:
+            details_next = cause.details["next_action"]
         return DriverError(code, message or code, dispatch_state=dispatch_state, receipt=receipt, untrusted=untrusted,
                            next_action=details_next, **extra)
 

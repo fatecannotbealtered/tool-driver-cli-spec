@@ -87,7 +87,7 @@
 
 ### DSKL-002 前置元数据
 
-每个 `SKILL.md` 开头都必须有前置元数据，包含下表的字段。只有领域 Skill 写 `metadata.requires` 和 `metadata.commands`。
+每个 `SKILL.md` 开头都必须有前置元数据，包含下表的字段。只有领域 Skill 写 `metadata.requires` 和 `metadata.commands`，只有改名桩写 `metadata.replaced_by`。
 
 <!-- contract:skill_frontmatter -->
 | 字段 | 哪些 Skill 要写 | 内容 |
@@ -96,7 +96,8 @@
 | `description` | 所有 Skill | 负责什么、不负责什么、不负责的去找哪个 Skill，用中文和英文两种说法写（DSKL-001、DSKL-025） |
 | `metadata.version` | 所有 Skill | package.json 里的工具版本 |
 | `metadata.requires` | 领域 Skill | 入口 Skill 的名字 |
-| `metadata.commands` | 领域 Skill | 这个 Skill 负责的命令路径（DSKL-026） |
+| `metadata.commands` | 领域 Skill，改名桩除外 | 这个 Skill 负责的命令路径（DSKL-026） |
+| `metadata.replaced_by` | 改名桩 | 改去读的那个 Skill（DSKL-028） |
 
 以工具 `kicad-cli` 的一个领域 Skill 为例：
 
@@ -268,7 +269,7 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 
 ### DSKL-024 先读入口 Skill
 
-每个领域 Skill 的正文必须一开头就要求 Agent 先读入口 Skill，`metadata.requires` 必须写入口 Skill 的名字。入口 Skill 没有安装时，Agent 必须停下来，请用户重新安装这个工具的 Skill。
+除改名桩（DSKL-028）外，每个领域 Skill 的正文必须一开头就要求 Agent 先读入口 Skill，`metadata.requires` 必须写入口 Skill 的名字。入口 Skill 没有安装时，Agent 必须停下来，请用户重新安装这个工具的 Skill。
 
 为什么：Agent 可能只凭描述加载了某个领域 Skill，不先读入口 Skill 就会漏掉写入配方和 STOP 检查点。
 检查：🤖 `check_project` 检查 `metadata.requires`；👀 评审开头的要求。
@@ -296,10 +297,10 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 
 ### DSKL-028 改名留桩
 
-Skill 改名或并入另一个 Skill 时，旧名字必须留下一个桩 Skill。桩只告诉 Agent 改去读哪个 Skill。
+Skill 改名或并入另一个 Skill 时，旧名字必须留下一个桩 Skill。桩只告诉 Agent 改去读哪个 Skill。桩保留 `metadata.requires`，在 `metadata.replaced_by` 里写出那个 Skill，不带 `metadata.commands`。
 
 为什么：`update` 只替换已经安装的 Skill 目录（DCLI-076）；没有桩，用户机器上的旧副本就会留下来，继续教过时的命令。
-检查：👀 评审。
+检查：🤖 `check_project` 检查 `metadata.replaced_by` 写的是本工具的另一个 Skill，并且桩不负责任何命令；👀 评审。
 
 ## 发布与同步
 

@@ -1276,8 +1276,10 @@ Check: 🤖 Driver conformance tests D15, D23 and D25; runtime unit tests with t
 
 When a tool has a host component, it MUST offer `plugin get`, `plugin install` and `plugin remove` (DCLI-200). `plugin get` returns the host component object: `name`, `version_on_disk`, `protocol_version`, `install_path` and `loaded` (the version each instance has loaded). Installing and upgrading MUST follow DSEC-050 to DSEC-053.
 
-Why: One install path, with its checks, keeps code that runs inside the application under control.
-Check: 🤖 Driver conformance test D12.
+The host component's source and its manifest live in `plugin/`. The manifest `plugin/manifest.json` MUST hold `version`, the tool version; `protocol_version` (DCLI-280); `files`, the SHA-256 of every file `plugin install` copies, by path inside `plugin/`; and `methods`, the instance-side capabilities the host component implements (DCLI-260). `check_project` writes the first three from the files, and the author writes `methods`. The tool passes the manifest to the runtime, and the native program carries `plugin/` with it.
+
+Why: One install path, with its checks, keeps code that runs inside the application under control. A manifest written from the files cannot disagree with them.
+Check: 🤖 Driver conformance test D12; `check_project` regenerates the manifest and compares it.
 
 ## Adapter and Runtime
 
@@ -1450,7 +1452,7 @@ The host MUST return only these error codes:
 | `E_VALIDATION` | The application rejected the content |
 | `E_UNSUPPORTED` | The application cannot do this |
 
-An error MUST be sent as a JSON-RPC error with code `-32000`. Its `data` MUST hold `code` and `dispatch_state`, and `native_message` when the application gave an error text. An `E_BUSY` error MUST hold `retry_after_ms`; an `E_HUMAN_REQUIRED` error SHOULD hold `action`. The CLI adds the other `details` fields of DCLI-012, such as `next_action` and `resume`. `native_message` is the application's own text and MUST be treated as untrusted content (DSEC-020).
+An error MUST be sent as a JSON-RPC error with code `-32000`. Its `data` MUST hold `code` and `dispatch_state`, and `native_message` when the application gave an error text. An `E_BUSY` error MUST hold `retry_after_ms`; an `E_HUMAN_REQUIRED` error SHOULD hold `action`. When a builtin knowledge entry explains the error, such as a known dialog, `data` SHOULD hold `knowledge`, the IDs of those entries; the CLI then names the `knowledge get` command in `next_action` (DSKL-124). An adapter in the CLI's process reports the same fields. The CLI adds the other `details` fields of DCLI-012, such as `next_action` and `resume`. `native_message` is the application's own text and MUST be treated as untrusted content (DSEC-020).
 
 Why: A small, fixed set of host errors maps cleanly onto the error codes the Agent already knows.
 Check: 🤖 Runtime unit tests.

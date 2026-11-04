@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Mapping
 
 from .adapter import AdapterStore, Backend, BadProtocol, BadReply, CapabilityError, Lost, Unanswered
 from .args import Call, command_line
-from .errors import DriverError, usage
+from .errors import NEXT_ACTION, DriverError, usage
 from .records import Locks, Mutex, Records, utc_now
 from .registry import Command
 from .scope import Scope, load as load_scope
@@ -167,9 +168,15 @@ class Run:
             if isinstance(data.get("title"), str):
                 extra["title"] = data["title"]
                 untrusted.append("details.title")
+        next_action = None
+        ids = data.get("knowledge")
+        if isinstance(ids, list) and ids and all(isinstance(i, str) and re.fullmatch(self.contract["knowledge"]["id_pattern"], i) for i in ids):
+            # An error the adapter recognized points to the entries that tell how to handle it (DSKL-124).
+            extra["knowledge"] = list(ids)
+            next_action = f"Read `{self.tool.name} knowledge get --id {ids[0]}` first. {NEXT_ACTION[code]}"
         message = str(exc) or code
         untrusted.append("message")
-        return DriverError(code, message, dispatch_state=dispatch_state, untrusted=untrusted, **extra)
+        return DriverError(code, message, next_action=next_action, dispatch_state=dispatch_state, untrusted=untrusted, **extra)
 
     # ------------------------------------------------------------------ sessions
 

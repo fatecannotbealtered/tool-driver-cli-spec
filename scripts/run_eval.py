@@ -291,6 +291,7 @@ class Session:
             self.set[f"{prefix}_FAKE_HOST"] = self.host.address
             self.unset = []
         self.scope_text = self._write_scope()
+        self.harness_scope = self._write_harness_scope()
         self._write_shim()
 
     def default_scope(self) -> dict[str, Any]:
@@ -314,6 +315,19 @@ class Session:
         text = json.dumps(scope, indent=2) + "\n"
         self.scope_file.write_text(text, encoding="utf-8")
         return text
+
+    def _write_harness_scope(self) -> Path:
+        """The scope of the grader's and hooks' own runs: every effect on the question's targets,
+        never limited by the scope the Agent is evaluated under."""
+        effects = [e["effect"] for e in self.facts.contract["effects"] if e["effect"] != "observe"]
+        documents = file_key(self.documents) + "/"
+        extra = [t for t in (self.question.scope or {}).get("targets", []) if not t.startswith("{documents}")]
+        targets = [documents] + extra + (["untitled:", "device:"] if self.fake else [])
+        path = self.tmp / "harness-scope.json"
+        path.write_text(json.dumps({"scope_id": "evaluation-harness", "effects": effects, "dangerous": True,
+                                    "targets": list(dict.fromkeys(targets)), "expires_at": "2099-01-01T00:00:00Z"}),
+                        encoding="utf-8")
+        return path
 
     def targets(self) -> list[str]:
         """The scope targets, with the documents folder written as {documents}."""
@@ -413,9 +427,11 @@ class Run:
         return (self.documents / name).read_text(encoding="utf-8")
 
     def tool(self, *args: str) -> dict[str, Any]:
-        """Run the tool as the grader or a hook; the run is not one of the Agent's calls."""
+        """Run the tool as the grader or a hook, under a scope of its own that grants every effect
+        on the question's targets; the run is not one of the Agent's calls."""
+        env = {**self._session.tool_env(), f"{self._session.facts.prefix}_SCOPE_FILE": str(self._session.harness_scope)}
         proc = subprocess.run([sys.executable, "-m", self._session.facts.pkg, *args], cwd=self.workspace,
-                              env=self._session.tool_env(), capture_output=True, timeout=CALL_TIMEOUT_S,
+                              env=env, capture_output=True, timeout=CALL_TIMEOUT_S,
                               stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
         try:
             return json.loads(proc.stdout.decode("utf-8"))

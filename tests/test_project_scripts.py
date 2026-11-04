@@ -491,6 +491,48 @@ class ProjectTest(unittest.TestCase):
         self.fix()
         self.expect("DSKL-023")
 
+    def test_matrices_follow_the_implemented_capabilities(self):
+        # The template's adapter implements only probe, so no standard command needs a matrix yet.
+        self.assertFalse((self.project / "tests" / "matrix" / "doc-list.json").exists())
+        self.edit("demo_cli/adapter/__init__.py", "        return {\"found\": False}",
+                  "        return {\"found\": False}\n\n    def documents(self, request: dict[str, Any]) -> dict[str, Any]:\n"
+                  "        return {\"items\": []}")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("`doc list`" in m for m in messages), messages)
+
+    def test_host_component_manifest(self):
+        self.edit("demo_cli/__init__.py", "host_component=False,",
+                  'host_component=True,\n    plugin_manifest=ROOT / "plugin" / "manifest.json",')
+        (self.project / "plugin").mkdir(exist_ok=True)
+        self.expect("DCLI-240")
+        self.fix()
+        manifest = json.loads((self.project / "plugin" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual((manifest["version"], manifest["files"], manifest["methods"]), ("0.1.0", {}, []))
+        manifest["methods"] = ["read", "apply"]
+        (self.project / "plugin" / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (self.project / "plugin" / "host.py").write_text("print('host')\n", encoding="utf-8")
+        self.expect("DCLI-240")
+        self.fix()
+        manifest = json.loads((self.project / "plugin" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["methods"], ["read", "apply"])
+        self.assertEqual(manifest["files"], {"host.py": check_project.digest(self.project / "plugin" / "host.py")})
+        self.assertNotIn("DCLI-240", self.clauses())
+
+    def test_rename_stubs(self):
+        folder = self.project / "skills" / "demo-part"
+        folder.mkdir()
+        stub = ("---\nname: demo-part\ndescription: Renamed; read demo-cli. 已改名，请读 demo-cli。\nmetadata:\n"
+                "  version: 0.1.0\n  requires: demo-cli\n  replaced_by: demo-cli\n---\n\n# demo-part\n\nThis Skill was merged into `demo-cli`; read it instead.\n\n"
+                "<!-- driver:command-map:start -->\n<!-- driver:command-map:end -->\n")
+        (folder / "SKILL.md").write_text(stub, encoding="utf-8")
+        self.fix()
+        self.assertEqual([p.text() for p in self.problems() if p.path.startswith("skills/")], [])
+        (folder / "SKILL.md").write_text(stub.replace("replaced_by: demo-cli", "replaced_by: demo-gone"), encoding="utf-8")
+        self.expect("DSKL-028")
+        # A full domain Skill that forgets its commands is not a stub.
+        (folder / "SKILL.md").write_text(stub.replace("  replaced_by: demo-cli\n", ""), encoding="utf-8")
+        self.expect("DSKL-026")
+
     def test_related_knowledge_must_exist(self):
         self.edit("demo_cli/commands/__init__.py", '"related_knowledge": []', '"related_knowledge": ["no-such-entry"]')
         self.fix()

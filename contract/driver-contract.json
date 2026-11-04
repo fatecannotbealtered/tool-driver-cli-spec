@@ -754,7 +754,7 @@
   },
   "skill": {
     "max_lines": 150,
-    "frontmatter": ["name", "description", "metadata.version", "metadata.requires", "metadata.commands"],
+    "frontmatter": ["name", "description", "metadata.version", "metadata.requires", "metadata.commands", "metadata.replaced_by"],
     "command_map_markers": ["<!-- driver:command-map:start -->", "<!-- driver:command-map:end -->"],
     "dangerous_marker": "(dangerous)",
     "stop_checkpoints": [

@@ -20,6 +20,8 @@
 | `scripts/check_spec.py` | 检查条款格式、编号、中英文对应、契约表格、Schema 和示例 |
 | `scripts/build_spec_bundle.py` | 生成发布用的 ZIP 和它的 SHA-256 文件 |
 | `scripts/instantiate.py`、`sync_spec.py`、`check_project.py`、`run_matrix.py`、`run_eval.py` | 工具项目从发布包里运行的脚本：生成项目、钉住某个发布、检查项目并写入生成内容、在真实软件上运行行为矩阵、让 Agent 运行评测题 |
+| `skills/build-driver-cli/` | 开发用 Skill：带 Agent 走完 DREPO-062 的接入步骤并检查工具；随发布包提供 |
+| `docs/ONBOARDING.md` | 写给想要新驱动工具的人的接入指南，中文版是 `ONBOARDING_zh.md` |
 | `docs/OPEN-QUESTIONS.md` | 开放问题；规范正文里不放开放问题 |
 | `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具；`tests/e2e_template.py` 端到端地跑一遍模板；`tests/eval_template.py` 用模板工具运行评测套件 |
 
