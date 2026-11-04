@@ -921,14 +921,14 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-075 直接运行的命令入口
 
-在 Windows 上，经 npm 启动器启动工具比直接运行原生程序慢得多，每次多一秒以上。因此 `update` 必须把 npm 的命令入口改为直接运行平台包里的原生程序：Windows 上是 cmd、PowerShell 和 Git Bash 各用的三个入口文件，其他系统上是一个符号链接。启动器保留作后备。入口直接运行原生程序时，结果中的 `entry` 必须为 `direct`；仍经启动器时必须为 `launcher`。
+经 npm 启动器启动工具，要先启动 Node.js，每次调用都多花几百毫秒甚至更多，Windows 上最明显。因此 `update` 必须把 npm 的命令入口改为直接运行平台包里的原生程序：Windows 上是 cmd、PowerShell 和 Git Bash 各用的三个入口文件，其他系统上是一个符号链接。启动器保留作后备。入口直接运行原生程序时，结果中的 `entry` 必须为 `direct`；仍经启动器时必须为 `launcher`。
 
-为什么：Agent 调用次数多，每次多一秒，一个任务下来就是几分钟。
+为什么：Agent 调用次数多，每次的延迟在一个任务里会累积起来。
 检查：🤖 运行时单元测试。
 
 ### DCLI-076 同步 Skill
 
-安装后，`update` 必须从新包同步已安装的 Skill：把每个已安装的 Skill 目录换成新副本，必须保持符号链接不动，禁止新建原本没装的 Skill。
+安装后，`update` 必须从新包同步已安装的 Skill：在契约 `update.skill_dirs` 列出的 Agent Skill 文件夹里查找，把每个已安装的 Skill 目录换成新副本，必须保持符号链接不动，禁止新建原本没装的 Skill。
 
 为什么：CLI 和 Skill 必须保持同一版本（DSKL-030）。
 检查：🤖 运行时单元测试。

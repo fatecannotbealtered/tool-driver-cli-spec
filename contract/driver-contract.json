@@ -684,6 +684,7 @@
     "provenance_statuses": ["verified", "not_checked"],
     "skill_sync_statuses": ["synced", "not_needed", "failed", "skipped"],
     "entry_values": ["direct", "launcher"],
+    "skill_dirs": ["~/.agents/skills", "~/.claude/skills", "~/.codex/skills", "~/.cursor/skills", "~/.gemini/skills"],
     "doctor_registry_timeout_ms": 3000,
     "notice_interval_hours": 24,
     "notice_type": "update_available",

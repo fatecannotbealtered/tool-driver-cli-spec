@@ -255,7 +255,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
 
 条件不成立的行，必须标为不适用。条件成立、但对这条命令不可能发生的行，也必须留在文件里，标为不适用并写明原因。
 
-各行在授权目标上用真实软件运行（DVER-031、DVER-050）。矩阵运行器随运行时提供：它填入占位符（DVER-002），运行适用的行，写一份真实软件记录并在其中写明每一行（DVER-042），再给每一行填上实际结果和 `live:` 证据。适用却没有实际结果和证据的行就是没运行过。实际结果与期望结果不同，或者真实运行的 `result` 为 `fail` 的行，就是失败了。没运行过或失败了的行，禁止算作通过。
+各行在授权目标上用真实软件运行（DVER-031、DVER-050）。矩阵运行器 `run_matrix` 随本规范提供：它填入占位符（DVER-002），运行适用的行，写一份真实软件记录并在其中写明每一行（DVER-042），再给每一行填上实际结果和 `live:` 证据。适用却没有实际结果和证据的行就是没运行过。实际结果与期望结果不同，或者真实运行的 `result` 为 `fail` 的行，就是失败了。没运行过或失败了的行，禁止算作通过。
 
 适用、但在真实软件上无法按需制造的行，如 `disconnect`，可以标为 `unrunnable` 并写明原因。这样的行不需要真实运行，运行时怎样处理这种情况由驱动一致性测试覆盖（DVER-010）。`normal`、`dialog` 和 `read_back_mismatch` 三行禁止标为 `unrunnable`（DVER-031）。
 
@@ -311,10 +311,10 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
 - `kind`：固定为 `live`
 - `tool`、`tool_version` 和 `commit`：工具，以及实际运行的那个构建
 - `application`：软件的名称和版本
-- `os`：操作系统
+- `os`：操作系统的完整名称；`platform`：`windows`、`macos` 或 `linux`
 - `recorded_at`：运行时间，UTC
 - `targets`：这次运行使用的授权目标（DVER-050）
-- `runs`：每条命令一项，包括命令路径、实际运行的参数（占位符已填好，DVER-002）、退出码和 `result`
+- `runs`：每条命令一项，包括命令路径、实际运行的参数（占位符已填好，DVER-002）、退出码、`result` 和运行时所用的模式 `mode`
 
 命令的表现符合预期时，`result` 为 `pass`，否则为 `fail`。某一项在 `matrix_row` 里写明了行为矩阵的行时，预期就是那一行的期望结果。每一项可以另加输出的信封（`envelope`）、它的 SHA-256（`envelope_sha256`）和说明。带机密的参数必须写成 `***`（DSEC-040）。`docs/COMPATIBILITY.md` 的支持矩阵由这些记录生成（DREPO-016）。
 
@@ -326,6 +326,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
   "commit": "3f9c2ab",
   "application": {"name": "KiCad", "version": "10.0.1"},
   "os": "Windows 11 24H2 x64",
+  "platform": "windows",
   "recorded_at": "2026-11-01T09:30:00Z",
   "targets": ["file:///D:/e2e/demo-board/"],
   "runs": [
@@ -334,6 +335,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
       "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
       "exit": 0,
       "result": "pass",
+      "mode": "session",
       "matrix_row": "normal",
       "envelope_sha256": "090b93f6516be82d6d224af36e040f4997faff07f3cda65b9c973520bd833fc3"
     },
@@ -342,6 +344,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
       "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
       "exit": 7,
       "result": "pass",
+      "mode": "session",
       "matrix_row": "busy",
       "notes": "Started during a design rule check; E_BUSY with dispatch_state not_started."
     }

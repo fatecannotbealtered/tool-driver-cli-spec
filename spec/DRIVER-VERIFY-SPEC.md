@@ -255,7 +255,7 @@ The file lists each row of the table below once; each row is one situation. A ro
 
 A row whose condition does not hold MUST be marked as not applying. A row whose condition holds but that cannot happen for the command MUST also stay in the file, marked as not applying, with the reason.
 
-The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner, which comes with the runtime, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
+The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner `run_matrix`, which comes with this specification, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
 
 A row that applies but cannot be caused on demand on the real application, such as `disconnect`, MAY be marked `unrunnable`, with the reason. It then needs no live run, and the driver suite covers how the runtime handles it (DVER-010). The `normal`, `dialog` and `read_back_mismatch` rows MUST NOT be marked `unrunnable` (DVER-031).
 
@@ -311,10 +311,10 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
 - `kind`: always `live`
 - `tool`, `tool_version` and `commit`: the tool and the exact build that ran
 - `application`: the name and version of the application
-- `os`: the operating system
+- `os`: the operating system as it reports itself, and `platform`: `windows`, `macos` or `linux`
 - `recorded_at`: the time of the run, in UTC
 - `targets`: the authorized targets the run used (DVER-050)
-- `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code and `result`
+- `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code, `result` and the `mode` it ran in
 
 `result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`), its SHA-256 (`envelope_sha256`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
 
@@ -326,6 +326,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
   "commit": "3f9c2ab",
   "application": {"name": "KiCad", "version": "10.0.1"},
   "os": "Windows 11 24H2 x64",
+  "platform": "windows",
   "recorded_at": "2026-11-01T09:30:00Z",
   "targets": ["file:///D:/e2e/demo-board/"],
   "runs": [
@@ -334,6 +335,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
       "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
       "exit": 0,
       "result": "pass",
+      "mode": "session",
       "matrix_row": "normal",
       "envelope_sha256": "090b93f6516be82d6d224af36e040f4997faff07f3cda65b9c973520bd833fc3"
     },
@@ -342,6 +344,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
       "arguments": ["--session", "kicad-1234", "--doc", "D:/e2e/demo-board/board.kicad_pcb", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
       "exit": 7,
       "result": "pass",
+      "mode": "session",
       "matrix_row": "busy",
       "notes": "Started during a design rule check; E_BUSY with dispatch_state not_started."
     }

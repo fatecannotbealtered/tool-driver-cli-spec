@@ -15,10 +15,12 @@
 | `sdk/python/_driver/` | 驱动运行时，每个工具原样复制；只用 Python 标准库 |
 | `conformance/fakehost/` | 模拟宿主，也是宿主协议的参考实现；只用 Python 标准库 |
 | `conformance/suites/` | 通用和驱动两组一致性测试；以进程方式启动工具，接模拟宿主 |
+| `template/` | 项目模板；`{{name}}` 是 `instantiate` 填入的值，`{{fill: ...}}` 是工具作者要写的内容 |
 | `scripts/check_spec.py` | 检查条款格式、编号、中英文对应、契约表格、Schema 和示例 |
 | `scripts/build_spec_bundle.py` | 生成发布用的 ZIP 和它的 SHA-256 文件 |
+| `scripts/instantiate.py`、`sync_spec.py`、`check_project.py`、`run_matrix.py` | 工具项目从发布包里运行的脚本：生成项目、钉住某个发布、检查项目并写入生成内容、在真实软件上运行行为矩阵 |
 | `docs/OPEN-QUESTIONS.md` | 开放问题；规范正文里不放开放问题 |
-| `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具 |
+| `tests/` | 脚本、模拟宿主和运行时的单元测试；`tests/sample/` 是一致性测试所测的示例工具；`tests/e2e_template.py` 端到端地跑一遍模板 |
 
 ## 修改规范
 
@@ -31,6 +33,8 @@ python scripts/check_spec.py
 python -m unittest discover -s tests -v
 cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
+
+改了运行时、模板或项目脚本，还要运行 `python tests/e2e_template.py`；它需要 `template/requirements-dev.txt` 里的依赖和 npm。
 
 ## 条款格式
 

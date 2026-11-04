@@ -29,6 +29,14 @@ class BuildTest(unittest.TestCase):
                 names = archive.namelist()
                 self.assertIn(prefix + "contract/driver-contract.json", names)
                 self.assertIn(prefix + "VERSION", names)
+                # A tool project gets everything it needs from the bundle: the runtime, the
+                # suites with the fake host, the template and the project scripts.
+                for needed in ("sdk/python/_driver/tool.py", "sdk/python/_driver/update.py", "conformance/suites/__main__.py",
+                               "conformance/fakehost/server.py", "template/package.json", "template/scripts/spec.py",
+                               "scripts/check_project.py", "scripts/sync_spec.py", "scripts/instantiate.py",
+                               "scripts/run_matrix.py"):
+                    self.assertIn(prefix + needed, names)
+                self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc")])
                 self.assertTrue(all(n.startswith(prefix) for n in names))
                 manifest = json.loads(archive.read(prefix + "MANIFEST.json"))
                 self.assertEqual(manifest["version"], bundle.version())

@@ -341,7 +341,7 @@ Check: 🤖 `check_project`.
 <!-- contract:compatibility_sections -->
 | Section | Content |
 |---|---|
-| `Support Matrix` | One row per combination of application version, operating system and mode, with its compatibility label (DREPO-022); generated, never typed by hand |
+| `Support Matrix` | One row per combination of application version (major and minor, or the supported range while no live record names a version), operating system and mode, with its compatibility label (DREPO-022); generated, never typed by hand |
 | `Client and Host` | Which tool versions work with which host protocol and host component versions; the tool and the application always run on the same machine |
 | `Host Component Versions` | Each host component version, with its protocol version and the application versions it loads into |
 | `Known Limitations` | Known gaps and failures, with the versions they affect |
@@ -615,7 +615,7 @@ Check: 🤖 `check_project` compares the platform packages with the capability s
 
 ### DREPO-053 package.json is the source
 
-The package name, the version, the command name and the platform packages MUST come only from `package.json`. Every other place that needs them, such as `update` (DCLI-070), the badges, the install block, the build scripts or `pyproject.toml`, MUST read them from `package.json` or be checked equal to it. The environment variable prefix `<PREFIX>` is the command name in upper case with `-` replaced by `_`: for the command `kicad-cli` it is `KICAD_CLI`.
+The package name, the version, the command name and the platform packages MUST come only from `package.json`. Every other place that needs them, such as `update` (DCLI-070), the badges, the install block, the build scripts or `pyproject.toml`, MUST read them from `package.json` or be checked equal to it. The environment variable prefix `<PREFIX>` is the command name in upper case with `-` replaced by `_`: for the command `kicad-cli` it is `KICAD_CLI`. The source package directory `<pkg>` is the command name with `-` replaced by `_`: `kicad_cli`.
 
 Why: A value written in two places drifts; one source keeps the install command, the update target and the badges in agreement.
 Check: 🤖 `check_project`.
@@ -631,7 +631,7 @@ The Install section of the README MUST give these steps, in this order:
 
 The template supplies the text of the block; `<package>` and `<tool>` come from `package.json`.
 
-Why: On Windows, every call through the npm launcher costs more than a second; running `update` once removes that cost, and the same block works for every tool.
+Why: Every call through the npm launcher first starts Node.js; running `update` once removes that cost, and the same block works for every tool.
 Check: 🤖 `check_project` compares the Install section with the template's block.
 
 ## Capability Survey and Onboarding
@@ -669,7 +669,7 @@ A new tool is usually built by an AI Agent. It SHOULD follow these eight steps, 
 |---|---|
 | 1 Survey | Fill in `docs/APPLICATION.md`; give every capability an ID and a disposition (DREPO-060) |
 | 2 Choose modes | Choose file, session or device mode from the survey; modes MAY be combined (DCLI-201) |
-| 3 Generate the project | Generate the project from the template; `check_project` passes right away |
+| 3 Generate the project | Generate the project from the template with `instantiate`; `check_project` then lists only what the next steps fill in: the placeholders (DREPO-019) and the domain commands still to register |
 | 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024) and the registration fields (DCLI-029), each with effects, units, target type and capability IDs (DREPO-061) |
 | 5 Implement the adapter | Implement only the adapter capabilities the chosen modes need (DCLI-260); put each in the adapter layer or the host component (DCLI-262) |
 | 6 Test | Run both conformance suites on the fake host (DVER-001); write a behavior matrix for each domain command (DVER-030) and run it on the real application, on authorized targets (DVER-031, DVER-050) |

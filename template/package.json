@@ -1,0 +1,29 @@
+{
+  "name": "{{package}}",
+  "version": "{{version}}",
+  "description": "Lets an AI Agent operate {{application}} safely from the command line.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/{{repo}}.git"
+  },
+  "homepage": "https://github.com/{{repo}}#readme",
+  "bugs": {
+    "url": "https://github.com/{{repo}}/issues"
+  },
+  "bin": {
+    "{{tool}}": "bin/{{tool}}.js"
+  },
+  "files": [
+    "bin/{{tool}}.js",
+    "skills/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "optionalDependencies": {}
+}
