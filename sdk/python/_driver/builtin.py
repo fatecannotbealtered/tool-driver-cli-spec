@@ -6,26 +6,23 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from . import knowledge
+from . import knowledge, update as self_update
 from .args import Meta
 from .errors import DriverError, usage
 from .output import Result, page
 from .records import parse_utc, public, utc_now
 from .registry import Command, Flag
 from .runtime import Run
+from .update import SEMVER, newer
 from .writes import read_back, same
 
 if TYPE_CHECKING:
     from .tool import Tool
 
-SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
 WRITE_ERRORS = ["E_FORBIDDEN", "E_CONFIRMATION_REQUIRED", "E_CONFLICT", "E_OUTCOME_UNKNOWN", "E_PARTIAL",
                 "E_VERIFY_FAILED", "E_VERIFY_INCOMPLETE", "E_IO"]
 READ_ERRORS = ["E_USAGE", "E_NOT_FOUND", "E_AMBIGUOUS", "E_UNSUPPORTED", "E_BUSY", "E_HUMAN_REQUIRED",
@@ -63,6 +60,12 @@ def commands(tool: Tool) -> list[Command]:
               Flag("--evidence", "string", "How the outcome was found; with --outcome.")],
              operation_resolve, kind="builtin", schema="operation.schema.json", capabilities=["read_back"],
              examples=["operation resolve --id op_7mq2xk4v"]),
+        make(tool, "update", "Update the tool and its installed Skills from npm.",
+             [Flag("--check", "boolean", "Only look for a newer version; install nothing."),
+              Flag("--target-version", "string", "The version to install; default the latest."),
+              Flag("--allow-downgrade", "boolean", "With --target-version, allow an older version.")],
+             self_update.update, kind="builtin", schema="update.schema.json", capabilities=[],
+             examples=["update --check", "update"]),
     ]
 
 
@@ -277,19 +280,31 @@ def doctor(run: Run) -> Result:
 
 
 def _skills_version(run: Run) -> dict[str, Any]:
-    folder = run.tool.root / "skills"
+    """The installed copies of the tool's Skills against the CLI version (DSKL-031)."""
+    shipped = run.tool.root / "skills"
+    names = sorted(p.parent.name for p in shipped.glob("*/SKILL.md")) if shipped.is_dir() else []
     versions = {}
-    if folder.is_dir():
-        for skill in sorted(folder.glob("*/SKILL.md")):
-            match = re.search(r"^\s+version:\s*['\"]?([^'\"\s]+)", skill.read_text(encoding="utf-8"), re.MULTILINE)
-            versions[skill.parent.name] = match.group(1) if match else None
+    for folder in self_update.skill_dirs(run):
+        for name in names:
+            skill = folder / name / "SKILL.md"
+            try:
+                text = skill.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            match = re.search(r"^\s+version:\s*['\"]?([^'\"\s]+)", text, re.MULTILINE)
+            versions[str(skill.parent)] = match.group(1) if match else None
     if not versions:
-        return _check("version", "warn", "No Skills ship with this tool.", "Reinstall the tool from npm.")
+        return _check("version", "warn", f"No Skill of {run.tool.name} is installed in an Agent's Skill folder.",
+                      "Copy the Skills from the installed npm package, as the Install section of the README shows.")
     wrong = {k: v for k, v in versions.items() if v != run.tool.version}
     if wrong:
-        return _check("version", "fail", f"Skills at another version than the CLI {run.tool.version}: {wrong}.",
-                      f"Run `{run.tool.name} update` to sync the Skills.")
-    return _check("version", "pass", f"The CLI and {len(versions)} Skills are at {run.tool.version}.")
+        links = [k for k in wrong if self_update._is_link(Path(k))]
+        fix = f"Run `{run.tool.name} update` to sync the Skills."
+        if links:
+            fix += (f" {', '.join(links)} {'is a link' if len(links) == 1 else 'are links'}, which update leaves alone: "
+                    "update the folder a link points to, or copy the Skill from the installed npm package.")
+        return _check("version", "fail", f"Installed Skills at another version than the CLI {run.tool.version}: {wrong}.", fix)
+    return _check("version", "pass", f"The CLI and {len(versions)} installed Skill copies are at {run.tool.version}.")
 
 
 def _plugin_check(run: Run) -> dict[str, Any]:
@@ -302,11 +317,26 @@ def _plugin_check(run: Run) -> dict[str, Any]:
     on_disk = plugin.get("version_on_disk")
     if not on_disk:
         return _check("plugin", "warn", "The host component is not installed.", f"Run `{run.tool.name} plugin install`.")
+    bundled = bundled_plugin_version(run.tool)
+    if bundled and bundled != on_disk:
+        return _check("plugin", "warn", f"Version {on_disk} of the host component is installed, but this CLI brings {bundled}.",
+                      f"Run `{run.tool.name} plugin install`.")
     stale = [f"{i['session']} has {i['version']}" for i in plugin.get("loaded", []) if i["version"] != on_disk]
     if stale:
         return _check("plugin", "fail", f"Version {on_disk} is on disk, but {'; '.join(stale)} loaded.",
                       "Ask the person to restart or reload those instances.")
     return _check("plugin", "pass", f"Version {on_disk} is on disk and loaded in every instance.")
+
+
+def bundled_plugin_version(tool: Tool) -> str | None:
+    """The host component version this CLI installs, from its plugin manifest."""
+    if tool.plugin_manifest is None:
+        return None
+    try:
+        version = json.loads(tool.plugin_manifest.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return version if isinstance(version, str) else None
 
 
 def _sessions_check(run: Run) -> dict[str, Any]:
@@ -325,39 +355,27 @@ def _sessions_check(run: Run) -> dict[str, Any]:
 # ------------------------------------------------------------------ update notices (DCLI-079)
 
 
-def _registry(env: Any) -> str:
-    base = env.get("npm_config_registry") or env.get("NPM_CONFIG_REGISTRY") or "https://registry.npmjs.org/"
-    return base if base.endswith("/") else base + "/"
-
-
-def query_registry(run: Run, timeout: float) -> dict[str, Any]:
-    """Ask the npm registry for the latest version; only update and doctor do this."""
-    url = _registry(run.env) + urllib.parse.quote(run.tool.package, safe="@")
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.npm.install-v1+json"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - the registry URL is https by default
-        data = json.loads(response.read().decode("utf-8"))
-    latest = data.get("dist-tags", {}).get("latest")
-    versions = data.get("versions", {})
-    deprecated = bool(isinstance(versions.get(run.tool.version), dict) and versions[run.tool.version].get("deprecated"))
-    return {"checked_at": utc_now(), "latest": latest, "deprecated": deprecated}
-
-
 def _cache_path(run: Run) -> Path:
     return run.state.path / "cache" / "update.json"
 
 
 def _update_check(run: Run) -> dict[str, Any]:
+    """Ask the registry through npm, waiting at most the contract's time; a failure is a warning (DCLI-079)."""
+    npm = self_update.find_npm(run.env)
+    if npm is None:
+        return _check("update", "warn", "npm was not found on PATH, so newer versions cannot be looked up.",
+                      "Install Node.js with npm.")
     try:
-        info = query_registry(run, run.contract["update"]["doctor_registry_timeout_ms"] / 1000)
-    except (OSError, ValueError, urllib.error.URLError) as exc:
-        return _check("update", "warn", f"The npm registry at {_registry(run.env)} could not be reached ({type(exc).__name__}).",
-                      f"Check the network, then run `{run.tool.name} update --check`.")
-    old = _read_cache(run)
-    info["notified_at"] = old.get("notified_at")
-    _write_cache(run, info)
-    latest = info.get("latest")
+        info = self_update.query(run, npm, run.contract["update"]["doctor_registry_timeout_ms"] / 1000)
+    except DriverError as exc:
+        return _check("update", "warn", exc.message, f"Check the network and npm's registry setting, then run "
+                      f"`{run.tool.name} update --check`.")
+    latest = info["latest"]
+    self_update.write_cache(run, info, latest)
     if latest and newer(latest, run.tool.version):
         return _check("update", "warn", f"Version {latest} is available; this is {run.tool.version}.", f"Run `{run.tool.name} update`.")
+    if info["deprecated"]:
+        return _check("update", "warn", f"Version {run.tool.version} is deprecated on npm.", f"Run `{run.tool.name} update`.")
     return _check("update", "pass", f"{run.tool.version} is the latest version.")
 
 
@@ -384,35 +402,21 @@ def update_notice(run: Run) -> None:
                             "message": f"{run.tool.prefix}_FAKE_HOST is set: the application is the fake host at {run.fake}, and results are simulated."})
     cache = _read_cache(run)
     latest = cache.get("latest")
-    if not latest or not (newer(latest, run.tool.version) or cache.get("deprecated")):
+    deprecated = cache.get("deprecated_version") == run.tool.version
+    if not (latest and newer(latest, run.tool.version)) and not deprecated:
         return
     last = cache.get("notified_at")
     hours = run.contract["update"]["notice_interval_hours"]
     if last and parse_utc(last) > datetime.now(timezone.utc) - timedelta(hours=hours):
         return
-    major = newer(latest, run.tool.version) and latest.split(".")[0] != run.tool.version.split(".")[0]
-    severity = "warning" if major or cache.get("deprecated") else "info"
-    what = f"Version {latest} is available" if newer(latest, run.tool.version) else f"Version {run.tool.version} is deprecated"
+    available = bool(latest and newer(latest, run.tool.version))
+    major = available and latest.split(".")[0] != run.tool.version.split(".")[0]
+    severity = "warning" if major or deprecated else "info"
+    what = f"Version {latest} is available" if available else f"Version {run.tool.version} is deprecated"
     run.notices.append({"type": run.contract["update"]["notice_type"], "severity": severity,
                         "message": f"{what}; run `{run.tool.name} update`."})
     cache["notified_at"] = utc_now()
     _write_cache(run, cache)
-
-
-def _key(version: str) -> tuple[Any, ...]:
-    match = SEMVER.match(version)
-    if not match:
-        return (-1,)
-    pre = match.group(4)
-    parts: tuple[Any, ...] = tuple(int(match.group(i)) for i in (1, 2, 3))
-    if pre is None:
-        return parts + ((1,),)
-    ids = tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre.split("."))
-    return parts + ((0,) + ids,)
-
-
-def newer(a: str, b: str) -> bool:
-    return bool(SEMVER.match(a)) and _key(a) > _key(b)
 
 
 # ------------------------------------------------------------------ changelog

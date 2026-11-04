@@ -921,14 +921,14 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-075 Direct command entry
 
-On Windows, starting the tool through the npm launcher is much slower than running the native program: more than one second per call. `update` MUST therefore point npm's command entries at the native program in the platform package. On Windows these are the three entry files used by cmd, PowerShell and Git Bash; on other systems it is one symbolic link. The launcher stays as a fallback. The result's `entry` MUST be `direct` when the entry runs the native program and `launcher` when it still goes through the launcher.
+Starting the tool through the npm launcher first starts Node.js, which costs a few hundred milliseconds or more on every call, most on Windows. `update` MUST therefore point npm's command entries at the native program in the platform package. On Windows these are the three entry files used by cmd, PowerShell and Git Bash; on other systems it is one symbolic link. The launcher stays as a fallback. The result's `entry` MUST be `direct` when the entry runs the native program and `launcher` when it still goes through the launcher.
 
-Why: An Agent makes many calls; one extra second on each adds up to minutes per task.
+Why: An Agent makes many calls; a delay on each one adds up over a task.
 Check: 🤖 Runtime unit tests.
 
 ### DCLI-076 Skill sync
 
-After installing, `update` MUST sync installed Skills from the new package. It replaces each installed Skill directory with the new copy, MUST leave symbolic links alone, and MUST NOT create a Skill that was not installed.
+After installing, `update` MUST sync installed Skills from the new package. It looks for them in the Agent Skill folders the contract lists under `update.skill_dirs`, replaces each installed Skill directory with the new copy, MUST leave symbolic links alone, and MUST NOT create a Skill that was not installed.
 
 Why: The CLI and its Skills must stay at the same version (DSKL-030).
 Check: 🤖 Runtime unit tests.

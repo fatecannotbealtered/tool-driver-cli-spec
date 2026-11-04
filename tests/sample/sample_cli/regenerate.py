@@ -2,8 +2,8 @@
 
     python -m sample_cli.regenerate
 
-The sample tool runs on the fake host alone, so each matrix keeps only its write sample, the
-normal row; the other rows say why they do not apply here.
+The sample tool runs on the fake host alone, so each matrix keeps only its normal row, which
+for a write command is its write sample; the other rows say why they do not apply here.
 """
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import json
 from . import ROOT, build
 
 SAMPLES = {
+    "part get": ["--session", "{session}", "--doc", "{doc}", "--id", "R1"],
+    "part list": ["--session", "{session}", "--doc", "{doc}"],
     "part move": ["--session", "{session}", "--doc", "{doc}", "--id", "R1", "--x", "12.5mm", "--y", "30mm"],
     "part update": ["--doc", "{doc}", "--id", "R1", "--value", "10k"],
     "part delete": ["--session", "{session}", "--doc", "{doc}", "--id", "R9"],

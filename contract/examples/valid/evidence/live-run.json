@@ -8,6 +8,7 @@
     "version": "10.0.1"
   },
   "os": "Windows 11 23H2 x64",
+  "platform": "windows",
   "recorded_at": "2026-11-02T08:30:00Z",
   "targets": [
     "file:///D:/authorized/demo-board/"
@@ -29,6 +30,7 @@
       ],
       "exit": 0,
       "result": "pass",
+      "mode": "session",
       "matrix_row": "normal"
     }
   ]

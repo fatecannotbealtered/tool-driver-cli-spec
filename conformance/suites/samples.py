@@ -91,8 +91,11 @@ def standard_samples(subject: Subject) -> list[Sample]:
 
 
 def own_samples(subject: Subject) -> list[Sample]:
+    """The write samples of the tool's own write commands: the normal rows of their behavior
+    matrices. Read commands have matrices too, but their normal rows are not write samples."""
+    writes = set(subject.writes())
     return [Sample(path, args, mode_of(subject, path, args), True) for path, args in subject.samples.items()
-            if path in subject.registrations]
+            if path in writes]
 
 
 def all_samples(subject: Subject) -> list[Sample]:

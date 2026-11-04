@@ -15,10 +15,12 @@ This repository holds tool-driver-cli-spec: five specifications, a machine contr
 | `sdk/python/_driver/` | The driver runtime every tool copies unchanged; Python standard library only |
 | `conformance/fakehost/` | The fake host and reference implementation of the host protocol; Python standard library only |
 | `conformance/suites/` | The general and driver conformance suites; they start a tool as a process against the fake host |
+| `template/` | The project template; `{{name}}` marks a value `instantiate` fills in, `{{fill: ...}}` a text the tool author writes |
 | `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
 | `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
+| `scripts/instantiate.py`, `sync_spec.py`, `check_project.py`, `run_matrix.py` | The scripts tool projects run from the release bundle: generate a project, pin a release, check a project and write its generated content, run a behavior matrix on the real application |
 | `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
-| `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against |
+| `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against; `tests/e2e_template.py` runs the template end to end |
 
 ## Changing the specification
 
@@ -31,6 +33,8 @@ python scripts/check_spec.py
 python -m unittest discover -s tests -v
 cd conformance && python -m suites --project ../tests/sample -- python -m sample_cli
 ```
+
+A change to the runtime, the template or the project scripts also runs `python tests/e2e_template.py`, with the dependencies of `template/requirements-dev.txt` and npm.
 
 ## Clause format
 

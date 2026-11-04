@@ -18,7 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "tool-driver-cli-spec"
 TOP_FILES = ["README.md", "README_zh.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "VERSION"]
-TREES = ["spec", "contract"]
+TREES = ["spec", "contract", "sdk", "conformance", "template", "scripts"]
+SKIP = {"__pycache__"}
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)
 
 
@@ -29,7 +30,8 @@ def version() -> str:
 def bundle_files() -> list[Path]:
     files = [ROOT / name for name in TOP_FILES]
     for tree in TREES:
-        files.extend(p for p in (ROOT / tree).rglob("*") if p.is_file())
+        files.extend(p for p in (ROOT / tree).rglob("*")
+                     if p.is_file() and not SKIP & set(p.relative_to(ROOT).parts) and p.suffix != ".pyc")
     missing = [p for p in files if not p.is_file()]
     if missing:
         raise SystemExit(f"missing files: {[p.relative_to(ROOT).as_posix() for p in missing]}")

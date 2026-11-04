@@ -57,12 +57,13 @@ tool-driver-cli-spec/
 ├── contract/    driver-contract.json、schemas/、examples/
 ├── sdk/python/  _driver/，每个工具原样复制的驱动运行时（DREPO-032）
 ├── conformance/ fakehost/，模拟宿主（DVER-020）；suites/，两组一致性测试（DVER-001）
-├── scripts/     check_spec.py、build_spec_bundle.py
+├── template/    项目模板，新工具从它生成（DREPO-062）
+├── scripts/     check_spec.py、build_spec_bundle.py；给工具项目用的 instantiate.py、sync_spec.py、check_project.py、run_matrix.py
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       脚本、模拟宿主和运行时的单元测试；sample/，一致性测试所测的示例工具
+└── tests/       脚本、模拟宿主和运行时的单元测试；sample/，一致性测试所测的示例工具；e2e_template.py
 ```
 
-后续阶段会加上 `template/` 和 `skills/`。
+第 5 阶段会加上 `skills/`。
 
 ## 检查
 
@@ -73,6 +74,19 @@ python -m unittest discover -s tests -v
 python scripts/build_spec_bundle.py
 cd conformance
 python -m suites --project ../tests/sample -- python -m sample_cli
+```
+
+模板的端到端测试需要模板的依赖（多了 PyInstaller）和 npm：
+
+```bash
+python -m pip install --require-hashes --no-deps -r template/requirements-dev.txt
+python tests/e2e_template.py
+```
+
+新工具项目从发布包开始生成：
+
+```bash
+python scripts/instantiate.py ../kicad-cli --tool kicad-cli --package @acme/kicad-cli --application KiCad --versions ">=9.0 <11" --modes file,session
 ```
 
 ## 许可证

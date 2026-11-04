@@ -57,12 +57,13 @@ tool-driver-cli-spec/
 ├── contract/    driver-contract.json, schemas/, examples/
 ├── sdk/python/  _driver/, the driver runtime every tool copies (DREPO-032)
 ├── conformance/ fakehost/, the fake host (DVER-020); suites/, the two conformance suites (DVER-001)
-├── scripts/     check_spec.py, build_spec_bundle.py
+├── template/    the project template a new tool is generated from (DREPO-062)
+├── scripts/     check_spec.py, build_spec_bundle.py; instantiate.py, sync_spec.py, check_project.py, run_matrix.py for tool projects
 ├── docs/        OPEN-QUESTIONS.md
-└── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against
+└── tests/       unit tests for the scripts, the fake host and the runtime; sample/, the sample tool the suites run against; e2e_template.py
 ```
 
-Later phases add `template/` and `skills/`.
+Phase 5 adds `skills/`.
 
 ## Checks
 
@@ -73,6 +74,19 @@ python -m unittest discover -s tests -v
 python scripts/build_spec_bundle.py
 cd conformance
 python -m suites --project ../tests/sample -- python -m sample_cli
+```
+
+The template end-to-end run needs the template's dependencies (they add PyInstaller) and npm:
+
+```bash
+python -m pip install --require-hashes --no-deps -r template/requirements-dev.txt
+python tests/e2e_template.py
+```
+
+A new tool project starts from the release bundle:
+
+```bash
+python scripts/instantiate.py ../kicad-cli --tool kicad-cli --package @acme/kicad-cli --application KiCad --versions ">=9.0 <11" --modes file,session
 ```
 
 ## License
