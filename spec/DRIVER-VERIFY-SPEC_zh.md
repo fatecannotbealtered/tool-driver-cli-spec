@@ -233,7 +233,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
 
 ### DVER-030 行为矩阵
 
-每个领域命令，以及每个调用适配能力的标准命令（DCLI-200、DCLI-260），都必须有一张行为矩阵：`tests/matrix/` 里每条命令一个 JSON 文件，以命令路径命名，并通过 `contract/schemas/behavior-matrix.schema.json` 的校验。内置命令，以及不调用适配能力的标准命令，如 `knowledge` 各命令，不需要矩阵，由运行时单元测试覆盖（DVER-022）。
+每个领域命令，以及每个所调用的适配能力都由工具实现了的标准命令（DCLI-200、DCLI-260），都必须有一张行为矩阵：`tests/matrix/` 里每条命令一个 JSON 文件，以命令路径命名，并通过 `contract/schemas/behavior-matrix.schema.json` 的校验。内置命令、不调用适配能力的标准命令（如 `knowledge` 各命令），以及所需能力工具没有实现、因而返回 `E_UNSUPPORTED` 的标准命令，都不需要矩阵，由运行时单元测试覆盖（DVER-022）。
 
 文件把下表的每一行各列一次，每行是一种情况。适用于这条命令的行写明参数和期望结果：退出码，失败时再加错误码。这一行运行过之后，还要写上实际结果和证据引用（DVER-041）。不适用的行写 `applies: false` 和原因。每行什么时候适用，契约在 `behavior_matrix_rows[].applies_when` 里列出；这些取值针对这条命令来判断：`writes` 指它是写命令，`session` 和 `device` 指它支持该模式，`documents` 指它操作文档，`host_component` 指它经宿主组件接入软件，`always` 总是成立。只有条件成立的行才会运行。
 

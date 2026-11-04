@@ -289,6 +289,23 @@ class RunTest(unittest.TestCase):
         finally:
             session.close()
 
+    def test_hooks_are_not_held_by_the_question_scope(self):
+        # A read-only question has no scope file, yet its hook may open the document it reads.
+        question = QUESTION.replace(
+            'FAKE_HOST = {"files": [], "instances": [{"id": "fake-1", "documents": [\n'
+            '    {"id": "doc-1", "name": "board.fake", "objects": {"R1": {"value": "10k"}}}]}]}',
+            'FAKE_HOST = {"instances": [{"id": "fake-1", "documents": []}],\n'
+            '             "files": [{"id": "doc-1", "name": "board.fake", "objects": {"R1": {"value": "10k"}}}]}\n\n\n'
+            'def before(run, turn):\n'
+            '    out = run.tool("doc", "open", "--session", "fake-1", "--doc", str(run.documents / "board.fake"))\n'
+            '    run.check(out["ok"], f"the hook could not open the board: {out}")\n')
+        question = question.replace('"--doc", "doc-1"', '"--session", "fake-1", "--doc", str(agent.documents / "board.fake")')
+        self.assertIn("def before", question)
+        [loaded] = self.load(opened=question)
+        problems, error, _ = run_eval.attempt(SAMPLE, self.facts, loaded, run_eval.ScriptedAgent(loaded.right), True,
+                                               self.tmp, False)
+        self.assertEqual((problems, error), ([], None))
+
     def test_a_question_that_needs_the_fake_host_fails_alone_on_the_real_application(self):
         question = QUESTION.replace('run.check(not run.write_calls(), "a write command ran")',
                                     'run.check(not run.applied(), "a change arrived")')

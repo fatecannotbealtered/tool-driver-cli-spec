@@ -336,6 +336,9 @@ class SampleAdapter(Adapter):
         key = file_key(request["document"], "/" + inputs["id"])
         if inputs["id"] == "missing":
             raise AdapterError("E_NOT_FOUND", "no such part", native_message="Part 'missing' not found")
+        if inputs["id"] == "locked":
+            raise AdapterError("E_NATIVE_FAILURE", "the part is locked", dispatch_state="not_started",
+                               knowledge=["locked-parts"])
         fields = {k: v for k, v in inputs.items() if k != "id"}
         before = data.get(inputs["id"], {})
         return {"action": f"Change {inputs['id']}", "targets": [{"key": key, "kind": "part"}],
@@ -344,6 +347,11 @@ class SampleAdapter(Adapter):
 
     def apply(self, request):
         data, inputs = self._load(request), request["inputs"]
+        if inputs.get("value") == "refused":
+            raise AdapterError("E_NATIVE_FAILURE", "the part is locked", dispatch_state="not_started", knowledge=["locked-parts"])
+        if inputs.get("value") == "dialog":
+            raise AdapterError("E_HUMAN_REQUIRED", "a license dialog opened", dispatch_state="dispatched",
+                               action="dismiss_dialog", knowledge=["license-dialog"])
         data.setdefault(inputs["id"], {}).update({k: v for k, v in inputs.items() if k != "id"})
         Path(request["document"]).write_text(json.dumps(data), encoding="utf-8")
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
@@ -393,6 +401,22 @@ class InProcess(unittest.TestCase):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "missing", "--value", "x")
         self.assertEqual((code, env["error"]["code"]), (3, "E_NOT_FOUND"))
         self.assertIn("$.error.details.native_message", env["meta"]["untrusted"])
+
+    def test_a_recognized_error_points_to_knowledge(self):
+        code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "locked", "--value", "x")
+        self.assertEqual(env["error"]["code"], "E_NATIVE_FAILURE")
+        self.assertEqual(env["error"]["details"]["knowledge"], ["locked-parts"])
+        self.assertIn("sample-cli knowledge get --id locked-parts", env["error"]["details"]["next_action"])
+
+    def test_write_errors_keep_the_pointer_to_knowledge(self):
+        for value, code, entry in (("refused", "E_NATIVE_FAILURE", "locked-parts"), ("dialog", "E_HUMAN_REQUIRED", "license-dialog")):
+            with self.subTest(value=value):
+                args = ("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", value)
+                _, env = self.run_tool(*args)
+                _, env = self.run_tool(*args, "--confirm", env["error"]["details"]["confirm_token"])
+                details = env["error"]["details"]
+                self.assertEqual((env["error"]["code"], details["knowledge"]), (code, [entry]))
+                self.assertIn(f"sample-cli knowledge get --id {entry}", details["next_action"])
 
     def test_missing_capability_is_unsupported(self):
         code, env = self.run_tool("session", "list")

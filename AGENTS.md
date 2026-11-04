@@ -20,6 +20,8 @@ This repository holds tool-driver-cli-spec: five specifications, a machine contr
 | `scripts/check_spec.py` | Checks clause format, numbering, language pairs, contract tables, schemas and examples |
 | `scripts/build_spec_bundle.py` | Builds the release ZIP and its SHA-256 file |
 | `scripts/instantiate.py`, `sync_spec.py`, `check_project.py`, `run_matrix.py`, `run_eval.py` | The scripts tool projects run from the release bundle: generate a project, pin a release, check a project and write its generated content, run a behavior matrix on the real application, run evaluation questions with an Agent |
+| `skills/build-driver-cli/` | The development Skill: guides an Agent through the onboarding steps of DREPO-062 and reviews a tool; ships in the release bundle |
+| `docs/ONBOARDING.md` | The onboarding guide for a person who wants a new driver tool, with `ONBOARDING_zh.md` |
 | `docs/OPEN-QUESTIONS.md` | Open questions; the specifications never contain them |
 | `tests/` | Unit tests for the scripts, the fake host and the runtime; `tests/sample/` is the sample tool the suites run against; `tests/e2e_template.py` runs the template end to end; `tests/eval_template.py` runs the evaluation suite with the template tool |
 

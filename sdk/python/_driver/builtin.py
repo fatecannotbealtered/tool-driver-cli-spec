@@ -317,14 +317,16 @@ def _plugin_check(run: Run) -> dict[str, Any]:
     on_disk = plugin.get("version_on_disk")
     if not on_disk:
         return _check("plugin", "warn", "The host component is not installed.", f"Run `{run.tool.name} plugin install`.")
-    bundled = bundled_plugin_version(run.tool)
-    if bundled and bundled != on_disk:
-        return _check("plugin", "warn", f"Version {on_disk} of the host component is installed, but this CLI brings {bundled}.",
-                      f"Run `{run.tool.name} plugin install`.")
+    # An instance running another version than the one on disk refuses writes (DSEC-053): that
+    # is a failure, and it comes before the softer note that the CLI brings a newer version.
     stale = [f"{i['session']} has {i['version']}" for i in plugin.get("loaded", []) if i["version"] != on_disk]
     if stale:
         return _check("plugin", "fail", f"Version {on_disk} is on disk, but {'; '.join(stale)} loaded.",
                       "Ask the person to restart or reload those instances.")
+    bundled = bundled_plugin_version(run.tool)
+    if bundled and bundled != on_disk:
+        return _check("plugin", "warn", f"Version {on_disk} of the host component is installed, but this CLI brings {bundled}.",
+                      f"Run `{run.tool.name} plugin install`.")
     return _check("plugin", "pass", f"Version {on_disk} is on disk and loaded in every instance.")
 
 

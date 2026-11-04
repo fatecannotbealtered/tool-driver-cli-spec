@@ -122,7 +122,8 @@
                 "dispatch_state": {"enum": ["not_started", "dispatched", "unknown"]},
                 "native_message": {"type": "string"},
                 "retry_after_ms": {"type": "integer", "minimum": 0},
-                "action": {"$ref": "error.schema.json#/$defs/details/properties/action"}
+                "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+                "knowledge": {"$ref": "error.schema.json#/$defs/details/properties/knowledge"}
               },
               "allOf": [
                 {"if": {"properties": {"code": {"const": "E_BUSY"}}}, "then": {"required": ["retry_after_ms"], "properties": {"dispatch_state": {"const": "not_started"}}}},

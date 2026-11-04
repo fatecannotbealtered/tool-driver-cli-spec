@@ -24,6 +24,11 @@ TOOL = Tool(
     versions="{{versions}}",
     modes={{modes}},
     host_component={{host_component}},
+{{#host_component}}
+    # plugin/manifest.json records the host component's files and methods; `python scripts/spec.py
+    # generate` writes all of it but `methods` (DCLI-240).
+    plugin_manifest=ROOT / "plugin" / "manifest.json",
+{{/host_component}}
 )
 
 

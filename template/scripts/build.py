@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-DATA = ["package.json", "CHANGELOG.md", "knowledge", "skills", "contract/driver-contract.json"]
+DATA = ["package.json", "CHANGELOG.md", "knowledge", "skills", "contract/driver-contract.json", "plugin"]
 
 
 def target() -> tuple[str, str]:
@@ -45,6 +45,8 @@ def main() -> int:
                "--paths", str(ROOT), "--collect-submodules", pkg]
     for item in DATA:
         source = ROOT / item
+        if not source.exists():
+            continue  # plugin/ exists only with a host component
         dest = str(Path(item).parent) if source.is_file() else item
         command += ["--add-data", f"{source}{os.pathsep}{dest}"]
     command.append(str(ROOT / pkg / "__main__.py"))

@@ -87,7 +87,7 @@ Check: 🤖 `check_project` checks that each Skill has one `SKILL.md` and that i
 
 ### DSKL-002 Front matter
 
-Every `SKILL.md` MUST begin with front matter holding the fields below. Only domain Skills carry `metadata.requires` and `metadata.commands`.
+Every `SKILL.md` MUST begin with front matter holding the fields below. Only domain Skills carry `metadata.requires` and `metadata.commands`, and only rename stubs carry `metadata.replaced_by`.
 
 <!-- contract:skill_frontmatter -->
 | Field | Required in | Content |
@@ -96,7 +96,8 @@ Every `SKILL.md` MUST begin with front matter holding the fields below. Only dom
 | `description` | every Skill | What the Skill covers, what it does not cover, and which Skill covers the rest, phrased in Chinese and English (DSKL-001, DSKL-025) |
 | `metadata.version` | every Skill | The tool version from package.json |
 | `metadata.requires` | domain Skills | The name of the entry Skill |
-| `metadata.commands` | domain Skills | The command paths the Skill owns (DSKL-026) |
+| `metadata.commands` | domain Skills, except rename stubs | The command paths the Skill owns (DSKL-026) |
+| `metadata.replaced_by` | rename stubs | The Skill to read instead (DSKL-028) |
 
 Example for a domain Skill of the tool `kicad-cli`:
 
@@ -268,7 +269,7 @@ Check: 🤖 `check_project` checks the directory names and that no domain Skill 
 
 ### DSKL-024 Read the entry Skill first
 
-The body of every domain Skill MUST start by telling the Agent to read the entry Skill first, and its `metadata.requires` MUST name the entry Skill. When the entry Skill is not installed, the Agent MUST stop and ask the user to reinstall the tool's Skills.
+The body of every domain Skill, except a rename stub (DSKL-028), MUST start by telling the Agent to read the entry Skill first, and its `metadata.requires` MUST name the entry Skill. When the entry Skill is not installed, the Agent MUST stop and ask the user to reinstall the tool's Skills.
 
 Why: An Agent may load a domain Skill by its description alone and would then miss the write recipe and the STOP checkpoints.
 Check: 🤖 `check_project` checks `metadata.requires`; 👀 review checks the opening instruction.
@@ -296,10 +297,10 @@ Check: 🤖 `check_project` checks that the area is a noun of a command the Skil
 
 ### DSKL-028 Rename stubs
 
-When a Skill is renamed or merged into another, the old name MUST stay as a stub Skill. The stub only tells the Agent which Skill to read instead.
+When a Skill is renamed or merged into another, the old name MUST stay as a stub Skill. The stub only tells the Agent which Skill to read instead. It keeps `metadata.requires`, names that Skill in `metadata.replaced_by` and has no `metadata.commands`.
 
 Why: `update` replaces only the Skill directories that are already installed (DCLI-076); without a stub, the user's old copy stays and keeps teaching outdated commands.
-Check: 👀 Review.
+Check: 🤖 `check_project` checks that `metadata.replaced_by` names another Skill of the tool and that the stub owns no commands; 👀 review.
 
 ## Release and Sync
 

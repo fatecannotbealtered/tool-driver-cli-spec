@@ -1276,8 +1276,10 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 工具有宿主组件时，必须提供 `plugin get`、`plugin install` 和 `plugin remove`（DCLI-200）。`plugin get` 返回宿主组件对象：`name`、`version_on_disk`、`protocol_version`、`install_path` 和 `loaded`（各实例已加载的版本）。安装和升级必须遵守 DSEC-050 至 DSEC-053。
 
-为什么：只有一条带检查的安装途径，在软件里运行的代码才可控。
-检查：🤖 驱动一致性测试 D12。
+宿主组件的源码和清单放在 `plugin/`。清单 `plugin/manifest.json` 必须写明 `version`，即工具版本；`protocol_version`（DCLI-280）；`files`，即 `plugin install` 复制的每个文件的 SHA-256，以 `plugin/` 里的路径为键；以及 `methods`，即宿主组件实现的实例端能力（DCLI-260）。前三项由 `check_project` 根据文件写出，`methods` 由作者填写。工具把清单交给运行时，原生程序也随身带着 `plugin/`。
+
+为什么：只有一条带检查的安装途径，在软件里运行的代码才可控。清单根据文件写出，就不会和文件对不上。
+检查：🤖 驱动一致性测试 D12；`check_project` 重新生成清单并比对。
 
 ## 适配层与运行时
 
@@ -1450,7 +1452,7 @@ CLI 与宿主组件之间必须只在本机连接：Windows 用命名管道，ma
 | `E_VALIDATION` | 软件拒绝了内容 |
 | `E_UNSUPPORTED` | 软件做不到 |
 
-错误必须以 JSON-RPC 错误发送，错误码为 `-32000`。`data` 里必须有 `code` 和 `dispatch_state`，软件给出了报错原文时还必须有 `native_message`。`E_BUSY` 错误必须带 `retry_after_ms`；`E_HUMAN_REQUIRED` 错误应该带 `action`。DCLI-012 要求的其他 `details` 字段，如 `next_action` 和 `resume`，由 CLI 补上。`native_message` 是软件自己的报错原文，必须当作不可信内容处理（DSEC-020）。
+错误必须以 JSON-RPC 错误发送，错误码为 `-32000`。`data` 里必须有 `code` 和 `dispatch_state`，软件给出了报错原文时还必须有 `native_message`。`E_BUSY` 错误必须带 `retry_after_ms`；`E_HUMAN_REQUIRED` 错误应该带 `action`。有内置知识条目讲解这个错误时，比如一个已知的弹窗，`data` 应该带 `knowledge`，即这些条目的 ID；CLI 会在 `next_action` 里写出对应的 `knowledge get` 命令（DSKL-124）。在 CLI 进程内运行的适配层报告同样的字段。DCLI-012 要求的其他 `details` 字段，如 `next_action` 和 `resume`，由 CLI 补上。`native_message` 是软件自己的报错原文，必须当作不可信内容处理（DSEC-020）。
 
 为什么：宿主错误少而固定，就能直接对应到 Agent 已经熟悉的错误码。
 检查：🤖 运行时单元测试。

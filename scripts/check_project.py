@@ -127,6 +127,19 @@ class Facts:
     def commands(self) -> list[dict[str, Any]]:
         return list((self.reference or {}).get("commands") or [])
 
+    def implemented(self) -> set[str]:
+        """The adapter capabilities the tool implements: the methods of its adapter, and with a
+        host component the instance-side methods its manifest lists (DCLI-240, DVER-030)."""
+        found = set((self.reference or {}).get("adapter_capabilities") or [])
+        manifest = self.root / "plugin" / "manifest.json"
+        if self.host_component and manifest.is_file():
+            try:
+                methods = json.loads(read(manifest)).get("methods")
+            except ValueError:
+                methods = None
+            found |= {m for m in methods or [] if isinstance(m, str)}
+        return found
+
     @property
     def domain_paths(self) -> list[str]:
         return [c["path"] for c in (self.registration or {}).get("commands", [])]
@@ -205,7 +218,10 @@ TOOL_PROBE = r"""
 import io, json, os, sys, tempfile
 sys.path.insert(0, os.getcwd())
 from {pkg} import TOOL
-out = {{"registration": TOOL.registration()}}
+from {pkg}._driver import Adapter as _Base
+names = [c["name"] for c in TOOL.contract["adapter_capabilities"]]
+out = {{"registration": TOOL.registration(),
+        "capabilities": [n for n in names if callable(getattr(TOOL.adapter_class, n, None)) and not hasattr(_Base, n)]}}
 with tempfile.TemporaryDirectory() as tmp:
     path = os.path.join(tmp, "reference.json")
     env = {{k: v for k, v in os.environ.items() if not k.startswith("{prefix}_")}}
@@ -228,7 +244,7 @@ def run_tool(root: Path, pkg: str, prefix: str) -> tuple[dict | None, dict | Non
         return None, None, (proc.stderr.strip().splitlines() or ["the tool exited with " + str(proc.returncode)])[-1]
     try:
         data = json.loads(proc.stdout)
-        return data["registration"], data["reference"], None
+        return data["registration"], {**data["reference"], "adapter_capabilities": data["capabilities"]}, None
     except (ValueError, KeyError) as exc:
         return None, None, f"unreadable output: {exc}"
 
@@ -692,15 +708,38 @@ def generate(facts: Facts) -> dict[Path, str]:
         out[path] = text
     if (root / "knowledge").is_dir():
         out[root / "knowledge" / facts.contract["knowledge"]["index_file"]] = knowledge_index(facts)
+    manifest = plugin_manifest(facts)
+    if manifest is not None:
+        out[root / "plugin" / "manifest.json"] = manifest
     return out
 
 
 def matrix_commands(facts: Facts) -> dict[str, dict[str, Any]]:
     """The commands that need a behavior matrix: every domain command, and every standard
-    command that calls an adapter capability (DVER-030)."""
+    command whose adapter capabilities the tool implements (DVER-030)."""
     builtin = {c["path"] for c in facts.contract["builtin_commands"]}
+    implemented = facts.implemented()
     return {c["path"]: c for c in facts.commands
-            if c["path"] in facts.domain_paths or (c["path"] not in builtin and c.get("capabilities"))}
+            if c["path"] in facts.domain_paths
+            or (c["path"] not in builtin and c.get("capabilities") and set(c["capabilities"]) <= implemented)}
+
+
+def plugin_manifest(facts: Facts) -> str | None:
+    """plugin/manifest.json: the tool version, the protocol version and the SHA-256 of every
+    file the install copies, with the instance-side methods the author lists (DCLI-240)."""
+    folder = facts.root / "plugin"
+    if not facts.host_component or not folder.is_dir():
+        return None
+    path = folder / "manifest.json"
+    try:
+        methods = json.loads(read(path)).get("methods", []) if path.is_file() else []
+    except ValueError:
+        methods = []
+    files = {p.relative_to(folder).as_posix(): digest(p) for p in sorted(folder.rglob("*"))
+             if p.is_file() and p.name not in ("manifest.json", "README.md") and "__pycache__" not in p.parts}
+    data = {"version": facts.version, "protocol_version": facts.contract["host_protocol"]["version"],
+            "files": files, "methods": methods if isinstance(methods, list) else []}
+    return json.dumps(data, indent=2) + "\n"
 
 
 def command_facts(facts: Facts, command: dict[str, Any]) -> dict[str, bool]:
@@ -985,7 +1024,7 @@ class Checker:
         clauses = {"commands.json": "DREPO-031", "README.md": "DREPO-020", "README_zh.md": "DREPO-020",
                    "SECURITY.md": "DSEC-002", "SECURITY_zh.md": "DSEC-002", "COMPATIBILITY.md": "DREPO-016",
                    "COMPATIBILITY_zh.md": "DREPO-016", "E2E.md": "DREPO-017", "E2E_zh.md": "DREPO-017",
-                   "index.json": "DSKL-121", "SKILL.md": "DSKL-006"}
+                   "index.json": "DSKL-121", "SKILL.md": "DSKL-006", "manifest.json": "DCLI-240"}
         for path, text in generate(self.facts).items():
             name = path.relative_to(self.root).as_posix()
             old = read(path) if path.is_file() else None
@@ -1228,6 +1267,7 @@ class Checker:
         paths = {c["path"] for c in facts.commands}
         claims: dict[str, list[str]] = {}
         recipe = self.entry_template_lines()
+        names = {path.parent.name for path, *_ in skills(facts)}
         for path, front, body, _ in skills(facts):
             name = path.parent.name
             rel = path.relative_to(self.root).as_posix()
@@ -1257,8 +1297,9 @@ class Checker:
             if str(meta.get("version", "")) != facts.version:
                 self.add("DSKL-030", rel, f"metadata.version must be the tool version {facts.version}")
             if name == facts.tool:
-                if "requires" in meta or "commands" in meta:
-                    self.add("DSKL-002", rel, "only domain Skills carry metadata.requires and metadata.commands")
+                if "requires" in meta or "commands" in meta or "replaced_by" in meta:
+                    self.add("DSKL-002", rel, "only domain Skills carry metadata.requires and metadata.commands, "
+                             "and only rename stubs metadata.replaced_by")
                 self.playbooks(rel, body)
                 continue
             if not facts.product or not name.startswith(facts.product + "-"):
@@ -1266,6 +1307,13 @@ class Checker:
             if meta.get("requires") != facts.tool:
                 self.add("DSKL-024", rel, f"metadata.requires names the entry Skill {facts.tool!r}")
             listed = meta.get("commands")
+            if "replaced_by" in meta:
+                # A rename stub owns no commands and names the Skill to read instead (DSKL-026, DSKL-028).
+                if meta["replaced_by"] not in names - {name}:
+                    self.add("DSKL-028", rel, "metadata.replaced_by names another Skill of the tool")
+                if "commands" in meta:
+                    self.add("DSKL-028", rel, "a rename stub owns no commands")
+                continue
             if not isinstance(listed, list) or not listed:
                 self.add("DSKL-026", rel, "a domain Skill lists the commands it owns in metadata.commands")
                 listed = []
