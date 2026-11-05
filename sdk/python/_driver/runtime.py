@@ -4,6 +4,7 @@ document and the device a command acts on (DCLI-201, DCLI-202, DCLI-204, DCLI-21
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import threading

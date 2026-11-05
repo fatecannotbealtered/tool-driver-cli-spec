@@ -541,6 +541,22 @@
           "summary": "The new name."
         },
         {
+          "name": "--pins",
+          "type": "json",
+          "summary": "The pins on the net.",
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pin": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "--output",
           "type": "path",
           "summary": "Write the full preview, with every change, to this file."

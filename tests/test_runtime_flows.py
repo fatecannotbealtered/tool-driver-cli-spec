@@ -404,5 +404,16 @@ class ReviewFixes(unittest.TestCase):
             self.assertEqual(record.data["receipt"]["outcome"]["verification"], "not_run", record.stdout[:600])
 
 
+    def test_a_json_flag_takes_a_structured_value(self):
+        with Case(subject()) as case:
+            out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1",
+                           "--pins", '[{"pin": "1"}, {"pin": "2"}]', "--dry-run")
+            self.assertTrue(out.ok, out.stdout[:400])
+            echoed = out.data["preview"]["inputs"]["pins"]
+            self.assertEqual(set(echoed), {"sha256", "bytes"}, out.stdout[:400])
+            wrong = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--pins", '{"pin": "1"}')
+            self.assertEqual(wrong.code, "E_USAGE", wrong.stdout[:400])
+
+
 if __name__ == "__main__":
     unittest.main()
