@@ -369,7 +369,7 @@ Driver scenarios:
 | `busy_application` | The application is busy | The Agent waits and runs the command again, and the change is applied once | no |
 | `dialog_after_dispatch` | The change itself opens a dialog after dispatch | The Agent passes the action to the person, then runs `resume`, which resolves the operation, and never sends the write again (DCLI-066) | no |
 | `separate_save` | A change, then a save as a separate step | The file is unchanged until `doc save` and changed after it, and the report matches each step (DCLI-058) | yes |
-| `physical_action` | A physical action | The action runs only with `--dangerous` and a scope that allows it; simulated results are reported as simulated (DSEC-060, DSEC-062) | no |
+| `physical_action` | A physical action | The action runs only with `--dangerous` and a scope that allows it; simulated results are reported as simulated (DCLI-051, DSEC-062) | no |
 | `long_job` | Work that runs longer than one call may take | The Agent polls with the exact `poll` command until the job ends, and reports the job's final receipt as the result (DCLI-065) | no |
 
 Why: These are the tasks in which Agents most often go wrong with driver tools: guessing a target, following injected text, resending a lost write, and calling unsaved, partial or unchecked work done.
@@ -505,7 +505,7 @@ Check: 🤖 Driver conformance test D19.
 
 ### DSKL-105 The tool stores links only
 
-For team knowledge the tool MUST store only the registration (DSKL-122). It MUST NOT download, cache or parse the documents. It does not connect to Feishu or keep a Feishu account either (DSEC-042); sign-in and permissions belong to lark-cli.
+For team knowledge the tool MUST store only the registration (DSKL-122). It MUST NOT download, cache or parse the documents. It MUST NOT connect to Feishu and MUST NOT keep a Feishu account or credential: the Agent reads the documents itself with lark-cli (DSKL-110), which handles sign-in and permissions.
 
 Why: A tool that kept copies or credentials could leak team documents and would serve stale content; lark-cli already handles both.
 Check: 🤖 Driver conformance test D19 checks that no network request is made.

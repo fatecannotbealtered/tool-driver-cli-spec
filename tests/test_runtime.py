@@ -172,9 +172,9 @@ class Registration(unittest.TestCase):
 
     def test_physical_parameter_needs_its_quantity(self):
         flag = {"name": "--x", "type": "quantity"}
-        self.assertRejected(registration(flags=[flag]), "DCLI-085")
-        self.assertRejected(registration(flags=[{"name": "--width-mm", "type": "number"}]), "DCLI-085")
-        self.assertRejected(registration(flags=[{"name": "--x", "type": "number", "quantity": "length"}]), "DCLI-085")
+        self.assertRejected(registration(flags=[flag]), "quantity")
+        self.assertRejected(registration(flags=[{"name": "--width-mm", "type": "number"}]), "quantity")
+        self.assertRejected(registration(flags=[{"name": "--x", "type": "number", "quantity": "length"}]), "quantity")
         self.assertRejected(registration(flags=[{"name": "--x", "type": "quantity", "quantity": "lightyears"}]), "DCLI-080")
 
     def test_command_shape(self):

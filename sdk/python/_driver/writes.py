@@ -779,7 +779,7 @@ class Engine:
         operation_id = record["operation_id"]
         with run.mutex.hold():
             # The token is spent and the targets locked in one step, so two confirms of one
-            # token cannot both dispatch (DCLI-055, DCLI-060, DSEC-033).
+            # token cannot both dispatch (DCLI-055, DCLI-060).
             fresh = run.records.load(operation_id)
             if fresh is None:
                 raise DriverError("E_IO", f"The record of {operation_id} cannot be read; nothing was sent.")

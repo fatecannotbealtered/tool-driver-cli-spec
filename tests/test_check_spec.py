@@ -144,6 +144,14 @@ class SpecFileTest(unittest.TestCase):
         errors = problems(EN.replace("The README MUST show the tool's tier.", "The README shows the tool's tier."))
         self.assertTrue(any("no normative word" in e for e in errors), errors)
 
+    def test_removed_clause_keeps_one_line(self):
+        body = "The README MUST show the tool's tier.\n\nWhy: People need to see the risk.\nCheck: 👀 Review."
+        en = EN.replace(body, "Removed: its rule is part of DSEC-001.")
+        zh = to_zh(EN).replace(to_zh(body), "已移除：这条规则已并入 DSEC-001。")
+        self.assertEqual(problems(en, zh), [])
+        errors = problems(EN.replace(body, "Removed: it went elsewhere."), zh)
+        self.assertTrue(any("is removed" in e for e in errors), errors)
+
     def test_checklist_must_match(self):
         errors = problems(EN.replace("- [ ] DSEC-002 Tool risk tier", "- [ ] DSEC-002 Risk of the tool"))
         self.assertTrue(any("checklist" in e for e in errors), errors)

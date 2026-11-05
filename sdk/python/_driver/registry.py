@@ -158,7 +158,7 @@ class Tiers:
 
 
 def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str]) -> Command:
-    """Check one domain registration and build its command (DCLI-029, DCLI-085)."""
+    """Check one domain registration and build its command (DCLI-029)."""
     path = reg.get("path", "")
     where = f"command {path!r}"
     extra = set(reg) - set(contract["registration_fields"]) - {
@@ -277,7 +277,7 @@ def _domain_flag(spec: dict[str, Any], contract: Contract, where: str) -> Flag:
         raise RegistrationError(f"{where}: flag {name} has type {kind!r}; use one of {sorted(DOMAIN_TYPES)}")
     quantity = spec.get("quantity")
     if (kind == "quantity") != (quantity is not None):
-        raise RegistrationError(f"{where}: flag {name} is a physical parameter only with type quantity and a quantity (DCLI-085)")
+        raise RegistrationError(f"{where}: flag {name} is a physical parameter only with type quantity and a quantity (DCLI-029, DCLI-080)")
     if quantity is not None and quantity not in contract.units:
         raise RegistrationError(f"{where}: flag {name} names the unknown quantity {quantity!r} (DCLI-080)")
     # A name ending in a unit, such as --x-mm, marks a physical parameter without a quantity.
@@ -285,7 +285,7 @@ def _domain_flag(spec: dict[str, Any], contract: Contract, where: str) -> Flag:
     suffixes = {u["suffix"].replace("_", "-") for u in contract["units"] if len(u["suffix"]) > 2}
     if kind != "quantity" and any(name.endswith(s) for s in suffixes):
         raise RegistrationError(
-            f"{where}: flag {name} carries a unit in its name; declare it as a quantity and take the unit in the value (DCLI-085)"
+            f"{where}: flag {name} carries a unit in its name; declare it as a quantity and take the unit in the value (DCLI-029, DCLI-082)"
         )
     if spec.get("output") and kind != "path":
         raise RegistrationError(f"{where}: flag {name} names a file the command creates only with type path")

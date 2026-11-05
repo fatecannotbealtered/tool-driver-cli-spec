@@ -36,6 +36,7 @@ LANG = {
         "checklist": "Checklist",
         "why": "Why: ",
         "check": "Check: ",
+        "removed": "Removed: ",
         "normative": re.compile(r"\b(MUST|SHOULD|MAY)\b"),
         "switch": "English | [中文]({name}_zh.md)",
         "version": "> Version {version} · Clauses {first} to {last}",
@@ -48,6 +49,7 @@ LANG = {
         "checklist": "检查清单",
         "why": "为什么：",
         "check": "检查：",
+        "removed": "已移除：",
         "normative": re.compile(r"(必须|禁止|应该|不应该|可以)"),
         "switch": "[English]({name}.md) | 中文",
         "version": "> 版本 {version} · 条款 {first} 至 {last}",
@@ -425,6 +427,11 @@ def check_spec_file(spec: SpecFile, doc: dict, version: str, contract: dict, rep
             report.add(at, f"{clause.id} must not sit in section '{clause.section}'")
 
         text = [ln for ln in clause.body if ln.strip()]
+        if text and text[0].startswith(lang["removed"]):
+            # A removed clause keeps its heading and one line that says where its rule went (AGENTS.md).
+            if len(text) != 1 or not CLAUSE_REF.search(text[0]):
+                report.add(at, f"{clause.id} is removed: its body is one '{lang['removed'].strip()}' line that names where its rule went")
+            continue
         why = [ln for ln in text if ln.startswith(lang["why"])]
         check = [ln for ln in text if ln.startswith(lang["check"])]
         if len(why) != 1 or len(check) != 1 or text[-2:] != [why[0] if why else None, check[0] if check else None]:
