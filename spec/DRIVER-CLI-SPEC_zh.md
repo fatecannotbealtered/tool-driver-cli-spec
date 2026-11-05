@@ -385,7 +385,7 @@
 | 参数 | 对象 | 含义 |
 |---|---|---|
 | `--session` `<id>` | 会话 | 选择实例（DCLI-202） |
-| `--doc` `<path-or-id>` | 文档 | 选择文档；文件模式下就是文件路径（DCLI-213） |
+| `--doc` `<path-or-id>` | 文档 | 选择文档；文件模式下就是文件路径（DCLI-201） |
 | `--device` `<id>` | 设备 | 选择设备 |
 | `--job` `<id>` | 长任务 | 选择长任务 |
 
@@ -446,7 +446,7 @@
 
 `json` 类型的参数接收结构化的值，比如焊盘表：在命令行上写成内联 JSON，或写成存放它的文件路径；在 `--input` 的条目里直接写值本身。它的 `schema` 是类型为 `object` 或 `array` 的 JSON Schema，`reference` 会显示出来。值里的物理量数字必须在键名里带上单位，用标准单位的后缀，如 `width_mm`（DCLI-081）。运行时检查最外层的类型，其余由适配层检查，不对时返回 `E_VALIDATION`。
 
-运行时必须拒绝违反这些规则的登记，比如没有声明物理量的物理量参数（DCLI-085）；确认级别必须由运行时根据登记推导，禁止由作者指定（DCLI-052）。`reference` 由登记生成（DCLI-031）。工具项目里的 `contract/commands.json` 必须由登记生成，并由 `contract/schemas/commands.schema.json` 校验。
+运行时必须拒绝违反这些规则的登记，比如没有声明所属物理量的物理量参数（DCLI-080）；确认级别必须由运行时根据登记推导，禁止由作者指定（DCLI-052）。`reference` 由登记生成（DCLI-031）。工具项目里的 `contract/commands.json` 必须由登记生成，并由 `contract/schemas/commands.schema.json` 校验。
 
 为什么：每个命令只有一份声明，`reference`、确认级别、授权范围检查、机密遮盖和读回都从它来，彼此就不会对不上。
 检查：🤖 `check_project` 用 `commands.schema.json` 校验 `contract/commands.json`；运行时单元测试检查运行时会拒绝违反规则的登记。
@@ -677,7 +677,7 @@
 | `scope_id` | 授权范围文件的 ID |
 | `scope_hash` | 授权范围文件内容的哈希 |
 
-- 运行时必须把令牌生成为至少 128 位的随机值，连同绑定的各项和到期时间存进计划中的操作记录（DCLI-059）。核对令牌就是与这条记录比对，不做任何签名（DSEC-033）。
+- 运行时必须用密码学安全随机源把令牌生成为至少 128 位的随机值，连同绑定的各项和到期时间存进计划中的操作记录（DCLI-059）。核对令牌就是与这条记录比对，不做任何签名，运行时也不保存签名密钥。确认时，运行时必须在计划中的操作记录里找到这个令牌，且令牌没有过期、没有用过，才接受它（DCLI-056 第 1 项）。
 - 令牌必须在 10 分钟后过期。
 - 令牌必须只能用一次，开始派发时即用掉。确认的那次调用如果在派发前被拒绝，比如返回 `E_BUSY`、`E_HUMAN_REQUIRED`、`E_FORBIDDEN` 或冲突 `target_locked`，令牌在过期前仍然可用。
 - 全局参数（DCLI-025），如 `--dangerous`、`--format`、`--quiet`，不属于输入，不绑定。
@@ -734,7 +734,7 @@
 
 ### DCLI-058 保存才是提交点
 
-会话模式下，修改不等于保存。会话模式下修改之后，回执的 `persistence` 必须为 `unchanged`，文档的 `dirty` 必须为 `true`。只有 `doc save`、文件模式下的写操作（DCLI-213）和新建文件的写操作才报告 `saved`。
+会话模式下，修改不等于保存。会话模式下修改之后，回执的 `persistence` 必须为 `unchanged`，文档的 `dirty` 必须为 `true`。只有 `doc save`、文件模式下的写操作（DCLI-201）和新建文件的写操作才报告 `saved`。
 
 效果为 `artifact` 的写操作，如 `doc save-as`、`export`、`render`，会新建文件。它的回执必须报告 `change: not_applicable` 和 `persistence: saved`，并按 DCLI-057 核实。
 
@@ -1090,10 +1090,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-085 未声明单位
 
-没有声明所属物理量的物理量参数，必须在命令登记时就被拒绝（DCLI-029）。
-
-为什么：未声明的单位在工具发布前就被发现，而不是等写错了数值才发现。
-检查：🤖 运行时单元测试；`check_project` 用 `commands.schema.json` 校验 `contract/commands.json`，它要求每个 `quantity` 类型的参数都写明物理量。
+已移除：这条规则已并入 DCLI-029。
 
 ## 模式与会话
 
@@ -1131,7 +1128,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `plugin remove` | `configure` | 有宿主组件时 | 两步确认 | 卸载宿主组件 |
 
 - 适配层缺少命令所需的能力时，命令必须返回 `E_UNSUPPORTED`（DCLI-260）；标为可选的命令，以及 `session open` 和 `session close`，依赖的都是可选能力。
-- `knowledge create` 和 `knowledge delete` 只改工具自己的登记，不改软件。它们不需要授权范围，也不计入工具的风险等级（DSEC-002），但仍然两步确认。
+- `knowledge create` 和 `knowledge delete` 的确认和授权范围见 DSKL-123。
 
 为什么：同样的功能在每个工具里叫同样的名字，Agent 不用重新学会话、文档和长任务的用法。
 检查：👀 对照本表评审命令树。
@@ -1146,6 +1143,8 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `file` 文件 | 不启动软件，直接读写文件 | `doc get`；`doc list` 可选 | 重新读取文件 | 写文件就是保存（`persistence: saved`） |
 | `session` 会话 | 驱动一个正在运行的软件实例 | `session list`、`session get`、`doc list`、`doc get`、`doc save`；其他 `session` 和 `doc` 命令在适配层有对应能力时提供 | 运行中的实例 | 只有 `doc save` 才保存 |
 | `device` 设备 | 驱动硬件或它的控制器 | `device list`、`device get` | 设备或它的传感器 | 不适用 |
+
+文件模式下，`--doc` 必须是文件路径，`revision` 是文件内容的哈希（DCLI-210）。
 
 一个命令同时支持文件模式和会话模式时，运行时必须为每次调用选定模式：
 
@@ -1273,10 +1272,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-213 文件模式下的文档
 
-文件模式下，`--doc` 必须是文件路径。写文件就是保存：回执报告 `persistence: saved`，读回必须重新读取文件。`revision` 是文件内容的哈希（DCLI-210）。文件模式只需要 `doc get`，`doc list` 可选（DCLI-201）。
-
-为什么：中间没有软件，磁盘上的文件就是唯一的依据。
-检查：👀 评审适配层。
+已移除：这些规则已并入 DCLI-201 和 DCLI-210。
 
 ## 长任务
 
@@ -1335,7 +1331,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-260 适配能力
 
-除了领域命令，工具作者只写本表中的适配能力，其余全部由运行时处理（DCLI-261）。缺少某项能力时，运行时必须对需要它的命令返回 `E_UNSUPPORTED`，工具不用写任何代码。
+除了领域命令，工具作者只写本表中的适配能力，其余全部由运行时处理（DREPO-032）。缺少某项能力时，运行时必须对需要它的命令返回 `E_UNSUPPORTED`，工具不用写任何代码。
 
 <!-- contract:adapter_capabilities -->
 | 能力 | 运行在哪一端 | 文件 | 会话 | 设备 | 说明 |
@@ -1373,10 +1369,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-261 运行时负责的事
 
-驱动运行时提供「运行时与工具的分工」表中列在它名下的全部内容。工具禁止重新实现其中任何一项，并必须按 DREPO-032 带上运行时。
-
-为什么：共用的规则只实现一次，在每个工具里的表现才完全一样。
-检查：🤖 `check_project` 按哈希核对运行时副本（DREPO-034）。
+已移除：这条规则已并入 DREPO-032。
 
 ### DCLI-262 适配代码在哪里运行
 
@@ -1395,10 +1388,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-263 黑盒一致性测试
 
-用其他语言编写的驱动运行时，必须通过同一套一致性测试；这些测试把 CLI 当作黑盒（DVER-011）。
-
-为什么：测试不依赖语言，才能证明每种运行时的行为都一样。
-检查：👀 评审一致性测试套件（DVER-011）。
+已移除：这条规则已并入 DVER-011。
 
 ## 宿主协议
 
@@ -1425,7 +1415,7 @@ CLI 与宿主组件之间必须只在本机连接：Windows 用命名管道，ma
 
 ### DCLI-273 握手
 
-连上之后，CLI 必须先发 `hello`，带 `protocol_version` 和 `cli_version`。宿主必须回复 `protocol_version`、`plugin_version`、`application`（软件名称和版本）、`session` `{id, generation}` 和 `methods`（它支持的方法）。协议主版本不同时，CLI 必须返回 `E_PROTOCOL`，禁止发出任何修改。
+连上之后，CLI 必须先发 `hello`，带 `protocol_version` 和 `cli_version`。宿主必须回复 `protocol_version`、`plugin_version`、`application`（软件名称和版本）、`session` `{id, generation}` 和 `methods`（它支持的方法）。协议主版本不同时，CLI 必须返回 `E_PROTOCOL`，禁止发出任何修改。每个连接都必须先这样握手，协议主版本不同时，在发出任何修改之前就结束连接。宿主组件应该用宿主端小库，DCLI-270 的连接方式和这次握手它都会做（DCLI-281）。
 
 为什么：对协议理解不一致的 CLI 和宿主，必须在误解一次写入之前就停下。
 检查：🤖 驱动一致性测试 D20。

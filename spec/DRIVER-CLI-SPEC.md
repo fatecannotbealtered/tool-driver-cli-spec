@@ -385,7 +385,7 @@ A command on a session, document, device or job MUST select the object with thes
 | Flag | Object | Meaning |
 |---|---|---|
 | `--session` `<id>` | session | Selects the instance (DCLI-202) |
-| `--doc` `<path-or-id>` | document | Selects the document; in file mode it is the file path (DCLI-213) |
+| `--doc` `<path-or-id>` | document | Selects the document; in file mode it is the file path (DCLI-201) |
 | `--device` `<id>` | device | Selects the device |
 | `--job` `<id>` | job | Selects the long job |
 
@@ -446,7 +446,7 @@ The adapter capabilities a domain command calls follow from its registration: `r
 
 A `json` flag takes a structured value, such as a pad table: on the command line, inline JSON or the path of a file that holds it; in an `--input` item, the value itself. Its `schema` is a JSON Schema of type `object` or `array`, and `reference` shows it. A physical number inside the value MUST carry the unit in its key, with the standard unit's suffix, such as `width_mm` (DCLI-081). The runtime checks the top-level type and the adapter checks the rest, answering `E_VALIDATION` when it is wrong.
 
-The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a unit quantity (DCLI-085), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
+The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a declared unit quantity (DCLI-080), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
 
 Why: One declaration per command feeds `reference`, the tier, the scope check, the masking of secrets and the read-back, so none of them can disagree.
 Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; runtime unit tests check that the runtime rejects a registration that breaks a rule.
@@ -677,7 +677,7 @@ The confirm token MUST bind these values. When any of them changes, the token MU
 | `scope_id` | The ID of the scope file |
 | `scope_hash` | The hash of the scope file's content |
 
-- The runtime MUST create the token as a random value of at least 128 bits and store it in the planned operation record (DCLI-059), together with the bound values and the expiry time. A token is checked against that record; nothing is signed (DSEC-033).
+- The runtime MUST create the token as a random value of at least 128 bits from a cryptographically secure random source and store it in the planned operation record (DCLI-059), together with the bound values and the expiry time. A token is checked against that record; nothing is signed, and the runtime keeps no signing key. At the confirm, the runtime MUST accept a token only when it finds it in a planned operation record, before its expiry and not yet spent (DCLI-056, step 1).
 - The token MUST expire after 10 minutes.
 - The token MUST be usable only once, and it is spent when dispatch starts. A confirming call that is refused before dispatch, for example with `E_BUSY`, `E_HUMAN_REQUIRED`, `E_FORBIDDEN` or the conflict `target_locked`, leaves the token usable until it expires.
 - Global flags (DCLI-025), such as `--dangerous`, `--format` and `--quiet`, are not inputs and are not bound.
@@ -734,7 +734,7 @@ Check: 🤖 Driver conformance tests D04, D07 and D08.
 
 ### DCLI-058 Save is the commit point
 
-In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`. Only `doc save`, writes in file mode (DCLI-213) and writes that create files report `saved`.
+In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`. Only `doc save`, writes in file mode (DCLI-201) and writes that create files report `saved`.
 
 A write with the `artifact` effect, such as `doc save-as`, `export` or `render`, creates files. Its receipt MUST report `change: not_applicable` and `persistence: saved`, and it is verified as DCLI-057 sets.
 
@@ -1090,10 +1090,7 @@ Check: 👀 Review of `reference`.
 
 ### DCLI-085 Undeclared units
 
-A physical parameter without a declared unit quantity MUST be rejected when the command is registered (DCLI-029).
-
-Why: An undeclared unit is caught before the tool ships, not after a wrong value is written.
-Check: 🤖 Runtime unit tests; `check_project` validates `contract/commands.json` against `commands.schema.json`, which needs a quantity for every flag of type `quantity`.
+Removed: its rule is part of DCLI-029.
 
 ## Modes and Sessions
 
@@ -1131,7 +1128,7 @@ The runtime implements these commands from the adapter capabilities (DCLI-260). 
 | `plugin remove` | `configure` | with a host component | two-step | Removes the host component |
 
 - A command whose adapter capability is missing MUST return `E_UNSUPPORTED` (DCLI-260); the commands marked optional, and `session open` and `session close`, depend on optional capabilities.
-- `knowledge create` and `knowledge delete` change only the tool's own registration, not the application. They need no scope and do not count toward the tool's risk tier (DSEC-002), but they stay two-step.
+- DSKL-123 sets the confirmation and scope of `knowledge create` and `knowledge delete`.
 
 Why: The same functions under the same names in every tool mean the Agent never relearns sessions, documents or jobs.
 Check: 👀 Review of the command tree against this table.
@@ -1146,6 +1143,8 @@ A tool works in one or more of these modes. It MUST declare in each command's re
 | `file` | Reads and writes files directly, without starting the application | `doc get`; `doc list` is optional | The file, read again | Writing the file is saving (`persistence: saved`) |
 | `session` | Drives a running instance of the application | `session list`, `session get`, `doc list`, `doc get`, `doc save`; the other `session` and `doc` commands where the adapter has their capabilities | The running instance | Only `doc save` saves |
 | `device` | Drives hardware or its controller | `device list`, `device get` | The device or its sensors | Does not apply |
+
+In file mode, `--doc` MUST be the file path, and `revision` is a hash of the file content (DCLI-210).
 
 When a command supports both file and session mode, the runtime MUST choose the mode for each call:
 
@@ -1273,10 +1272,7 @@ Check: 🤖 Driver conformance test D10.
 
 ### DCLI-213 Documents in file mode
 
-In file mode, `--doc` MUST be the file path. Writing the file is saving: the receipt reports `persistence: saved`, and read-back MUST read the file again. `revision` is a hash of the file content (DCLI-210). File mode needs only `doc get`; `doc list` is optional (DCLI-201).
-
-Why: Without an application in between, the file on disk is the only truth.
-Check: 👀 Review of the adapter.
+Removed: its rules are part of DCLI-201 and DCLI-210.
 
 ## Long Jobs
 
@@ -1335,7 +1331,7 @@ Check: 🤖 Driver conformance test D12; `check_project` regenerates the manifes
 
 ### DCLI-260 Adapter capabilities
 
-Besides the domain commands, the tool author writes only the adapter capabilities in this table; the runtime does everything else (DCLI-261). When a capability is missing, the runtime MUST return `E_UNSUPPORTED` for the commands that need it, with no tool code.
+Besides the domain commands, the tool author writes only the adapter capabilities in this table; the runtime does everything else (DREPO-032). When a capability is missing, the runtime MUST return `E_UNSUPPORTED` for the commands that need it, with no tool code.
 
 <!-- contract:adapter_capabilities -->
 | Capability | Side | File | Session | Device | Description |
@@ -1373,10 +1369,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-261 Runtime responsibilities
 
-The driver runtime provides everything listed for it in the table under "Runtime and Tool Responsibilities". A tool MUST NOT reimplement any of it, and MUST carry the runtime as DREPO-032 sets.
-
-Why: Shared rules implemented once behave the same in every tool.
-Check: 🤖 `check_project` checks the runtime copy by hash (DREPO-034).
+Removed: its rule is part of DREPO-032.
 
 ### DCLI-262 Where adapter code runs
 
@@ -1395,10 +1388,7 @@ Check: 👀 Review against the capability survey (DREPO-015).
 
 ### DCLI-263 Black-box conformance
 
-A driver runtime written in another language MUST pass the same conformance suites, which treat the CLI as a black box (DVER-011).
-
-Why: Tests that do not depend on the language prove the same behavior for every runtime.
-Check: 👀 Review of the conformance suites (DVER-011).
+Removed: its rule is part of DVER-011.
 
 ## Host Protocol
 
@@ -1425,7 +1415,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-273 Handshake
 
-After connecting, the CLI MUST first send `hello` with `protocol_version` and `cli_version`. The host MUST reply with `protocol_version`, `plugin_version`, `application` (name and version), `session` `{id, generation}` and `methods`, the methods it supports. When the major protocol versions differ, the CLI MUST return `E_PROTOCOL` and MUST NOT send any change.
+After connecting, the CLI MUST first send `hello` with `protocol_version` and `cli_version`. The host MUST reply with `protocol_version`, `plugin_version`, `application` (name and version), `session` `{id, generation}` and `methods`, the methods it supports. When the major protocol versions differ, the CLI MUST return `E_PROTOCOL` and MUST NOT send any change. Every connection MUST start with this handshake, so a different major version ends it before any change is sent. Host components SHOULD use the host libraries, which do the transport of DCLI-270 and this handshake (DCLI-281).
 
 Why: A CLI and a host that disagree on the protocol must stop before they misunderstand a write.
 Check: 🤖 Driver conformance test D20.

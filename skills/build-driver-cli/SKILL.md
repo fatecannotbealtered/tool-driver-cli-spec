@@ -41,7 +41,7 @@ Create a virtual environment outside the new project with Python 3.12 or later a
 ## Rules that hold throughout
 
 - The specification decides. Before each step, read the clauses it names. Where a clause fixes a name, value, text, file or flow, use it exactly; never invent a flag, error code, verb, section, label or step. When a table and `contract/driver-contract.json` disagree, the contract wins.
-- Once the project exists, obey its `AGENTS.md`: never edit pinned copies or generated content, never skip or weaken a conformance test. Never reimplement what the driver runtime does (DCLI-261). Fake host results are never evidence (DVER-021); never mark a command above its evidence (DVER-040).
+- Once the project exists, obey its `AGENTS.md`: never edit pinned copies or generated content, never skip or weaken a conformance test. Never reimplement what the driver runtime does (DREPO-032). Fake host results are never evidence (DVER-021); never mark a command above its evidence (DVER-040).
 - The real application runs only on targets a person listed under Authorized Targets in `docs/E2E.md` (DVER-050). You never add a target, never create or change a scope file, and never point `<PREFIX>_SCOPE_FILE` at a file you wrote (DSEC-011). Ask the person.
 - Publishing, tagging and pushing need the person's explicit approval. Work on a branch; never commit secrets, license files or project files the person may not share.
 - Name other tools, such as lark-cli, and follow their own help; never write their commands into the tool, its Skills or its output (DSKL-110).
@@ -120,7 +120,7 @@ Run it before you ask for the release in step 8, and whenever you are asked to r
    ```
 
 3. For each of them, read the clause in `.agent/` and compare it with the project: the files, the registrations, the Skills, the workflows and the output of `python -m <pkg> reference --all --output <file>`.
-4. Report one table with every clause from steps 1 and 3. Name a clause you cannot judge, such as one that needs the real application, with the reason. Clauses about the specification repository or the runtime itself, such as DCLI-263, DVER-011, DVER-022 and DSKL-041, are `n/a`, with the reason.
+4. Report one table with every clause from steps 1 and 3. Name a clause you cannot judge, such as one that needs the real application, with the reason. Clauses about the specification repository or the runtime itself, such as DVER-011, DVER-022 and DSKL-041, are `n/a`, with the reason.
 
 | Clause | Conforms | Evidence | Fix |
 |---|---|---|---|

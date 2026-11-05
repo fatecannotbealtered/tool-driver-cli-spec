@@ -285,7 +285,7 @@
           }
         },
         {
-          "description": "A physical parameter has the type quantity and names its quantity (DCLI-085).",
+          "description": "A physical parameter has the type quantity and names its quantity (DCLI-029, DCLI-080).",
           "if": {
             "required": [
               "type"

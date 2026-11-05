@@ -103,11 +103,11 @@
 | `G01` | 不带任何参数开关，运行每个两步确认级命令的样例；也去掉目标参数运行，并在输出文件已存在时运行 artifact 样例 | 退出码 5，`E_CONFIRMATION_REQUIRED`；`details` 带 `preview`、`confirm_token` 和 `expires_at`；生成的命令写明运行时选定的会话和文档；覆盖已有文件的 artifact 写操作要先确认；没有写入 | DCLI-011, DCLI-014, DCLI-050, DCLI-051, DCLI-053, DSEC-003 |
 | `G02` | 带 `--dry-run` 运行每个样例 | 退出码 0；预览有效，确认级别符合规则，来自软件的值列入 `meta.untrusted`；没有写入 | DCLI-054, DSEC-021 |
 | `G03` | 为一个样例拿到令牌，然后分别改动每个参数、去掉每个可选参数、加一个参数、把样例指向另一个文档或设备，再确认 | `E_CONFLICT`，`token_mismatch`，并指出是哪个参数；没有写入 | DCLI-055, DCLI-056 |
-| `G04` | 原样确认，再用同一个令牌确认一次 | 第一次成功；第二次返回 `E_CONFLICT`，`token_used`；修改只写入一次 | DCLI-055, DCLI-056, DSEC-033 |
-| `G05` | 用篡改过的令牌确认 | 每次都被拒绝，`E_CONFLICT` `token_invalid`；没有写入；令牌至少含 128 位随机数 | DCLI-055, DSEC-033 |
+| `G04` | 原样确认，再用同一个令牌确认一次 | 第一次成功；第二次返回 `E_CONFLICT`，`token_used`；修改只写入一次 | DCLI-055, DCLI-056 |
+| `G05` | 用篡改过的令牌确认 | 每次都被拒绝，`E_CONFLICT` `token_invalid`；没有写入；令牌至少含 128 位随机数 | DCLI-055 |
 | `G06` | 不带令牌，以 `--format text` 运行一个两步确认级命令的样例 | 退出码 5；没有写入 | DCLI-014, DCLI-053 |
 | `G07` | 没有授权范围文件时预演和确认；再分别在缺少样例的效果、缺少样例的目标、（危险级样例）缺少危险许可、已过期或无效、以及前缀停在名字中间的授权范围下运行每个样例 | `E_FORBIDDEN`，`details.scope` 写明缺什么；`context` 报告授权范围状态；没有写入 | DCLI-050, DSEC-014, DSEC-015, DSEC-016 |
-| `G08` | 让状态目录里的 `operations/` 不可写，然后运行写命令样例和一次读取 | 每个写操作都返回 `E_IO`，没有写入；读取照常 | DCLI-059, DSEC-033 |
+| `G08` | 让状态目录里的 `operations/` 不可写，然后运行写命令样例和一次读取 | 每个写操作都返回 `E_IO`，没有写入；读取照常 | DCLI-059 |
 | `G09` | 不带 `--dangerous` 确认每个危险级命令的令牌，再带上它确认 | 第一次退出码 5，没有写入；之后同一令牌可以执行写入 | DCLI-014, DCLI-051, DCLI-052, DCLI-053, DSEC-003 |
 | `G10` | 在预演和确认之间修改授权范围文件的 ID，或在 ID 不变时修改它的内容；另外，软件的预览变为不能执行，或列出的修改变了 | `E_CONFLICT`，`scope_changed`、`blocked` 或 `preview_changed`；没有写入 | DCLI-056, DSEC-015 |
 | `R01` | 校验 `reference`（索引）、`reference --command` 和 `reference --all --output` | 结构有效；索引不超过 8000 个字符，单条命令不超过 6000 个字符；每条命令都按模式写明确认级别；每个示例都能解析 | DCLI-030, DCLI-031, DCLI-051, DCLI-201 |
@@ -155,13 +155,13 @@
 | `D11` | `jobs` | 取消长任务，包括实例忙的时候；另外，任务结束时产出读回成功、读不回、或只完成一部分 | 先报告 `cancel_requested`；软件仍报告任务在运行时，`job get` 不报告它已取消；软件确认已停止后，任务的 `state` 才变为 `cancelled`；`job get` 给出由回执推导的 `ok` 和 `code` | DCLI-065, DCLI-220, DCLI-221, DSEC-018 |
 | `D12` | `host_component` | 宿主组件的磁盘版本与已加载版本不一致：在调用之前，或在预演和确认之间 | `doctor` 的 `plugin` 检查失败；写命令被拒绝，返回 `E_HUMAN_REQUIRED`，`action` 为 `restart_application` | DCLI-240, DSEC-053 |
 | `D13` | `always` | 给领域命令的物理量参数传不带单位的数；另外，给 `job get --wait` 传不带单位的数 | `E_USAGE`，`problem` 列出可用的单位 | DCLI-026, DCLI-082 |
-| `D14` | `physical` | 物理动作没有带 `--dangerous`，或授权范围没有允许 `physical` | 被拒绝；什么都没派发 | DSEC-014, DSEC-060 |
+| `D14` | `physical` | 物理动作没有带 `--dangerous`，或授权范围没有允许 `physical` | 被拒绝；什么都没派发 | DSEC-014 |
 | `D15` | `device` | 使用模拟设备 | 设备对象和在它上面运行的每条命令的结果都带 `simulated: true` | DCLI-230, DSEC-062 |
 | `D16` | `session` | 会话模式下直接执行一次修改 | 一次调用完成，有操作记录、读回和完整回执；没有授权范围时和其他写操作一样被拒绝 | DCLI-050, DCLI-052, DSEC-015 |
 | `D17` | `direct_writes` | 授权范围把 `confirm` 设为 `always` | 不带参数开关运行直接执行级的命令，返回 `E_CONFIRMATION_REQUIRED`，附预览和令牌，不执行 | DCLI-052, DSEC-013 |
 | `D18` | `session` | 保存之前，人在软件里手动改过文档 | `doc save` 的预览同时列出本工具的修改（`origin: tool`）和外来的修改（`origin: external`） | DCLI-058, DCLI-277 |
-| `D19` | `always` | 登记一条非飞书链接；再在没有授权范围文件时登记一条飞书链接并读取 | 前者返回 `E_VALIDATION`，什么都不登记。后者需要两步确认，但不需要授权范围；`knowledge get` 返回链接和读取工具；链接和说明列入 `meta.untrusted`。全程不发出网络请求 | DSEC-021, DSEC-041, DSEC-042, DSKL-102, DSKL-104, DSKL-105, DSKL-107, DSKL-110, DSKL-122, DSKL-123 |
-| `D20` | `host_component` | 宿主组件的协议主版本比 CLI 新或旧 | 握手失败，`E_PROTOCOL`；不发出任何修改 | DCLI-273, DCLI-280, DSEC-054 |
+| `D19` | `always` | 登记一条非飞书链接；再在没有授权范围文件时登记一条飞书链接并读取 | 前者返回 `E_VALIDATION`，什么都不登记。后者需要两步确认，但不需要授权范围；`knowledge get` 返回链接和读取工具；链接和说明列入 `meta.untrusted`。全程不发出网络请求 | DSEC-021, DSEC-041, DSKL-102, DSKL-104, DSKL-105, DSKL-107, DSKL-110, DSKL-122, DSKL-123 |
+| `D20` | `host_component` | 宿主组件的协议主版本比 CLI 新或旧 | 握手失败，`E_PROTOCOL`；不发出任何修改 | DCLI-273, DCLI-280 |
 | `D21` | `host_component` | 宿主在回复之前关闭了连接 | 写操作：记为结果未知，目标保持锁定。读操作：`E_BUSY`，会话报告为 `unresponsive` | DCLI-063, DCLI-204, DCLI-275, DCLI-278 |
 | `D22` | `session` | 两个实例中有一个不回应 | `session list` 返回两个实例，对不回应的那个最多等 2 秒，它的 `state` 为 `unresponsive` | DCLI-204, DCLI-205 |
 | `D23` | `device` | 中止命令以外的命令作用于设备时，设备处于 `emergency_stop` 或 `fault`：在调用之前、在预演和确认之间、或在确认的过程中 | `E_HUMAN_REQUIRED`，`action` 为 `confirm_on_device`；`dispatch_state` 为 `not_started`；什么都没派发；设备恢复后，`resume` 命令可以执行写入 | DCLI-055, DCLI-230, DSEC-061 |

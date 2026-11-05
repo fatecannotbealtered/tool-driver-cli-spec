@@ -509,7 +509,7 @@ Check: 🤖 `check_project` compares the contract's hash, regenerates `commands.
 
 ### DREPO-032 Runtime copy
 
-The driver runtime MUST sit in `<pkg>/_driver/`, unchanged. `<pkg>/_driver/MANIFEST.json` MUST record the specification release the runtime came from and the SHA-256 hash of every runtime file. A tool MUST NOT change runtime files or reimplement what the runtime does (DCLI-261).
+The driver runtime MUST sit in `<pkg>/_driver/`, unchanged. `<pkg>/_driver/MANIFEST.json` MUST record the specification release the runtime came from and the SHA-256 hash of every runtime file. A tool MUST NOT change runtime files or reimplement anything the runtime provides, that is, anything listed for the runtime in the Runtime and Tool Responsibilities table of a specification.
 
 Why: Every tool then runs the same tested code for envelopes, writes and update, and a change to it shows up as a hash mismatch.
 Check: 🤖 `check_project` checks every file against `MANIFEST.json`.
