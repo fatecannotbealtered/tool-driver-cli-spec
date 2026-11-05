@@ -1,6 +1,5 @@
 {
   "ok": false,
-  "schema_version": "1.0",
   "error": {
     "code": "E_BUSY",
     "message": "KiCad is running a design rule check; nothing was sent.",
@@ -10,8 +9,5 @@
       "next_action": "Wait 5 s, then run the same command again.",
       "retry_after_ms": 5000
     }
-  },
-  "meta": {
-    "duration_ms": 120
   }
 }

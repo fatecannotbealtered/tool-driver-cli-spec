@@ -379,11 +379,6 @@
       "revision": "sha256:4be1c0f2",
       "dirty": false
     },
-    "inputs": {
-      "doc": "D:/proj/board.kicad_pcb",
-      "name": "GND",
-      "width": "0.5mm"
-    },
     "can_apply": true
   },
   "confirm_token": "tok_71c2d9e05a4b3f18",

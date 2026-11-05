@@ -113,18 +113,18 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-003 Envelope keys
 
-A success envelope MUST have exactly the keys `ok`, `schema_version`, `data` and `meta`. An error envelope MUST have exactly the keys `ok`, `schema_version`, `error` and `meta`. A failed command MUST NOT return `data`. `schema_version` MUST be the major and minor version of this specification, as a string: `"1.0"` for every 1.0.x version.
+A success envelope MUST have the keys `ok` and `data`, and an error envelope the keys `ok` and `error`; both carry `meta` only when it holds something (DCLI-004), and no other key. A failed command MUST NOT return `data`.
 
 A success:
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"},"meta":{"duration_ms":38}}
+{"ok":true,"data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"}}
 ```
 
 An error:
 
 ```json
-{"ok":false,"schema_version":"1.0","error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}},"meta":{"duration_ms":120}}
+{"ok":false,"error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}}}
 ```
 
 Why: Fixed keys let the Agent check `ok` first and then read one known place for the result or the error.
@@ -132,15 +132,14 @@ Check: 🤖 General conformance test R04.
 
 ### DCLI-004 Meta
 
-`meta` MUST hold only these keys:
+`meta` MUST hold only these keys, and is left out when both are:
 
-- `duration_ms`: present in every envelope; the run time in whole milliseconds.
 - `notices`: a list of `{type, severity, message}`, where `severity` is `info` or `warning`. The update notice (DCLI-079) is one example. Omitted when empty.
 - `untrusted`: a list of JSON paths in the envelope that hold untrusted content (DSEC-021). Omitted when empty.
 
 `untrusted` MUST also list every text the runtime writes that embeds an untrusted value, such as a `message`, the `action` or a `label` of a preview, or a generated command (DCLI-011) that contains a name taken from a document.
 
-Why: The Agent finds timing, notices and untrusted markers in the same place in every tool, and a document's text cannot slip in through a sentence the tool wrote.
+Why: The Agent finds notices and untrusted markers in the same place in every tool, and a document's text cannot slip in through a sentence the tool wrote.
 Check: 🤖 General conformance test R04.
 
 ### DCLI-005 Names and values
@@ -646,7 +645,6 @@ Every write builds a preview, in the direct tier too, where the runtime keeps it
 | `changes_truncated` | `true` when there are more changes than `changes` holds |
 | `session` | `{id, generation}` |
 | `document` | `{id, revision, dirty}` |
-| `inputs` | Every input, echoed back; secrets show as `***` and files as `{sha256, bytes}` |
 | `can_apply` | Whether the operation can run |
 | `blocked_by` | When it cannot run, the reasons |
 
@@ -794,7 +792,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 The five dimensions MUST be reported separately and MUST NOT be merged into one success flag.
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}}}
 ```
 
 Why: Ran, changed, delivered, saved and verified are different facts, and the Agent must report each one truthfully.
@@ -1063,7 +1061,7 @@ Check: 🤖 Runtime unit tests (unit conversion).
 
 ### DCLI-081 Unit suffixes in output
 
-An output key for a physical quantity MUST carry the unit suffix from DCLI-080, and its value MUST be a number in the standard unit, such as `x_mm: 12.5`. The timing fields of the envelope and the host protocol (`duration_ms`, `retry_after_ms`, `deadline_ms`) are in milliseconds and are not domain quantities.
+An output key for a physical quantity MUST carry the unit suffix from DCLI-080, and its value MUST be a number in the standard unit, such as `x_mm: 12.5`. The timing fields of the error details and the host protocol (`retry_after_ms`, `deadline_ms`) are in milliseconds and are not domain quantities.
 
 Why: The unit is visible in the key, so the Agent cannot misread a value.
 Check: 👀 Review of the output schemas in `reference`.

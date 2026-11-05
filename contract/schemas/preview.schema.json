@@ -102,7 +102,7 @@
     },
     "preview": {
       "type": "object",
-      "required": ["operation_id", "command", "action", "effects", "tier", "summary", "changes", "inputs", "can_apply"],
+      "required": ["operation_id", "command", "action", "effects", "tier", "summary", "changes", "can_apply"],
       "additionalProperties": false,
       "properties": {
         "operation_id": {"$ref": "#/$defs/operation_id"},
@@ -116,7 +116,6 @@
         "changes_truncated": {"type": "boolean"},
         "session": {"$ref": "#/$defs/session_ref"},
         "document": {"$ref": "#/$defs/document_ref"},
-        "inputs": {"type": "object"},
         "can_apply": {"type": "boolean"},
         "blocked_by": {"type": "array", "items": {"type": "string"}}
       },

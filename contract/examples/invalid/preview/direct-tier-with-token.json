@@ -38,11 +38,6 @@
       "revision": "rev-7",
       "dirty": true
     },
-    "inputs": {
-      "id": "R1",
-      "x": "12.5mm",
-      "y": "30mm"
-    },
     "can_apply": true
   },
   "confirm_token": "tok_1",

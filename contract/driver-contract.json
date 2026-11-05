@@ -78,9 +78,9 @@
     }
   ],
   "envelope": {
-    "success_keys": ["ok", "schema_version", "data", "meta"],
-    "error_keys": ["ok", "schema_version", "error", "meta"],
-    "meta_keys": ["duration_ms", "notices", "untrusted"],
+    "success_keys": ["ok", "data"],
+    "error_keys": ["ok", "error"],
+    "meta_keys": ["notices", "untrusted"],
     "notice_keys": ["type", "severity", "message"],
     "notice_severities": ["info", "warning"],
     "error_keys_inner": ["code", "message", "retryable", "details"],
@@ -240,7 +240,6 @@
       "changes_truncated",
       "session",
       "document",
-      "inputs",
       "can_apply",
       "blocked_by"
     ],
@@ -248,7 +247,6 @@
     "change_keys": ["target", "field", "before", "after", "origin"],
     "change_origins": ["tool", "external"],
     "masked_value": "***",
-    "file_input_keys": ["sha256", "bytes"],
     "max_changes": 50
   },
   "confirm_token": {
@@ -660,7 +658,7 @@
     {"quantity": "volume", "unit": "mm3", "suffix": "_mm3", "accepts": ["mm3", "cm3", "l", "m3"]},
     {"quantity": "ratio", "unit": "%", "suffix": "_pct", "accepts": ["%"]}
   ],
-  "timing_fields": ["duration_ms", "retry_after_ms", "deadline_ms"],
+  "timing_fields": ["retry_after_ms", "deadline_ms"],
   "scope_file": {
     "env": "<PREFIX>_SCOPE_FILE",
     "default": "<state_dir>/scope.json",

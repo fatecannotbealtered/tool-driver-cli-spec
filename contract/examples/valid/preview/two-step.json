@@ -52,10 +52,6 @@
       "revision": "rev-8",
       "dirty": true
     },
-    "inputs": {
-      "session": "kicad-1234",
-      "doc": "doc_1"
-    },
     "can_apply": true
   },
   "confirm_token": "tok_3f9a7c1e2b8d4a60",

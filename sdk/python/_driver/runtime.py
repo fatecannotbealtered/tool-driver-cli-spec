@@ -43,11 +43,10 @@ class Where:
 
 @dataclass
 class Inputs:
-    """The inputs of a domain command: for the adapter, for the token and for the preview."""
+    """The inputs of a domain command: for the adapter and for the token."""
 
     adapter: dict[str, Any]
     bound: dict[str, Any]
-    echo: dict[str, Any]
     selected: list[str]  # the object IDs selected with --id, --ids or --input items
     batch: bool
     items: list[dict[str, Any]] | None = None
@@ -530,7 +529,6 @@ class Run:
         if command.verb == "update" and not changed:
             raise usage(f"{command.path} changes only the properties given, and none is given.", None)
         bound = dict(adapter)
-        echo = dict(adapter)
         secrets: dict[str, str] = {}
         for flag in flags.values():
             key = self.key(flag)
@@ -539,17 +537,11 @@ class Run:
             if flag.secret:
                 secrets[key] = str(adapter[key])
                 bound[key] = {"secret": True}  # the value is bound by a salted hash in the token (DSEC-040)
-                echo[key] = self.contract["preview"]["masked_value"]
             elif flag.type == "path" and not flag.output:
-                digest = _file_digest(adapter[key], flag.name)
-                bound[key] = {"path": adapter[key], **digest}
-                echo[key] = digest
-            elif flag.type == "json":
-                # A structured value can be long; the preview names it by size and digest (DCLI-008).
-                text = json.dumps(adapter[key], sort_keys=True, separators=(",", ":")).encode("utf-8")
-                echo[key] = {"sha256": hashlib.sha256(text).hexdigest(), "bytes": len(text)}
+                # The token binds the file's content too, so a changed input file needs a new preview.
+                bound[key] = {"path": adapter[key], **_file_digest(adapter[key], flag.name)}
         batch = "ids" in adapter or items is not None
-        return Inputs(adapter, bound, echo, selected, batch, items, secrets)
+        return Inputs(adapter, bound, selected, batch, items, secrets)
 
     def key(self, flag: Any) -> str:
         if flag.name == "--input":

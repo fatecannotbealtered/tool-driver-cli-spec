@@ -54,13 +54,6 @@
     "apply",
     "read_back"
   ],
-  "errors": [
-    "E_AMBIGUOUS",
-    "E_BUSY",
-    "E_HUMAN_REQUIRED",
-    "E_OUTCOME_UNKNOWN",
-    "E_PARTIAL"
-  ],
   "default_fields": [
     "id",
     "x_mm",

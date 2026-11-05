@@ -113,18 +113,18 @@
 
 ### DCLI-003 信封的键
 
-成功信封必须恰好有 `ok`、`schema_version`、`data`、`meta` 四个键；失败信封必须恰好有 `ok`、`schema_version`、`error`、`meta` 四个键。失败时禁止返回 `data`。`schema_version` 必须是由本规范的主版本号和次版本号组成的字符串：所有 1.0.x 版本都是 `"1.0"`。
+成功信封必须有 `ok` 和 `data` 两个键，失败信封必须有 `ok` 和 `error` 两个键；`meta` 只在有内容时出现（DCLI-004），此外没有别的键。失败时禁止返回 `data`。
 
 成功：
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"},"meta":{"duration_ms":38}}
+{"ok":true,"data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"}}
 ```
 
 失败：
 
 ```json
-{"ok":false,"schema_version":"1.0","error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}},"meta":{"duration_ms":120}}
+{"ok":false,"error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}}}
 ```
 
 为什么：键固定后，Agent 先看 `ok`，再到一个确定的位置读结果或错误。
@@ -132,15 +132,14 @@
 
 ### DCLI-004 meta
 
-`meta` 必须只有以下三个键：
+`meta` 必须只有以下两个键，两个都没有时整个省略：
 
-- `duration_ms`：每个信封都有；运行耗时，整数毫秒。
 - `notices`：提示列表，每条为 `{type, severity, message}`，`severity` 取 `info` 或 `warning`。更新提示（DCLI-079）就是一例。为空时省略。
 - `untrusted`：信封中存放不可信内容的 JSON 路径列表（DSEC-021）。为空时省略。
 
 运行时自己写的文字里嵌有不可信的值时，`untrusted` 也必须列出它，比如 `message`、预览的 `action` 或 `label`，或者含有取自文档的名字的生成命令（DCLI-011）。
 
-为什么：在每个工具里，Agent 都在同一个位置找到耗时、提示和不可信标记；文档里的文字也没法借工具写的句子混进来。
+为什么：在每个工具里，Agent 都在同一个位置找到提示和不可信标记；文档里的文字也没法借工具写的句子混进来。
 检查：🤖 通用一致性测试 R04。
 
 ### DCLI-005 命名与取值
@@ -646,7 +645,6 @@
 | `changes_truncated` | 改动多于 `changes` 所列时为 `true` |
 | `session` | `{id, generation}` |
 | `document` | `{id, revision, dirty}` |
-| `inputs` | 回显全部输入；机密显示为 `***`，文件显示为 `{sha256, bytes}` |
 | `can_apply` | 能不能执行 |
 | `blocked_by` | 不能执行时的原因 |
 
@@ -794,7 +792,7 @@
 五个维度必须分开报告，禁止合并成一个成功标记。
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}}}
 ```
 
 为什么：执行了、改了、送达了、存了、核实了是不同的事实，Agent 必须逐一如实报告。
@@ -1063,7 +1061,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-081 输出里的单位后缀
 
-物理量的输出键名必须带 DCLI-080 规定的单位后缀，值必须是标准单位下的数，如 `x_mm: 12.5`。信封和宿主协议里的计时字段（`duration_ms`、`retry_after_ms`、`deadline_ms`）以毫秒为单位，不属于领域里的物理量。
+物理量的输出键名必须带 DCLI-080 规定的单位后缀，值必须是标准单位下的数，如 `x_mm: 12.5`。错误详情和宿主协议里的计时字段（`retry_after_ms`、`deadline_ms`）以毫秒为单位，不属于领域里的物理量。
 
 为什么：单位写在键名里，Agent 不会读错数值。
 检查：👀 评审 `reference` 里的输出 Schema。

@@ -318,7 +318,7 @@ Check: 👀 Review of the test setup.
 
 ### DSEC-040 Secrets
 
-Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is echoed, as in the `inputs` of a preview (DCLI-054), a secret MUST be shown as `***`. The tool declares which parameters are secrets with `secret: true` when it registers its commands (DCLI-029); the runtime masks them.
+Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is shown, as in a generated command (DCLI-011) or the request kept in an operation record, a secret MUST be shown as `***` or `<secret>`. The tool declares which parameters are secrets with `secret: true` when it registers its commands (DCLI-029); the runtime masks them.
 
 Why: Output, records and logs are read by Agents and kept on disk; a secret there leaks to every later reader.
 Check: 🤖 Runtime unit tests; 👀 review of the parameters declared as secrets.

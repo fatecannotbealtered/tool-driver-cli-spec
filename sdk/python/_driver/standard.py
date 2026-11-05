@@ -636,7 +636,6 @@ class SessionOpen(_Lifecycle):
         self.where = Where("session")
         path, kind = self.call.values.get("--doc"), self.call.values.get("--kind")
         self.bound = {"inputs": {"path": path, "kind": kind}}
-        self.echo = {k: v for k, v in (("path", path), ("kind", kind)) if v}
         self.action = f"Start a new instance of {self.run.tool.application}" + (f" for {kind} documents" if kind else "") + (
             f" and open {path}." if path else ".")
 
@@ -665,7 +664,6 @@ class SessionClose(_Lifecycle):
         session = run.session(self.call.values.get("--session"))
         self.where = Where("session", session=session)
         self.bound = {"inputs": {"discard": bool(self.call.values.get("--discard"))}}
-        self.echo = dict(self.bound["inputs"])
         if not session.get("owned"):
             self.conditions.append("close_unowned_session")
         # dirty null means the application cannot tell; such a document may hold unsaved work (DCLI-210).
@@ -712,7 +710,6 @@ class _OnDocument(_Lifecycle):
         if self.where.document is None:
             raise DriverError("E_NOT_FOUND", "No document matches; name it with --doc.")
         self.bound = {"inputs": self.inputs(), "document": self.where.document["id"]}
-        self.echo = self.bound["inputs"]
         self.gates(saving=self.saving)
 
     def inputs(self) -> dict[str, Any]:
@@ -758,13 +755,11 @@ class DocCreate(_Lifecycle):
         if self.exists:
             self.conditions.append("target_exists")
         inputs: dict[str, Any] = {"kind": kind, "path": self.path}
-        self.echo = {k: v for k, v in (("kind", kind), ("path", self.path)) if v}
         if self.template:
             from .runtime import _file_digest
 
             digest = _file_digest(self.template, "--template")
             inputs["template"] = {"path": self.template, **digest}
-            self.echo["template"] = digest
         self.bound = {"inputs": inputs}
         if self.where.session is not None:
             run.gate_session(self.where.session)
@@ -820,7 +815,6 @@ class DocOpen(_Lifecycle):
         self.where = Where("session", session=session)
         self.path = self.call.values["--doc"]
         self.bound = {"inputs": {"path": self.path}}
-        self.echo = {"path": self.path}
         run.gate_session(session)
         self.action = f"Open {self.path} in session {session['id']}."
 
@@ -974,7 +968,7 @@ class DocSaveAs(_OnDocument):
         self.exists = os.path.exists(self.out)
         if self.exists:
             self.conditions.append("target_exists")
-        self.bound["inputs"] = self.echo = {"output": self.out}
+        self.bound["inputs"] = {"output": self.out}
         self.action = f"Save document {self.where.document['id']} as {self.out}."
 
     def targets(self) -> list[dict[str, Any]]:
@@ -1001,7 +995,7 @@ class DocClose(_OnDocument):
         super().prepare()
         doc = self.where.document
         discard = bool(self.call.values.get("--discard"))
-        self.bound["inputs"] = self.echo = {"discard": discard}
+        self.bound["inputs"] = {"discard": discard}
         if discard:
             self.conditions.append("discard_unsaved_changes")
         elif doc.get("dirty") is not False:
@@ -1124,7 +1118,6 @@ class JobCancel(_Lifecycle):
         if device is not None:
             run.gate_device(device, halt=True)
         self.bound = {"inputs": {"job": job["id"]}}
-        self.echo = {"job": job["id"]}
         self.action = f"Ask the application to cancel job {job['id']}."
 
     def targets(self) -> list[dict[str, Any]]:
@@ -1162,7 +1155,6 @@ class PluginInstall(_Lifecycle):
         manifest = self.check_manifest()
         self.version = (manifest or {}).get("version")
         self.bound = {"inputs": {"version": self.version}}
-        self.echo = {"version": self.version} if self.version else {}
         self.action = f"Install the host component{' ' + self.version if self.version else ''}; running instances keep the version they loaded."
 
     def check_manifest(self) -> dict[str, Any] | None:
@@ -1208,7 +1200,7 @@ class PluginInstall(_Lifecycle):
 class PluginRemove(PluginInstall):
     def prepare(self) -> None:
         self.where = Where(self.run.tool.modes[0])
-        self.bound, self.echo = {"inputs": {}}, {}
+        self.bound = {"inputs": {}}
         self.action = "Remove the host component; running instances keep the version they loaded."
 
     def apply(self, operation_id: str, child: int | None = None) -> dict[str, Any]:

@@ -232,7 +232,7 @@ def d05(subject: Subject) -> None:
         argv = sample.prepare(case)
         case.control("set_session", session="fake-1", state="blocked", title="Conformance dialog")
         out = call(case, sample, argv=argv)
-        check("$.error.details.title" in out.envelope["meta"].get("untrusted", []), "the dialog title is not marked untrusted")
+        check("$.error.details.title" in out.envelope.get("meta", {}).get("untrusted", []), "the dialog title is not marked untrusted")
         check(sample.path in out.details.get("resume", ""), f"resume does not run the call again: {out.details.get('resume')!r}")
     target = _session_target(subject)
     method = "save_doc" if target.path == "doc save" else "apply"
@@ -592,7 +592,7 @@ def d19(subject: Subject) -> None:
             got = case.run("knowledge", "get", "--id", "conformance-team", env=env)
             check(got.ok and got.data["source"] == "team" and got.data["reader"] == "lark-cli", f"knowledge get: {got.describe()}")
             check(got.data["entry"]["url"] == "https://conformance.feishu.cn/wiki/abc", "the link was not kept as given")
-            marked = got.envelope["meta"].get("untrusted", [])
+            marked = got.envelope.get("meta", {}).get("untrusted", [])
             check("$.data.entry.url" in marked and "$.data.entry.about" in marked, f"meta.untrusted is {marked}")
         check(recorder.count == 0, f"{recorder.count} network requests were made")
     finally:

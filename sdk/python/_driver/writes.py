@@ -50,7 +50,6 @@ class WriteSpec:
         self.call = run.call
         self.where = Where("file")
         self.bound: dict[str, Any] = {}
-        self.echo: dict[str, Any] = {}
         self.conditions: list[str] = []
         self.selected: list[str] = []
         self.batch = False
@@ -156,7 +155,6 @@ class DomainWrite(WriteSpec):
         self.secrets = self.inputs.secrets or {}
         self.bound = {"inputs": self.inputs.bound, "document": (self.where.document or {}).get("id"),
                       "device": (self.where.device or {}).get("id")}
-        self.echo = self.inputs.echo
         if "artifact" in self.command.effects and any(os.path.exists(p) for p in self.outputs()):
             self.conditions.append("target_exists")
         if self.command.long and self.batch:
@@ -581,7 +579,6 @@ class Engine:
             preview["session"] = spec.session_ref()
         if spec.document_ref():
             preview["document"] = spec.document_ref()
-        preview["inputs"] = spec.echo
         preview["can_apply"] = bool(pv.get("can_apply", True))
         if not preview["can_apply"]:
             preview["blocked_by"] = list(pv.get("blocked_by", [])) or ["the application gave no reason"]

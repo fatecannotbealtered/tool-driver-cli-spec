@@ -409,8 +409,7 @@ class ReviewFixes(unittest.TestCase):
             out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1",
                            "--pins", '[{"pin": "1"}, {"pin": "2"}]', "--dry-run")
             self.assertTrue(out.ok, out.stdout[:400])
-            echoed = out.data["preview"]["inputs"]["pins"]
-            self.assertEqual(set(echoed), {"sha256", "bytes"}, out.stdout[:400])
+            self.assertNotIn("inputs", out.data["preview"], out.stdout[:400])
             wrong = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--pins", '{"pin": "1"}')
             self.assertEqual(wrong.code, "E_USAGE", wrong.stdout[:400])
 

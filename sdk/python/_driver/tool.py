@@ -100,7 +100,7 @@ class Tool:
         """The watchdog of an in-process adapter call: report what is known, then end the
         process, because the call on the main thread cannot be interrupted (DCLI-278)."""
         error = _hang_error(run, cap, deadline_ms)
-        env_out = self.envelopes.failure(error, run.notices, int((time.monotonic() - started) * 1000))
+        env_out = self.envelopes.failure(error, run.notices)
         text = (render_text(env_out) if fmt == "text" else dumps(env_out, pretty)) + "\n"
         try:
             if hasattr(out, "buffer"):
@@ -170,18 +170,17 @@ class Tool:
                 if call is not None and call.command.path not in ("update", "doctor"):
                     builtin.update_notice(run)
                 run.close()
-        duration = int((time.monotonic() - started) * 1000)
         if error is None:
             assert result is not None
             if fmt == "raw" and result.raw is not None:
                 out.buffer.write(result.raw) if hasattr(out, "buffer") else out.write(result.raw.decode("utf-8", "replace"))
                 return 0
             try:
-                env_out = self.envelopes.success(result, notices, duration)
+                env_out = self.envelopes.success(result, notices)
             except DriverError as exc:
-                env_out = self.envelopes.failure(exc, notices, duration)
+                env_out = self.envelopes.failure(exc, notices)
         else:
-            env_out = self.envelopes.failure(error, notices, duration)
+            env_out = self.envelopes.failure(error, notices)
         text = (render_text(env_out) if fmt == "text" else dumps(env_out, pretty)) + "\n"
         if hasattr(out, "buffer"):
             out.flush()
