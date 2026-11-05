@@ -1,6 +1,5 @@
 {
   "ok": true,
-  "schema_version": "1.0",
   "data": {
     "id": "doc_1",
     "path": "D:/proj/board.kicad_pcb",
@@ -9,8 +8,5 @@
     "dirty": true,
     "readonly": false,
     "disk": "in_sync"
-  },
-  "meta": {
-    "duration_ms": 38
   }
 }

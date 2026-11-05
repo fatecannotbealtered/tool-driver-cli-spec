@@ -36,6 +36,7 @@ LANG = {
         "checklist": "Checklist",
         "why": "Why: ",
         "check": "Check: ",
+        "removed": "Removed: ",
         "normative": re.compile(r"\b(MUST|SHOULD|MAY)\b"),
         "switch": "English | [中文]({name}_zh.md)",
         "version": "> Version {version} · Clauses {first} to {last}",
@@ -48,6 +49,7 @@ LANG = {
         "checklist": "检查清单",
         "why": "为什么：",
         "check": "检查：",
+        "removed": "已移除：",
         "normative": re.compile(r"(必须|禁止|应该|不应该|可以)"),
         "switch": "[English]({name}.md) | 中文",
         "version": "> 版本 {version} · 条款 {first} 至 {last}",
@@ -425,6 +427,11 @@ def check_spec_file(spec: SpecFile, doc: dict, version: str, contract: dict, rep
             report.add(at, f"{clause.id} must not sit in section '{clause.section}'")
 
         text = [ln for ln in clause.body if ln.strip()]
+        if text and text[0].startswith(lang["removed"]):
+            # A removed clause keeps its heading and one line that says where its rule went (AGENTS.md).
+            if len(text) != 1 or not CLAUSE_REF.search(text[0]):
+                report.add(at, f"{clause.id} is removed: its body is one '{lang['removed'].strip()}' line that names where its rule went")
+            continue
         why = [ln for ln in text if ln.startswith(lang["why"])]
         check = [ln for ln in text if ln.startswith(lang["check"])]
         if len(why) != 1 or len(check) != 1 or text[-2:] != [why[0] if why else None, check[0] if check else None]:
@@ -659,7 +666,6 @@ SCHEMA_ENUMS = [
     ("receipt.schema.json", "/$defs/outcome/properties/delivery/enum", lambda c: c["receipt"]["dimensions"]["delivery"]),
     ("receipt.schema.json", "/$defs/outcome/properties/persistence/enum", lambda c: c["receipt"]["dimensions"]["persistence"]),
     ("receipt.schema.json", "/$defs/outcome/properties/verification/enum", lambda c: c["receipt"]["dimensions"]["verification"]),
-    ("receipt.schema.json", "/$defs/receipt/properties/failed_stage/enum", lambda c: c["receipt"]["failed_stages"]),
     ("batch.schema.json", "/properties/summary/required", lambda c: c["batch"]["summary_keys"]),
     ("batch.schema.json", "/properties/items/items/properties", lambda c: c["batch"]["item_keys"]),
     ("objects.schema.json", "/$defs/session/required", lambda c: c["objects"]["session"]),
@@ -689,10 +695,8 @@ SCHEMA_ENUMS = [
     ("knowledge.schema.json", "/$defs/kind/enum", lambda c: c["knowledge"]["kinds"]),
     ("knowledge.schema.json", "/$defs/builtin_front_matter/required", lambda c: c["knowledge"]["builtin_fields"]),
     ("knowledge.schema.json", "/$defs/builtin_front_matter/properties", lambda c: c["knowledge"]["builtin_fields"] + c["knowledge"]["rule_fields"] + c["knowledge"]["resource_fields"]),
-    ("knowledge.schema.json", "/$defs/builtin_front_matter/properties/lang/enum", lambda c: c["knowledge"]["langs"]),
     ("knowledge.schema.json", "/$defs/builtin_front_matter/properties/severity/enum", lambda c: c["knowledge"]["severities"]),
     ("knowledge.schema.json", "/$defs/team_entry/properties", lambda c: c["knowledge"]["team_fields"]),
-    ("knowledge.schema.json", "/$defs/team_entry/properties/provider/const", lambda c: [p["provider"] for p in c["knowledge"]["providers"]]),
     ("knowledge.schema.json", "/$defs/get_team/properties/reader/const", lambda c: [p["reader"] for p in c["knowledge"]["providers"]]),
     ("host-protocol.schema.json", "/$defs/method/enum", lambda c: c["host_protocol"]["methods"]),
     ("host-protocol.schema.json", "/$defs/discovery_file/required", lambda c: c["host_protocol"]["discovery_keys"]),

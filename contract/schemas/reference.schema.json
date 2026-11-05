@@ -19,13 +19,11 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["path", "summary", "effects", "tier"],
+            "required": ["path", "summary"],
             "additionalProperties": false,
             "properties": {
               "path": {"$ref": "#/$defs/command/properties/path"},
-              "summary": {"type": "string"},
-              "effects": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/effect"}},
-              "tier": {"$ref": "#/$defs/tier_value"}
+              "summary": {"type": "string"}
             }
           }
         }
@@ -97,7 +95,7 @@
     },
     "command": {
       "type": "object",
-      "required": ["path", "summary", "flags", "output_schema", "examples", "effects", "tier", "maturity", "evidence", "modes", "capabilities", "errors"],
+      "required": ["path", "summary", "flags", "output_schema", "examples", "effects", "tier", "maturity", "modes"],
       "additionalProperties": false,
       "properties": {
         "path": {"type": "string", "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"},
@@ -127,24 +125,11 @@
         "long": {"const": true},
         "verify_after_save": {"const": true},
         "maturity": {"enum": ["draft", "verified", "stable"]},
-        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
+        "evidence": {"description": "Only in the file of reference --all.", "type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
         "modes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mode"}},
-        "capabilities": {"type": "array", "items": {"type": "string"}},
-        "errors": {"type": "array", "items": {"$ref": "error.schema.json#/properties/code"}},
+        "capabilities": {"description": "Only in the file of reference --all.", "type": "array", "items": {"type": "string"}},
         "default_fields": {"type": "array", "items": {"type": "string"}},
         "related_knowledge": {"type": "array", "items": {"type": "string"}},
-        "departures": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["clause", "summary"],
-            "additionalProperties": false,
-            "properties": {
-              "clause": {"type": "string", "pattern": "^(DCLI|DSEC|DSKL|DVER|DREPO)-[0-9]{3}$"},
-              "summary": {"type": "string", "minLength": 1}
-            }
-          }
-        },
         "formats": {"type": "array", "items": {"enum": ["json", "text", "raw"]}}
       }
     }

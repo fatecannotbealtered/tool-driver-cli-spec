@@ -22,8 +22,6 @@ COMMANDS = [
             {"name": "--y", "type": "quantity", "quantity": "length", "summary": "Y position.", "coordinate_system": BOARD},
         ],
         "untrusted_fields": ["value"],
-        "adapter_capabilities": ["read", "preview", "apply", "read_back"],
-        "survey_ids": ["CAP-004"],
         "irreversible": False,
         "halt": False,
         "tolerances": {"x_mm": 0.001, "y_mm": 0.001},
@@ -40,10 +38,11 @@ COMMANDS = [
 
 - `path` is `noun verb`. The verb comes from the fixed list of DCLI-022; the noun is the application's own term, written in full, and never a reserved name (DCLI-023, DCLI-024).
 - Do not declare `--session`, `--doc`, `--device` or `--job`; the runtime adds the target flags for each mode (DCLI-027). Other objects are selected with `--id` or `--ids`. A shared function uses the shared flag of DCLI-026. Never add a global flag (DCLI-025).
-- Every physical value is a `quantity` flag with its quantity from the units table; the user writes the unit in the value, such as `12.5mm`, and output fields carry the unit in their name, such as `x_mm` (DCLI-080 to DCLI-085).
+- Every physical value is a `quantity` flag with its quantity from the units table; the user writes the unit in the value, such as `12.5mm`, and output fields carry the unit in their name, such as `x_mm` (DCLI-080 to DCLI-084).
 - Declare every effect (DCLI-051). The runtime derives the confirmation tier; you never set it (DCLI-052). Mark a change the application cannot take back `irreversible`, and a `stop` command `halt` (DSEC-018).
 - List in `untrusted_fields` every output field that holds text from the application or its files (DSEC-021). Mark a flag that carries a secret with `secret: true` (DSEC-040).
-- `survey_ids` names the capability IDs the command provides; set their disposition to `provided` in both survey files (DREPO-061).
+- Set the disposition of the capabilities the command provides to `provided` in both survey files (DREPO-060).
+- Register `jobs: true` only for a write the application itself may run as a long job; the runtime then follows the job with `job_status` (DCLI-065).
 - Start every command at `draft` with no evidence; raise it only as DVER-040 allows.
 
 Then run `python scripts/spec.py generate`. It writes `contract/commands.json`, the command maps and a first behavior matrix for each command that has none.
@@ -59,7 +58,7 @@ Every domain command, and every standard command whose adapter capabilities the 
 ```
 
 - The `normal` row of a write command is its sample: the general suite runs it against the fake host (DVER-002).
-- Name sessions, documents, devices and output folders only with `{session}`, `{doc}`, `{device}` and `{dir}`.
+- Name sessions, documents, devices and output folders only with `{session}`, `{doc}`, `{device}` and `{dir}`, a job with `{job}`, and a file the command only reads, such as a design description, with `{inputs}`: put it in `tests/inputs/`.
 - A row that applies but cannot happen for this command becomes `"applies": false` with the reason.
 - A row that applies but cannot be caused on demand on the real application, such as `disconnect`, may keep its arguments and add `"unrunnable": "<reason>"`. `normal`, `dialog` and `read_back_mismatch` never may.
 - A complete example is `contract/examples/valid/behavior-matrix/footprint-move.json` in the release.

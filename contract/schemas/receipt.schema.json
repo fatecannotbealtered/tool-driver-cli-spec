@@ -54,16 +54,21 @@
         },
         "session": {"$ref": "preview.schema.json#/$defs/session_ref"},
         "document": {"$ref": "preview.schema.json#/$defs/document_ref"},
-        "failed_stage": {"enum": ["apply", "deliver", "persist", "verify"]},
         "notes": {"type": "array", "items": {"type": "string"}}
       },
       "allOf": [{"$ref": "#/$defs/receipt_optional"}],
       "unevaluatedProperties": false
     },
     "receipt_optional": {
-      "description": "Optional receipt keys outside the fixed list: simulated is true when the result came from a simulated device (DSEC-062).",
+      "description": "Optional receipt keys outside the fixed list: simulated is true when the result came from a simulated device (DSEC-062); more_files counts the produced files left out past receipt.listed_files and gives the command that writes them all (DCLI-061).",
       "properties": {
-        "simulated": {"const": true}
+        "simulated": {"const": true},
+        "more_files": {
+          "type": "object",
+          "required": ["count", "command"],
+          "properties": {"count": {"type": "integer", "minimum": 1}, "command": {"type": "string"}},
+          "additionalProperties": false
+        }
       }
     }
   }

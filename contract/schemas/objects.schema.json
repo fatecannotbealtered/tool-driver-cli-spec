@@ -29,7 +29,7 @@
         "pid": {"type": "integer", "minimum": 0},
         "owned": {"type": "boolean"},
         "generation": {"type": "integer", "minimum": 0},
-        "state": {"enum": ["starting", "ready", "busy", "unresponsive", "blocked", "lost", "closed"]},
+        "state": {"enum": ["starting", "ready", "busy", "unresponsive", "blocked", "lost", "unreachable", "closed"]},
         "documents": {
           "type": "array",
           "items": {
@@ -51,7 +51,8 @@
           "additionalProperties": false,
           "properties": {
             "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
-            "title": {"type": "string"}
+            "title": {"type": "string"},
+            "knowledge": {"description": "Knowledge entries that tell how to handle this dialog (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"}
           }
         },
         "since_at": {"$ref": "error.schema.json#/$defs/utc"},

@@ -13,7 +13,7 @@ description: >-
   Not for using a driver tool to do work in an application; use that tool's own Skill, such as kicad-cli.
   不负责用驱动工具在软件里干活，那要用该工具自己的 Skill，比如 kicad-cli。
 metadata:
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # build-driver-cli
@@ -41,7 +41,7 @@ Create a virtual environment outside the new project with Python 3.12 or later a
 ## Rules that hold throughout
 
 - The specification decides. Before each step, read the clauses it names. Where a clause fixes a name, value, text, file or flow, use it exactly; never invent a flag, error code, verb, section, label or step. When a table and `contract/driver-contract.json` disagree, the contract wins.
-- Once the project exists, obey its `AGENTS.md`: never edit pinned copies or generated content, never skip or weaken a conformance test. Never reimplement what the driver runtime does (DCLI-261). Fake host results are never evidence (DVER-021); never mark a command above its evidence (DVER-040).
+- Once the project exists, obey its `AGENTS.md`: never edit pinned copies or generated content, never skip or weaken a conformance test. Never reimplement what the driver runtime does (DREPO-032). Fake host results are never evidence (DVER-021); never mark a command above its evidence (DVER-040).
 - The real application runs only on targets a person listed under Authorized Targets in `docs/E2E.md` (DVER-050). You never add a target, never create or change a scope file, and never point `<PREFIX>_SCOPE_FILE` at a file you wrote (DSEC-011). Ask the person.
 - Publishing, tagging and pushing need the person's explicit approval. Work on a branch; never commit secrets, license files or project files the person may not share.
 - Name other tools, such as lark-cli, and follow their own help; never write their commands into the tool, its Skills or its output (DSKL-110).
@@ -70,14 +70,14 @@ Each step names the clauses to read, what to fill, the check and when it is done
 - Read: DREPO-001 to DREPO-004, DREPO-019, DREPO-030 to DREPO-034, DREPO-053.
 - Fill: the person decides `--tool`, `--package` (under an npm scope they own), `--repo` and `--author`. Run `python <spec>/scripts/instantiate.py <new project folder> --tool <tool> --package <package> --application <name> --versions "<range>" --modes <modes>`, adding `--host-component`, `--platforms`, `--repo` and `--author`. In the project, run `git init`, commit the generated files and continue on a branch. Move the survey into `docs/APPLICATION.md` and `docs/APPLICATION_zh.md`. Fill each `{{fill: ...}}` text when its step comes; each says what to write.
 - Check: `python scripts/spec.py check --json`.
-- Done when it lists only DREPO-019 placeholders and the DREPO-061 note that no domain command is registered.
+- Done when it lists only DREPO-019 placeholders and the DCLI-029 note that no domain command is registered.
 
 ### 4 Register commands
 
-- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-064, DCLI-065, DCLI-068, DCLI-080 to DCLI-085, DCLI-212, DREPO-061, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
-- Fill: one registration per command in `<pkg>/commands/__init__.py`, with `survey_ids`; set those capabilities to `provided` in both survey files. Mark work that can take longer than a call `long`, list `doc_kinds` when the application has several kinds of document, set `verify_after_save` when the application shows a change correctly only after a save, use a `json` flag for a structured value such as a pad table, and give each write an output schema that shows what the change made (DCLI-068). New documents come from `doc create`, never a domain command. Then run `python scripts/spec.py generate`.
-- Check: `python -m <pkg> reference` starts and lists each command with its tier; `python scripts/spec.py check` reports nothing but DREPO-019 placeholders. The person reviews the command list: the names, and the effects and `irreversible` marks, which set the confirmation tiers.
-- Done when every `provided` capability has its command, every command traces to the survey, and the person agreed to the list.
+- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-064, DCLI-065, DCLI-068, DCLI-080 to DCLI-084, DCLI-212, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
+- Fill: one registration per command in `<pkg>/commands/__init__.py`; set the capabilities it offers to `provided` in both survey files. Mark work that can take longer than a call `long`, and list in `long_commands` (in `<pkg>/__init__.py`) the standard writes the application takes over a minute for, such as `doc open` of a large project (DCLI-065); list `doc_kinds` when the application has several kinds of document, set `verify_after_save` when the application shows a change correctly only after a save, use a `json` flag for a structured value such as a pad table, and give each write an output schema that shows what the change made (DCLI-068). New documents come from `doc create`, never a domain command. Then run `python scripts/spec.py generate`.
+- Check: `python -m <pkg> reference` starts and lists each command, and `reference --command <path>` shows its tier; `python scripts/spec.py check` reports nothing but DREPO-019 placeholders. The person reviews the command list: the names, and the effects and `irreversible` marks, which set the confirmation tiers.
+- Done when every `provided` capability has its command, every command offers a surveyed capability, and the person agreed to the list.
 
 ### 5 Implement the adapter
 
@@ -120,7 +120,7 @@ Run it before you ask for the release in step 8, and whenever you are asked to r
    ```
 
 3. For each of them, read the clause in `.agent/` and compare it with the project: the files, the registrations, the Skills, the workflows and the output of `python -m <pkg> reference --all --output <file>`.
-4. Report one table with every clause from steps 1 and 3. Name a clause you cannot judge, such as one that needs the real application, with the reason. Clauses about the specification repository or the runtime itself, such as DCLI-263, DVER-011, DVER-022 and DSKL-041, are `n/a`, with the reason.
+4. Report one table with every clause from steps 1 and 3. Name a clause you cannot judge, such as one that needs the real application, with the reason. Clauses about the specification repository or the runtime itself, such as DVER-011, DVER-022 and DSKL-041, are `n/a`, with the reason.
 
 | Clause | Conforms | Evidence | Fix |
 |---|---|---|---|

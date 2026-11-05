@@ -22,6 +22,8 @@ def build() -> Tool:
         root=ROOT, adapter=SampleAdapter, commands=COMMANDS, application="FakeApp", versions=">=1.0 <2",
         modes=["file", "session", "device"], host_component=os.environ.get("SAMPLE_CLI_VARIANT") == "host",
         contract=REPO / "contract" / "driver-contract.json",
+        # Tests list slow standard writes here to run them as long jobs (DCLI-065).
+        long_commands=[c for c in os.environ.get("SAMPLE_CLI_LONG", "").split(",") if c],
     )
 
 

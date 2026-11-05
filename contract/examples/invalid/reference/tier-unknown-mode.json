@@ -41,24 +41,9 @@
     "cloud": "direct"
   },
   "maturity": "verified",
-  "evidence": [
-    "live:docs/evidence/2026-11-01-footprint-move.json"
-  ],
   "modes": [
     "file",
     "session"
-  ],
-  "capabilities": [
-    "preview",
-    "apply",
-    "read_back"
-  ],
-  "errors": [
-    "E_AMBIGUOUS",
-    "E_BUSY",
-    "E_HUMAN_REQUIRED",
-    "E_OUTCOME_UNKNOWN",
-    "E_PARTIAL"
   ],
   "default_fields": [
     "id",

@@ -83,7 +83,7 @@ Device mode has nothing to save: the device acts at once.
 
 ### Long jobs and blocking
 
-Work that takes longer than one call returns a job with a `poll` command: a write in `result.job`, a read in `job`. Run that exact command until the job ends, then report a write job's final receipt, or a read job's `result`. On `E_BUSY`, wait `retry_after_ms` and run the same command again; after 3 retries of the same command, ask the person. On `E_HUMAN_REQUIRED`, pass `action` and the dialog text to the person, and once they are done, run `resume` exactly as given.
+Work that takes longer than one call returns a job with a `poll` command: a write in `result.job`, a read in `job`. `reference` marks such commands `long`, standard ones such as `doc open` included. Run that exact command until the job ends, then report a write job's final receipt and `result`, or a read job's `result`. A session in state `unreachable` runs but cannot be driven: tell the person and ask which instance to use. On `E_BUSY`, wait `retry_after_ms` and run the same command again; after 3 retries of the same command, ask the person. On `E_HUMAN_REQUIRED`, pass `action` and the dialog text to the person, and once they are done, run `resume` exactly as given. When an error lists `details.knowledge`, read that entry first.
 {{#device}}
 
 ### Physical effects

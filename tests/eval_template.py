@@ -39,16 +39,16 @@ PART = {"type": "object", "properties": {"id": {"type": "string"}, "value": {"ty
 
 def command(path: str, summary: str, effects: list[str], modes: list[str], flags: list[dict[str, Any]], example: str,
             **extra: Any) -> dict[str, Any]:
-    writes = effects != ["observe"]
     reg: dict[str, Any] = {
         "path": path, "summary": summary, "effects": effects, "modes": modes, "target_kind": extra.pop("target_kind", "part"),
         "flags": flags, "untrusted_fields": extra.pop("untrusted_fields", []),
-        "adapter_capabilities": extra.pop("capabilities", ["read", "preview", "apply", "read_back"] if writes else ["read"]),
-        "survey_ids": ["CAP-001"], "irreversible": extra.pop("irreversible", False), "halt": extra.pop("halt", False),
+        "irreversible": extra.pop("irreversible", False), "halt": extra.pop("halt", False),
         "tolerances": extra.pop("tolerances", {}), "default_fields": extra.pop("default_fields", []),
         "related_knowledge": extra.pop("related_knowledge", []), "output_schema": extra.pop("output_schema", PART),
         "examples": [f"demo-cli {example}"], "maturity": "draft", "evidence": [],
     }
+    if extra.pop("jobs", False):
+        reg["jobs"] = True
     assert not extra, extra
     return reg
 
@@ -74,7 +74,7 @@ COMMANDS = [
     command("analysis run", "Run the analysis of a document; a long analysis continues as a long job.", ["change"],
             ["session"], [{"name": "--depth", "type": "integer", "summary": "How many passes to run."}],
             "analysis run --doc board.fake --depth 3", target_kind="document",
-            capabilities=["read", "preview", "apply", "read_back", "job_status", "cancel"], output_schema={"type": "object"}),
+            jobs=True, output_schema={"type": "object"}),
     command("axis move", "Move a machine axis to a position.", ["physical"], ["device"],
             [{**ID, "required": True, "summary": "The axis."},
              {"name": "--position", "type": "quantity", "quantity": "length", "summary": "The target position.",
@@ -105,9 +105,6 @@ title: Part positions in FakeApp snap to the placement grid
 kind: guide
 applies_to: [part move, part get]
 tags: [placement, grid]
-lang: en
-based_on: FakeApp manual, chapter Placement
-updated_on: 2026-11-01
 ---
 
 FakeApp keeps every part on its placement grid. The pitch of the placement grid is 0.7366 mm,
@@ -121,9 +118,6 @@ title: The license reminder dialog blocks FakeApp
 kind: troubleshooting
 applies_to: [context]
 tags: [dialog, license]
-lang: en
-based_on: FakeApp manual, chapter Licensing
-updated_on: 2026-11-01
 ---
 
 FakeApp shows a license reminder dialog at start and blocks every command until a person

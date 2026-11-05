@@ -36,19 +36,7 @@
     }
   ],
   "maturity": "verified",
-  "evidence": [
-    "live:docs/evidence/2026-11-01-doc-close.json"
-  ],
   "modes": [
     "session"
-  ],
-  "capabilities": [
-    "close_doc"
-  ],
-  "errors": [
-    "E_NOT_FOUND",
-    "E_BUSY",
-    "E_HUMAN_REQUIRED",
-    "E_CONFLICT"
   ]
 }

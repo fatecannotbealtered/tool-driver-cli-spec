@@ -24,6 +24,9 @@ TOOL = Tool(
     versions="{{versions}}",
     modes={{modes}},
     host_component={{host_component}},
+    # Standard writes that take {{application}} more than a minute, such as "doc open" of a large
+    # project; the runtime runs them as long jobs (DCLI-065, contract jobs.standard_long).
+    long_commands=[],
 {{#host_component}}
     # plugin/manifest.json records the host component's files and methods; `python scripts/spec.py
     # generate` writes all of it but `methods` (DCLI-240).

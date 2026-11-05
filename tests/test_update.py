@@ -536,7 +536,7 @@ class UpdateTest(unittest.TestCase):
     def notices(self):
         out = io.StringIO()
         self.tool.run(["context"], self.env, out)
-        return json.loads(out.getvalue())["meta"].get("notices", [])
+        return json.loads(out.getvalue()).get("meta", {}).get("notices", [])
 
     def test_doctor_reports_a_host_component_older_than_the_bundled_one(self):
         manifest = self.tmp / "plugin" / "manifest.json"

@@ -14,30 +14,15 @@
   "index": [
     {
       "path": "footprint move",
-      "summary": "Move footprints.",
-      "effects": [
-        "change"
-      ],
-      "tier": {
-        "file": "two_step",
-        "session": "direct"
-      }
+      "summary": "Move footprints."
     },
     {
       "path": "doc save",
-      "summary": "Save a document.",
-      "effects": [
-        "persist"
-      ],
-      "tier": "two_step"
+      "summary": "Save a document."
     },
     {
       "path": "doc close",
-      "summary": "Close a document.",
-      "effects": [
-        "lifecycle"
-      ],
-      "tier": "direct"
+      "summary": "Close a document."
     }
   ]
 }

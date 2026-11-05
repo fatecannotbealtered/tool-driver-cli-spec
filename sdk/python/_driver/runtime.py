@@ -4,7 +4,6 @@ document and the device a command acts on (DCLI-201, DCLI-202, DCLI-204, DCLI-21
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import threading
@@ -43,11 +42,10 @@ class Where:
 
 @dataclass
 class Inputs:
-    """The inputs of a domain command: for the adapter, for the token and for the preview."""
+    """The inputs of a domain command: for the adapter and for the token."""
 
     adapter: dict[str, Any]
     bound: dict[str, Any]
-    echo: dict[str, Any]
     selected: list[str]  # the object IDs selected with --id, --ids or --input items
     batch: bool
     items: list[dict[str, Any]] | None = None
@@ -62,6 +60,10 @@ class Run:
         self.env = env
         prefix = tool.prefix
         self.worker = env.get(f"{prefix}_JOB_WORKER")  # set only in the worker of a long job (DCLI-065)
+        # The worker of a long job has the long deadline for every call it makes (DCLI-065).
+        long_ms = int(tool.contract["jobs"]["worker_max_seconds"]) * 1000
+        self.write_deadline_ms = long_ms if self.worker else WRITE_DEADLINE_MS
+        self.read_deadline_ms = long_ms if self.worker else READ_DEADLINE_MS
         state = env.get(f"{prefix}_STATE_DIR") or str(Path.home() / f".{tool.name}")
         self.state = StateDir(state)
         self.records = Records(self.state, self.contract["operation"]["retention_days"], self.contract["operation"]["id_prefix"])
@@ -125,12 +127,12 @@ class Run:
 
     # ------------------------------------------------------------------ adapter calls for reads
 
-    def capability(self, cap: str, request: dict[str, Any], deadline_ms: int = READ_DEADLINE_MS) -> Any:
+    def capability(self, cap: str, request: dict[str, Any], deadline_ms: int | None = None) -> Any:
         session = request.get("session")
         if not self.backend.has(cap, session):
             raise DriverError("E_UNSUPPORTED", f"This tool's adapter has no {cap} capability, so it cannot do this.")
         try:
-            return self.backend.call(cap, request, deadline_ms)
+            return self.backend.call(cap, request, deadline_ms or self.read_deadline_ms)
         except CapabilityError as exc:
             raise self.host_error(exc, "not_started") from None
         except BadReply as exc:
@@ -189,11 +191,11 @@ class Run:
                 extra["title"] = data["title"]
                 untrusted.append("details.title")
         next_action = None
-        ids = data.get("knowledge")
-        if isinstance(ids, list) and ids and all(isinstance(i, str) and re.fullmatch(self.contract["knowledge"]["id_pattern"], i) for i in ids):
+        ids = self.knowledge_ids(data)
+        if ids:
             # An error the adapter recognized points to the entries that tell how to handle it (DSKL-124).
-            extra["knowledge"] = list(ids)
-            next_action = f"Read `{self.tool.name} knowledge get --id {ids[0]}` first. {NEXT_ACTION[code]}"
+            extra["knowledge"] = ids
+            next_action = self.knowledge_first(ids, NEXT_ACTION[code])
         message = str(exc) or code
         untrusted.append("message")
         return DriverError(code, message, next_action=next_action, dispatch_state=dispatch_state, untrusted=untrusted, **extra)
@@ -255,6 +257,17 @@ class Run:
             raise DriverError("E_BACKEND_UNAVAILABLE", "No instance of the application is running.", next_action=hint)
         raise self.ambiguous_sessions(items, f"{len(items)} instances are running")
 
+    def knowledge_ids(self, data: Any) -> list[str]:
+        """The knowledge entries the adapter named for an error, a blocked preview or a dialog (DSKL-124)."""
+        ids = data.get("knowledge") if isinstance(data, dict) else None
+        pattern = self.contract["knowledge"]["id_pattern"]
+        if isinstance(ids, list) and ids and all(isinstance(i, str) and re.fullmatch(pattern, i) for i in ids):
+            return list(ids)
+        return []
+
+    def knowledge_first(self, ids: list[str], then: str) -> str:
+        return f"Read `{self.tool.name} knowledge get --id {ids[0]}` first. {then}"
+
     def gate_session(self, session: dict[str, Any], halt: bool = False) -> None:
         """React to the session state as DCLI-204 sets; a halt command passes busy and blocked (DSEC-018)."""
         state, sid = session["state"], session["id"]
@@ -264,6 +277,9 @@ class Run:
             raise DriverError("E_NOT_FOUND", f"Session {sid} has ended.")
         if state == "lost":
             raise DriverError("E_BACKEND_UNAVAILABLE", f"Session {sid} is lost: its host component does not accept connections. Nothing was sent.")
+        if state == "unreachable":
+            raise DriverError("E_BACKEND_UNAVAILABLE", f"Session {sid} is running, but this tool cannot drive it. Nothing was sent.",
+                              next_action="Work in a session that is ready, or ask the person which instance to use.")
         if halt:
             return
         if state in ("starting", "busy", "unresponsive"):
@@ -271,12 +287,14 @@ class Run:
             raise DriverError("E_BUSY", f"Session {sid} {reason}; nothing was sent.", retry_after_ms=SESSION_DEADLINE_MS)
         if state == "blocked":
             blocker = session.get("blocker") or {"action": "other", "title": ""}
+            ids = self.knowledge_ids(blocker)
+            extra: dict[str, Any] = {"knowledge": ids, "next_action": self.knowledge_first(ids, NEXT_ACTION["E_HUMAN_REQUIRED"])} if ids else {}
             raise DriverError(
                 "E_HUMAN_REQUIRED", f"Session {sid} is blocked by a dialog or a similar window; nothing was sent.",
                 action=blocker.get("action", "other"), title=blocker.get("title", ""),
                 resume=self.again(confirm=self.call.confirm if self.call else None,
                                   dangerous=bool(self.call and self.call.dangerous)),
-                untrusted=["details.title", "details.resume"],
+                untrusted=["details.title", "details.resume"], **extra,
             )
 
     # ------------------------------------------------------------------ documents
@@ -510,7 +528,6 @@ class Run:
         if command.verb == "update" and not changed:
             raise usage(f"{command.path} changes only the properties given, and none is given.", None)
         bound = dict(adapter)
-        echo = dict(adapter)
         secrets: dict[str, str] = {}
         for flag in flags.values():
             key = self.key(flag)
@@ -519,17 +536,11 @@ class Run:
             if flag.secret:
                 secrets[key] = str(adapter[key])
                 bound[key] = {"secret": True}  # the value is bound by a salted hash in the token (DSEC-040)
-                echo[key] = self.contract["preview"]["masked_value"]
             elif flag.type == "path" and not flag.output:
-                digest = _file_digest(adapter[key], flag.name)
-                bound[key] = {"path": adapter[key], **digest}
-                echo[key] = digest
-            elif flag.type == "json":
-                # A structured value can be long; the preview names it by size and digest (DCLI-008).
-                text = json.dumps(adapter[key], sort_keys=True, separators=(",", ":")).encode("utf-8")
-                echo[key] = {"sha256": hashlib.sha256(text).hexdigest(), "bytes": len(text)}
+                # The token binds the file's content too, so a changed input file needs a new preview.
+                bound[key] = {"path": adapter[key], **_file_digest(adapter[key], flag.name)}
         batch = "ids" in adapter or items is not None
-        return Inputs(adapter, bound, echo, selected, batch, items, secrets)
+        return Inputs(adapter, bound, selected, batch, items, secrets)
 
     def key(self, flag: Any) -> str:
         if flag.name == "--input":

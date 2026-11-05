@@ -172,9 +172,9 @@ class Registration(unittest.TestCase):
 
     def test_physical_parameter_needs_its_quantity(self):
         flag = {"name": "--x", "type": "quantity"}
-        self.assertRejected(registration(flags=[flag]), "DCLI-085")
-        self.assertRejected(registration(flags=[{"name": "--width-mm", "type": "number"}]), "DCLI-085")
-        self.assertRejected(registration(flags=[{"name": "--x", "type": "number", "quantity": "length"}]), "DCLI-085")
+        self.assertRejected(registration(flags=[flag]), "quantity")
+        self.assertRejected(registration(flags=[{"name": "--width-mm", "type": "number"}]), "quantity")
+        self.assertRejected(registration(flags=[{"name": "--x", "type": "number", "quantity": "length"}]), "quantity")
         self.assertRejected(registration(flags=[{"name": "--x", "type": "quantity", "quantity": "lightyears"}]), "DCLI-080")
 
     def test_command_shape(self):
@@ -184,9 +184,12 @@ class Registration(unittest.TestCase):
         self.assertRejected(registration(path="part get"), "observe")
         self.assertRejected(registration(path="part stop"), "DSEC-018")
         self.assertRejected(registration(halt=True), "DSEC-018")
-        self.assertRejected(registration(adapter_capabilities=["read"]), "preview")
-        self.assertRejected(registration(adapter_capabilities=["read", "preview", "apply", "read_back", "teleport"]), "unknown")
-        self.assertRejected({k: v for k, v in registration().items() if k != "survey_ids"}, "missing")
+        self.assertRejected(registration(adapter_capabilities=["read"]), "unknown")
+        self.assertRejected(registration(survey_ids=["CAP-001"]), "unknown")
+        self.assertRejected(registration(departures=[]), "unknown")
+        self.assertRejected({k: v for k, v in registration().items() if k != "tolerances"}, "missing")
+        self.assertRejected(registration(jobs=True, long=True), "DCLI-065")
+        self.assertRejected(registration(path="part list", effects=["observe"], jobs=True), "DCLI-065")
 
     def test_flags(self):
         for flag, words in (({"name": "--dry-run", "type": "boolean"}, "global"), ({"name": "--version", "type": "string"}, "global"),
@@ -250,13 +253,13 @@ class Envelope(unittest.TestCase):
     def test_a_long_list_is_shortened(self):
         envelopes = Envelopes(CONTRACT)
         items = [{"id": f"item-{i}", "text": "x" * 100} for i in range(200)]
-        env = envelopes.success(Result({"items": items, "count": 200, "has_more": False}, offset=0), [], 1)
+        env = envelopes.success(Result({"items": items, "count": 200, "has_more": False}, offset=0), [])
         self.assertLessEqual(len(json.dumps(env, separators=(",", ":"))), 8000)
         self.assertTrue(env["data"]["has_more"])
         self.assertEqual(env["data"]["next_offset"], env["data"]["count"])
 
     def test_untrusted_paths_point_at_values(self):
-        env = Envelopes(CONTRACT).success(Result({"title": "x"}, [".title", ".missing"]), [], 1)
+        env = Envelopes(CONTRACT).success(Result({"title": "x"}, [".title", ".missing"]), [])
         self.assertEqual(env["meta"]["untrusted"], ["$.data.title"])
 
 
@@ -387,7 +390,7 @@ class InProcess(unittest.TestCase):
         args = ["part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "2k", "--token", "s3cret"]
         code, env = self.run_tool(*args)
         self.assertEqual((code, env["error"]["code"]), (5, "E_CONFIRMATION_REQUIRED"))
-        self.assertEqual(env["error"]["details"]["preview"]["inputs"]["token"], "***")
+        self.assertNotIn("s3cret", json.dumps(env))  # a secret never comes back (DSEC-040)
         code, env = self.run_tool(*args, "--confirm", env["error"]["details"]["confirm_token"])
         self.assertEqual(code, 0, env)
         self.assertEqual(env["data"]["receipt"]["outcome"]["persistence"], "saved")
@@ -444,11 +447,11 @@ class UpdateNotice(unittest.TestCase):
         env = {"SAMPLE_CLI_STATE_DIR": str(tmp / "state")}
         out = io.StringIO()
         tool.run(["context"], env=env, stdout=out)
-        notices = [n for n in json.loads(out.getvalue())["meta"].get("notices", []) if n["type"] == "update_available"]
+        notices = [n for n in json.loads(out.getvalue()).get("meta", {}).get("notices", []) if n["type"] == "update_available"]
         self.assertEqual([n["severity"] for n in notices], ["warning"])
         out = io.StringIO()
         tool.run(["context"], env=env, stdout=out)
-        notices = json.loads(out.getvalue())["meta"].get("notices", [])
+        notices = json.loads(out.getvalue()).get("meta", {}).get("notices", [])
         self.assertFalse([n for n in notices if n["type"] == "update_available"])
         stale = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
         (cache / "update.json").write_text(json.dumps({"latest": "0.1.1", "notified_at": stale}), encoding="utf-8")

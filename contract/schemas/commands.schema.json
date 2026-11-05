@@ -37,8 +37,6 @@
         "target_kind",
         "flags",
         "untrusted_fields",
-        "adapter_capabilities",
-        "survey_ids",
         "irreversible",
         "halt",
         "tolerances",
@@ -88,44 +86,6 @@
           "items": {
             "type": "string",
             "minLength": 1
-          }
-        },
-        "adapter_capabilities": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "probe",
-              "sessions",
-              "open_session",
-              "close_session",
-              "documents",
-              "create_doc",
-              "open_doc",
-              "save_doc",
-              "save_doc_as",
-              "close_doc",
-              "undo",
-              "read",
-              "preview",
-              "apply",
-              "read_back",
-              "job_status",
-              "cancel",
-              "devices",
-              "plugin_status",
-              "plugin_install",
-              "plugin_remove"
-            ]
-          }
-        },
-        "survey_ids": {
-          "description": "Capability IDs from the capability survey (DREPO-061).",
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^CAP-[0-9]{3}$"
           }
         },
         "irreversible": {
@@ -202,6 +162,10 @@
         },
         "long": {
           "description": "The work can take longer than one call may; the runtime runs it as a long job (DCLI-065).",
+          "type": "boolean"
+        },
+        "jobs": {
+          "description": "The application may run the write as a long job: apply reports the job and the runtime follows it with job_status (DCLI-065).",
           "type": "boolean"
         }
       },
@@ -321,7 +285,7 @@
           }
         },
         {
-          "description": "A physical parameter has the type quantity and names its quantity (DCLI-085).",
+          "description": "A physical parameter has the type quantity and names its quantity (DCLI-029, DCLI-080).",
           "if": {
             "required": [
               "type"

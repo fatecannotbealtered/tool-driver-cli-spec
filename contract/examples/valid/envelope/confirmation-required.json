@@ -1,6 +1,5 @@
 {
   "ok": false,
-  "schema_version": "1.0",
   "error": {
     "code": "E_CONFIRMATION_REQUIRED",
     "message": "doc save needs confirmation; nothing was saved.",
@@ -61,10 +60,6 @@
           "revision": "rev-8",
           "dirty": true
         },
-        "inputs": {
-          "session": "kicad-1234",
-          "doc": "doc_1"
-        },
         "can_apply": true
       },
       "confirm_token": "tok_3f9a7c1e2b8d4a60",
@@ -72,7 +67,6 @@
     }
   },
   "meta": {
-    "duration_ms": 210,
     "untrusted": [
       "$.error.details.preview.action",
       "$.error.details.preview.target.label"

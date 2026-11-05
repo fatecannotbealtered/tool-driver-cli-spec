@@ -33,7 +33,6 @@
           "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "tampered": {"const": true},
           "envelope": {"$ref": "envelope.schema.json"},
-          "envelope_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "notes": {"type": "string"}
         }
       }

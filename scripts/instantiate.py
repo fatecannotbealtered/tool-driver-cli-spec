@@ -106,7 +106,7 @@ def copy_template(args: argparse.Namespace, root: Path) -> None:
         dest.write_text(text, encoding="utf-8", newline="\n")
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     package["optionalDependencies"] = {f"{args.package}-{NPM_OS[p]}-x64": args.version for p in args.platforms}
-    (root / "package.json").write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "package.json").write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     for name in ("docs/APPLICATION.md", "docs/APPLICATION_zh.md"):
         path = root / name
         if path.is_file():
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         shutil.rmtree(cache, ignore_errors=True)  # running the new tool leaves bytecode; the project starts clean
     print(f"Generated {args.tool} in {root}, pinned to tool-driver-cli-spec {check_project.bundle_version()}.")
     left = [p for p in problems if p.clause == "DREPO-019"]
-    commands = [p for p in problems if p.clause == "DREPO-061" and p.path == "contract/commands.json"]
+    commands = [p for p in problems if p.clause == "DCLI-029" and p.path == "contract/commands.json"]
     other = [p for p in problems if p not in left and p not in commands]
     print(f"Next: fill {len(left)} placeholder(s) and register the domain commands; `python scripts/spec.py check` lists "
           "what is left.")

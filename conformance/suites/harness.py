@@ -169,7 +169,7 @@ class Subject:
             "direct_writes": bool(direct) or "session" in self.modes,
             "documents": any(m in self.modes for m in ("file", "session")),
             "dangerous": "dangerous" in tiers,
-            "jobs": any("job_status" in r["adapter_capabilities"] for r in regs),
+            "jobs": any(r.get("jobs") for r in regs),
             "session": "session" in self.modes,
             "device": "device" in self.modes,
             "host_component": self.host_component,
@@ -191,6 +191,7 @@ class Case:
         self.dir = self.tmp / "out"
         self.dir.mkdir()
         self.scope_file = self.tmp / "scope.json"
+        self._job: str | None = None
         cfg = dict(config or {})
         cfg.setdefault("host_component", subject.host_component)
         self.host = FakeHost(state_dir=str(self.state_dir), config=cfg, commands=list(subject.registrations.values()),
@@ -262,13 +263,38 @@ class Case:
     def fill(self, args: list[str], file_mode: bool = False) -> list[str]:
         """Fill the sample placeholders with the fake host's values (DVER-002)."""
         values = {"{session}": "fake-1", "{doc}": self.doc_path("file-1") if file_mode else "doc-1",
-                  "{device}": "dev-1", "{dir}": str(self.dir), "{file}": self.doc_path("file-1")}
+                  "{device}": "dev-1", "{dir}": str(self.dir), "{file}": self.doc_path("file-1"),
+                  "{inputs}": str(self.subject.project / "tests" / "inputs")}
+        if any("{job}" in arg for arg in args):
+            values["{job}"] = self.job()
         out = []
         for arg in args:
             for key, value in values.items():
                 arg = arg.replace(key, value)
             out.append(arg)
         return out
+
+    def job(self) -> str:
+        """``{job}``: a job this case starts with the sample of the tool's first long command."""
+        if self._job is None:
+            subject = self.subject
+            long = [p for p, r in subject.registrations.items() if r.get("long") and p in subject.samples]
+            check(long, "a sample uses {job}, but the tool has no long command with a sample that starts one")
+            path, args = long[0], subject.samples[long[0]]
+            check(not any("{job}" in a for a in args), f"the sample of {path} itself uses {{job}}")
+            modes = subject.registrations[path]["modes"]
+            argv = self.fill(args, "{session}" not in args and "file" in modes)
+            out = self.run(*path.split(" "), *argv)
+            if out.code == "E_CONFIRMATION_REQUIRED":
+                extra = ["--confirm", out.details["confirm_token"]]
+                if out.details["preview"]["tier"] == "dangerous":
+                    extra.append("--dangerous")
+                out = self.run(*path.split(" "), *argv, *extra)
+            data = out.data if isinstance(out.data, dict) else {}
+            job = (data.get("result") or {}).get("job") or data.get("job") or {}
+            check(job.get("id"), f"{path} started no job for {{job}}: {out.describe()}")
+            self._job = str(job["id"])
+        return self._job
 
     def footprint(self) -> str:
         """Everything a write could change: the fake host's world and the files it holds."""

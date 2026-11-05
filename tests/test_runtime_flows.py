@@ -103,7 +103,7 @@ import sys, time
 sys.path[:0] = [REPO_TESTS, REPO_SAMPLE]
 from test_runtime import SampleAdapter, registration, SAMPLE, REPO
 from _driver import Tool
-import _driver.writes as w
+import _driver.runtime as rt
 
 
 class Hung(SampleAdapter):
@@ -111,7 +111,7 @@ class Hung(SampleAdapter):
         time.sleep(20)
 
 
-w.WRITE_DEADLINE_MS = 500
+rt.WRITE_DEADLINE_MS = 500
 reg = registration(path="part update", modes=["file"], flags=[{"name": "--id", "type": "string", "required": True},
                    {"name": "--value", "type": "string"}], tolerances={})
 Tool(root=SAMPLE, adapter=Hung, commands=[reg], application="Files", versions="any", modes=["file"],
@@ -409,10 +409,135 @@ class ReviewFixes(unittest.TestCase):
             out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1",
                            "--pins", '[{"pin": "1"}, {"pin": "2"}]', "--dry-run")
             self.assertTrue(out.ok, out.stdout[:400])
-            echoed = out.data["preview"]["inputs"]["pins"]
-            self.assertEqual(set(echoed), {"sha256", "bytes"}, out.stdout[:400])
+            self.assertNotIn("inputs", out.data["preview"], out.stdout[:400])
             wrong = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--pins", '{"pin": "1"}')
             self.assertEqual(wrong.code, "E_USAGE", wrong.stdout[:400])
+
+
+class SlowStandardCommands(unittest.TestCase):
+    """Standard writes a tool lists as long run in its worker (DCLI-065); required flags (DCLI-013)."""
+
+    LONG = {"SAMPLE_CLI_LONG": "doc open,session close"}
+
+    def test_a_long_doc_open_returns_a_job_whose_result_is_the_document(self):
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "big.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            out = case.run("doc", "open", "--session", "fake-1", "--doc", path, env=self.LONG)
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]
+            self.assertEqual(set(out.data["result"]), {"job"}, out.stdout[:400])
+            done = case.run("job", "get", "--job", job["id"], "--wait", "60s", env=self.LONG)
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed", done.stdout[:600])
+            docs = case.run("doc", "list", "--session", "fake-1")
+            self.assertIn(path, [d.get("path") for d in docs.data["items"]], docs.stdout[:600])
+
+    def test_reference_shows_a_listed_standard_command_as_long(self):
+        with Case(subject()) as case:
+            out = case.run("reference", "--command", "doc open", env=self.LONG)
+            self.assertTrue(out.data.get("long"), out.stdout[:400])
+
+    def test_a_required_flag_left_out_is_a_usage_error(self):
+        with Case(subject()) as case:
+            for args in (["doc", "open", "--session", "fake-1"], ["doc", "get"], ["job", "get"]):
+                out = case.run(*args)
+                self.assertEqual(out.code, "E_USAGE", f"{args}: {out.stdout[:300]}")
+
+
+class StatesAndKnowledge(unittest.TestCase):
+    """An instance the tool cannot drive (DCLI-204); knowledge on errors the runtime makes (DSKL-124)."""
+
+    def test_an_unreachable_instance_refuses_writes_and_sends_nothing(self):
+        with Case(subject()) as case:
+            case.control("set_session", session="fake-1", state="unreachable")
+            listed = case.run("session", "list")
+            self.assertTrue(listed.ok, listed.stdout[:400])
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            self.assertEqual(out.code, "E_BACKEND_UNAVAILABLE", out.stdout[:400])
+            self.assertEqual(out.details["dispatch_state"], "not_started")
+
+    def test_a_blocked_preview_points_to_its_knowledge_entry(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "preview", "action": "result", "times": 3,
+                                        "result": {"can_apply": False, "blocked_by": ["a relation drives it"],
+                                                   "knowledge": ["relation-driven"]}})
+            out = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "1mm", "--y", "2mm")
+            self.assertEqual(out.code, "E_CONFLICT", out.stdout[:400])
+            self.assertEqual(out.details.get("knowledge"), ["relation-driven"], out.stdout[:400])
+            self.assertIn("knowledge get --id relation-driven", out.details["next_action"])
+
+    def test_a_dialog_points_to_its_knowledge_entry(self):
+        with Case(subject()) as case:
+            case.control("set_session", session="fake-1", state="blocked", title="License", knowledge=["license-dialog"])
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            self.assertEqual(out.code, "E_HUMAN_REQUIRED", out.stdout[:400])
+            self.assertEqual(out.details.get("knowledge"), ["license-dialog"], out.stdout[:400])
+
+    def test_a_domain_list_keeps_the_runtime_limit(self):
+        with Case(subject()) as case:
+            out = case.run("part", "list", "--session", "fake-1", "--doc", "doc-1", "--limit", "101")
+            self.assertEqual(out.code, "E_USAGE", out.stdout[:400])
+
+
+class ReviewFixes102(unittest.TestCase):
+    """Edges the 1.0.2 review found."""
+
+    def test_a_save_the_adapter_cannot_confirm_on_disk_is_incomplete(self):
+        with Case(subject()) as case:
+            moved = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            self.assertTrue(moved.ok, moved.stdout[:400])
+            case.control("fault", rule={"method": "read_back", "action": "unreadable", "command": "doc save", "fields": ["saved"]})
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            saved = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertEqual(saved.code, "E_VERIFY_INCOMPLETE", saved.stdout[:600])
+
+    def test_operation_get_writes_the_whole_record_to_a_new_file_only(self):
+        with Case(subject()) as case:
+            moved = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            target = os.path.join(case.tmp, "record.json")
+            out = case.run("operation", "get", "--id", moved.data["operation_id"], "--output", target)
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(json.loads(Path(target).read_text(encoding="utf-8"))["operation_id"], moved.data["operation_id"])
+            again = case.run("operation", "get", "--id", moved.data["operation_id"], "--output", target)
+            self.assertEqual(again.code, "E_USAGE", again.stdout[:400])
+
+    def test_a_long_doc_save_keeps_the_document_state_it_left(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed", done.stdout[:600])
+            self.assertIs(done.data["receipt"]["document"]["dirty"], False, done.stdout[:600])
+
+
+class ManyFiles(unittest.TestCase):
+    """A receipt past receipt.listed_files files gives their count and the full record command (DCLI-061)."""
+
+    def test_the_receipt_keeps_ten_files_missing_ones_first(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.contract import Contract
+        from _driver.writes import slim_receipt
+
+        class FakeRun:
+            contract = Contract(REPO / "contract" / "driver-contract.json")
+
+            def cmd(self, path, args):
+                return "tool " + path + " " + " ".join(f"{k} {v}" for k, v in args)
+
+        observed = {f"file:///D:/out/f{i:02}.gbr": {"exists": True, "path": f"D:/out/f{i:02}.gbr", "bytes": 1, "sha256": "0" * 64}
+                    for i in range(14)}
+        observed["file:///D:/out/f13.gbr"] = {"exists": False}
+        slim = slim_receipt(FakeRun(), {"operation_id": "op_x", "observed": observed})
+        self.assertEqual(len(slim["observed"]), 10)
+        self.assertIn("file:///D:/out/f13.gbr", slim["observed"])
+        self.assertEqual(slim["more_files"]["count"], 4)
+        self.assertIn("operation get --id op_x --output", slim["more_files"]["command"])
 
 
 if __name__ == "__main__":

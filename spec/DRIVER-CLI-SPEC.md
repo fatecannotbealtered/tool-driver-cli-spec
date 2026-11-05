@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-CLI-SPEC_zh.md)
 
-> Version 1.0.1 · Clauses DCLI-001 to DCLI-281
+> Version 1.0.2 · Clauses DCLI-001 to DCLI-281
 
 ## How to Read
 
@@ -113,18 +113,18 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-003 Envelope keys
 
-A success envelope MUST have exactly the keys `ok`, `schema_version`, `data` and `meta`. An error envelope MUST have exactly the keys `ok`, `schema_version`, `error` and `meta`. A failed command MUST NOT return `data`. `schema_version` MUST be the major and minor version of this specification, as a string: `"1.0"` for every 1.0.x version.
+A success envelope MUST have the keys `ok` and `data`, and an error envelope the keys `ok` and `error`; both carry `meta` only when it holds something (DCLI-004), and no other key. A failed command MUST NOT return `data`.
 
 A success:
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"},"meta":{"duration_ms":38}}
+{"ok":true,"data":{"id":"doc_1","path":"D:/proj/board.kicad_pcb","session":"kicad-1234","revision":"r7","dirty":true,"readonly":false,"disk":"in_sync"}}
 ```
 
 An error:
 
 ```json
-{"ok":false,"schema_version":"1.0","error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}},"meta":{"duration_ms":120}}
+{"ok":false,"error":{"code":"E_BUSY","message":"KiCad is running a design rule check; nothing was sent.","retryable":true,"details":{"dispatch_state":"not_started","next_action":"Wait 5 s, then run the same command again.","retry_after_ms":5000}}}
 ```
 
 Why: Fixed keys let the Agent check `ok` first and then read one known place for the result or the error.
@@ -132,15 +132,14 @@ Check: 🤖 General conformance test R04.
 
 ### DCLI-004 Meta
 
-`meta` MUST hold only these keys:
+`meta` MUST hold only these keys, and is left out when both are:
 
-- `duration_ms`: present in every envelope; the run time in whole milliseconds.
 - `notices`: a list of `{type, severity, message}`, where `severity` is `info` or `warning`. The update notice (DCLI-079) is one example. Omitted when empty.
 - `untrusted`: a list of JSON paths in the envelope that hold untrusted content (DSEC-021). Omitted when empty.
 
 `untrusted` MUST also list every text the runtime writes that embeds an untrusted value, such as a `message`, the `action` or a `label` of a preview, or a generated command (DCLI-011) that contains a name taken from a document.
 
-Why: The Agent finds timing, notices and untrusted markers in the same place in every tool, and a document's text cannot slip in through a sentence the tool wrote.
+Why: The Agent finds notices and untrusted markers in the same place in every tool, and a document's text cannot slip in through a sentence the tool wrote.
 Check: 🤖 General conformance test R04.
 
 ### DCLI-005 Names and values
@@ -361,7 +360,7 @@ When a command offers one of these functions, it MUST use this flag name and mea
 <!-- contract:shared_flags -->
 | Flag | Value | Meaning |
 |---|---|---|
-| `--limit` | `<n>` | Items per page. Help states the default and the maximum. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
+| `--limit` | `<n>` | Items per page: by default 20, at most 100, for every list, domain lists included; the runtime adds `--limit` and `--offset` to every `list` command and keeps both values. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
 | `--offset` | `<n>` | Start position of the page |
 | `--query` | `<text>` | What `search` looks for |
 | `--sort` | `<field>` | Field that orders a list |
@@ -386,7 +385,7 @@ A command on a session, document, device or job MUST select the object with thes
 | Flag | Object | Meaning |
 |---|---|---|
 | `--session` `<id>` | session | Selects the instance (DCLI-202) |
-| `--doc` `<path-or-id>` | document | Selects the document; in file mode it is the file path (DCLI-213) |
+| `--doc` `<path-or-id>` | document | Selects the document; in file mode it is the file path (DCLI-201) |
 | `--device` `<id>` | device | Selects the device |
 | `--job` `<id>` | job | Selects the long job |
 
@@ -415,7 +414,7 @@ Check: 🤖 Runtime unit tests (normalization and prefix matching).
 
 ### DCLI-029 Command registration
 
-Every command MUST be registered before it can run. The runtime registers the built-in and standard commands; the tool author registers each domain command. A registration holds these fields:
+Every command MUST be registered before it can run. The runtime registers the built-in and standard commands; the tool author registers each domain command, and lists in `long_commands` the standard writes that take the application more than a minute (DCLI-065). A registration holds these fields:
 
 <!-- contract:registration_fields -->
 | Field | Content |
@@ -427,8 +426,6 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
 | `flags` | Every flag, each with its type (`string`, `integer`, `number`, `boolean`, `quantity`, `path` or `json`, and `list`, `input` or `duration` for the shared flags of DCLI-026), the `schema` of a `json` flag, the unit quantity of a `quantity` flag (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true`, with the type `path`, when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
-| `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
-| `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |
 | `irreversible` | `true` when the application cannot take the change back; the command is then dangerous (DCLI-051) |
 | `halt` | `true` for a halt command (DSEC-018) |
 | `tolerances` | Per field, how far a read-back value may differ from the preview and still match (DCLI-057) |
@@ -443,10 +440,13 @@ A registration MAY also hold these fields:
 | `doc_kinds` | The kinds of document the command works on, when the application has several, such as `part`, `assembly` and `drawing` (DCLI-210) |
 | `verify_after_save` | `true` when, in session mode, the application shows the change correctly only after the document is saved; `doc save` then verifies it (DCLI-057) |
 | `long` | `true` when the work can take longer than one call may; the runtime then runs it as a long job (DCLI-065) |
+| `jobs` | `true` for a write the application may run as a long job: `apply` reports the job and the runtime follows it with `job_status` (DCLI-065). A command is `jobs` or `long`, never both |
+
+The adapter capabilities a domain command calls follow from its registration: `read` for a read; `preview`, `apply` and `read_back` for a write, and also `job_status` and `cancel` with `jobs` (DCLI-260).
 
 A `json` flag takes a structured value, such as a pad table: on the command line, inline JSON or the path of a file that holds it; in an `--input` item, the value itself. Its `schema` is a JSON Schema of type `object` or `array`, and `reference` shows it. A physical number inside the value MUST carry the unit in its key, with the standard unit's suffix, such as `width_mm` (DCLI-081). The runtime checks the top-level type and the adapter checks the rest, answering `E_VALIDATION` when it is wrong.
 
-The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a unit quantity (DCLI-085), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
+The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a declared unit quantity (DCLI-080), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
 
 Why: One declaration per command feeds `reference`, the tier, the scope check, the masking of secrets and the read-back, so none of them can disagree.
 Check: 🤖 `check_project` validates `contract/commands.json` against `commands.schema.json`; runtime unit tests check that the runtime rejects a registration that breaks a rule.
@@ -464,7 +464,7 @@ The driver runtime implements these commands for every tool. A tool author MUST 
 | `context` | — | Local state, without going online (DCLI-032) |
 | `doctor` | — | Health checks (DCLI-033) |
 | `changelog` | `--since <version>` | Release notes from the bundled CHANGELOG (DCLI-034) |
-| `operation get` | `--id` | One operation record (DCLI-035) |
+| `operation get` | `--id`, `--output` | One operation record (DCLI-035) |
 | `operation list` | `--state`, `--batch`, `--limit`, `--offset` | Operation records, newest first (DCLI-035) |
 | `operation resolve` | `--id`, `--outcome`, `--evidence` | Settles an outcome-unknown write by reading the target back, or records the outcome the Agent found (DCLI-035) |
 | `update` | `--check`, `--target-version <v>`, `--allow-downgrade` | Self-update (DCLI-070) |
@@ -474,17 +474,17 @@ Check: 🤖 General conformance tests R01 and R05.
 
 ### DCLI-031 reference
 
-`reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity and evidence, modes, required adapter capabilities, possible error codes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. When a clause lets a tool depart from a default, `reference` MUST show each departure on the command it affects, with the ID of the clause that allows it, in the command's `departures` list.
+`reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity, modes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. The adapter capabilities a command needs and the evidence behind its maturity appear only in the file of `reference --all`, which the project scripts check (DVER-041).
 
 - `tier` MUST give the confirmation tier for each mode the command supports. A tier that depends on the call MUST be described in `tier_when`, such as `doc close --discard`, closing an instance the tool did not start, a save-as or export over an existing file, or a condition the command registers itself, with its `description` (DCLI-029).
-- A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
+- A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, and a command registered `jobs` shows `long` too, because it also returns a job, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
 - Every parameter and output field that holds a coordinate MUST name its `coordinate_system` (DCLI-084).
 - `reference` without flags MUST return only the index, within 8000 characters: each command with its path and its one-sentence summary. Limits and conditions belong in the command's own description.
 - `reference --command <path>` MUST return one command, within 6000 characters.
 - `reference --all --output <path>` MUST write the description of every command to that file and return only a summary (DCLI-008).
 
-Why: The Agent learns the whole tool, including the tier of each write in each mode, from one short call and never guesses.
-Check: 🤖 General conformance tests R01 and R02; 👀 review that every departure names its clause.
+Why: The Agent learns what the tool offers from one short call, and the full use of a command, including its tier in each mode, from one more; it never guesses.
+Check: 🤖 General conformance tests R01 and R02.
 
 ### DCLI-032 context
 
@@ -521,7 +521,7 @@ Check: 🤖 General conformance test R05.
 | `license` | The application's license status |
 | `plugin` | The host component version on disk equals the version each instance has loaded (DSEC-053) |
 | `sessions` | The running instances and their states |
-| `knowledge` | The knowledge index, entry format and registration file, and lark-cli on PATH when team knowledge is registered (DSKL-125) |
+| `knowledge` | The entry format and the registration file, and lark-cli on PATH when team knowledge is registered (DSKL-125) |
 
 Why: One command finds the common setup problems and says how to fix each one.
 Check: 🤖 General conformance test R05 checks that every fixed check is present.
@@ -535,7 +535,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-035 Operation commands
 
-- `operation get --id <id>` MUST return one operation record.
+- `operation get --id <id> [--output <path>]` MUST return one operation record. With `--output` it writes the whole record, with every file the write produced, to that file (DCLI-061).
 - `operation list [--state <state>] [--batch <id>] [--limit <n>] [--offset <n>]` MUST list operation records, newest first. `--batch` takes the operation ID of a batch and lists only its items (DCLI-064).
 - `operation resolve --id <id>` settles an outcome-unknown write (DCLI-063). Without `--outcome`, the runtime MUST read the target back through the adapter, compare it with the preview, record the outcome it finds with `resolved_by: read_back` and the observed values, and return them.
 - `operation resolve --id <id> --outcome applied|not_applied|partial --evidence <text>` records an outcome the Agent found by other means, with `resolved_by: agent`. It is allowed only when the target cannot be read back; otherwise it MUST be refused with `E_VALIDATION`.
@@ -646,7 +646,6 @@ Every write builds a preview, in the direct tier too, where the runtime keeps it
 | `changes_truncated` | `true` when there are more changes than `changes` holds |
 | `session` | `{id, generation}` |
 | `document` | `{id, revision, dirty}` |
-| `inputs` | Every input, echoed back; secrets show as `***` and files as `{sha256, bytes}` |
 | `can_apply` | Whether the operation can run |
 | `blocked_by` | When it cannot run, the reasons |
 
@@ -678,7 +677,7 @@ The confirm token MUST bind these values. When any of them changes, the token MU
 | `scope_id` | The ID of the scope file |
 | `scope_hash` | The hash of the scope file's content |
 
-- The runtime MUST create the token as a random value of at least 128 bits and store it in the planned operation record (DCLI-059), together with the bound values and the expiry time. A token is checked against that record; nothing is signed (DSEC-033).
+- The runtime MUST create the token as a random value of at least 128 bits from a cryptographically secure random source and store it in the planned operation record (DCLI-059), together with the bound values and the expiry time. A token is checked against that record; nothing is signed, and the runtime keeps no signing key. At the confirm, the runtime MUST accept a token only when it finds it in a planned operation record, before its expiry and not yet spent (DCLI-056, step 1).
 - The token MUST expire after 10 minutes.
 - The token MUST be usable only once, and it is spent when dispatch starts. A confirming call that is refused before dispatch, for example with `E_BUSY`, `E_HUMAN_REQUIRED`, `E_FORBIDDEN` or the conflict `target_locked`, leaves the token usable until it expires.
 - Global flags (DCLI-025), such as `--dangerous`, `--format` and `--quiet`, are not inputs and are not bound.
@@ -722,7 +721,7 @@ What the read-back checks depends on the write:
 | `delete` | The object is absent |
 | `import` | The imported objects are present, by count |
 | An `artifact` write, such as `export`, `render` or `doc save-as` | Every produced file exists, and its path, size and SHA-256 are recorded; several files are allowed. The receipt makes no claim about bytes the application wrote itself |
-| `doc save` in session mode | The saved file is read again and the changed fields are found in it; when the file cannot be read that way, verification is `incomplete` |
+| `doc save` in session mode | The saved file is read again and the changed fields are found in it, and the document's field `saved` is `true`. When the application can read the file only after the document is closed and opened again, the adapter reads the fields from the instance instead and reports `saved: true` only when it saw the file on disk change. When the adapter cannot tell, verification is `incomplete` |
 | A long job | The job's outputs, when it ends (DCLI-065) |
 
 - A write that creates files and also changes a document MUST be verified both ways: the files exist, and the changed fields read back. Verification is `passed` only when both pass.
@@ -735,7 +734,7 @@ Check: 🤖 Driver conformance tests D04, D07 and D08.
 
 ### DCLI-058 Save is the commit point
 
-In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`. Only `doc save`, writes in file mode (DCLI-213) and writes that create files report `saved`.
+In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`. Only `doc save`, writes in file mode (DCLI-201) and writes that create files report `saved`.
 
 A write with the `artifact` effect, such as `doc save-as`, `export` or `render`, creates files. Its receipt MUST report `change: not_applicable` and `persistence: saved`, and it is verified as DCLI-057 sets.
 
@@ -778,9 +777,9 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 - `observed`: the values read back, one entry per key: each target key the adapter's `read_back` reports (DCLI-260); each produced file under `file:///<path>`, with `path`, `bytes` and `sha256`; or, for a command with no target object, the object's name, such as `session`, `document` or `plugin`;
 - `mismatched`: each field that does not match, written `<field>@<key>`, where `<key>` is its key in `observed`;
 - `session` `{id, generation}` and `document` `{id, revision, dirty}`;
-- `failed_stage`: where the write failed or was interrupted: `apply`, `deliver`, `persist` or `verify`;
 - `notes`: extra remarks;
-- `simulated: true` when the result comes from a simulated device (DSEC-062).
+- `simulated: true` when the result comes from a simulated device (DSEC-062);
+- `more_files` `{count, command}` when the write produced more files than the contract's `receipt.listed_files` (10): `observed` keeps that many, missing files first, `count` is the number left out, and `command` is the `operation get --output` call that writes the whole record to a file (DCLI-008).
 
 <!-- contract:receipt_dimensions -->
 | Dimension | Values |
@@ -794,7 +793,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 The five dimensions MUST be reported separately and MUST NOT be merged into one success flag.
 
 ```json
-{"ok":true,"schema_version":"1.0","data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}},"meta":{"duration_ms":640}}
+{"ok":true,"data":{"operation_id":"op_7mq2xk4v","receipt":{"operation_id":"op_7mq2xk4v","command":"footprint move","target":{"key":"file:///D:/proj/board.kicad_pcb#/footprints/R1","kind":"footprint"},"effects":["change"],"tier":"direct","outcome":{"execution":"completed","change":"applied","delivery":"not_applicable","persistence":"unchanged","verification":"passed"},"observed":{"file:///D:/proj/board.kicad_pcb#/footprints/R1":{"x_mm":12.5,"y_mm":30.0}},"mismatched":[],"session":{"id":"kicad-1234","generation":3},"document":{"id":"doc_1","revision":"r8","dirty":true}},"result":{"id":"R1","x_mm":12.5,"y_mm":30.0}}}
 ```
 
 Why: Ran, changed, delivered, saved and verified are different facts, and the Agent must report each one truthfully.
@@ -855,8 +854,10 @@ A call that does work MUST return within 60 seconds. Work that can take longer M
 
 A long job runs in one of two places:
 
-- The application runs it: the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
+- The application runs it: the command is registered with `jobs: true` (DCLI-029), the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
 - The runtime runs it: the command is registered with `long: true` (DCLI-029). The call does every check, records the job and starts a worker, then returns at once. The worker is the tool's own program, started again with `job get --job <id>` and the variable `<PREFIX>_JOB_WORKER=<id>`, detached from the call and with no window. It makes the adapter call without the 60-second limit, up to `jobs.worker_max_seconds` in the contract, and records the outcome in the state directory. The tool author writes no job code.
+
+A standard write that can take more than a minute, such as `doc open` of a large project or `session close` of an application that takes long to quit, runs the same way when the tool lists it in `long_commands` (DCLI-029); the contract's `jobs.standard_long` names the standard writes that may be listed. The command's own checks run again in the worker right before dispatch, its own read-back runs when the work ends, and its result, such as the new session of `session open`, comes with `job get`.
 
 Writes and reads:
 
@@ -1061,7 +1062,7 @@ Check: 🤖 Runtime unit tests (unit conversion).
 
 ### DCLI-081 Unit suffixes in output
 
-An output key for a physical quantity MUST carry the unit suffix from DCLI-080, and its value MUST be a number in the standard unit, such as `x_mm: 12.5`. The timing fields of the envelope and the host protocol (`duration_ms`, `retry_after_ms`, `deadline_ms`) are in milliseconds and are not domain quantities.
+An output key for a physical quantity MUST carry the unit suffix from DCLI-080, and its value MUST be a number in the standard unit, such as `x_mm: 12.5`. The timing fields of the error details and the host protocol (`retry_after_ms`, `deadline_ms`) are in milliseconds and are not domain quantities.
 
 Why: The unit is visible in the key, so the Agent cannot misread a value.
 Check: 👀 Review of the output schemas in `reference`.
@@ -1089,10 +1090,7 @@ Check: 👀 Review of `reference`.
 
 ### DCLI-085 Undeclared units
 
-A physical parameter without a declared unit quantity MUST be rejected when the command is registered (DCLI-029).
-
-Why: An undeclared unit is caught before the tool ships, not after a wrong value is written.
-Check: 🤖 Runtime unit tests; `check_project` validates `contract/commands.json` against `commands.schema.json`, which needs a quantity for every flag of type `quantity`.
+Removed: its rule is part of DCLI-029.
 
 ## Modes and Sessions
 
@@ -1130,7 +1128,7 @@ The runtime implements these commands from the adapter capabilities (DCLI-260). 
 | `plugin remove` | `configure` | with a host component | two-step | Removes the host component |
 
 - A command whose adapter capability is missing MUST return `E_UNSUPPORTED` (DCLI-260); the commands marked optional, and `session open` and `session close`, depend on optional capabilities.
-- `knowledge create` and `knowledge delete` change only the tool's own registration, not the application. They need no scope and do not count toward the tool's risk tier (DSEC-002), but they stay two-step.
+- DSKL-123 sets the confirmation and scope of `knowledge create` and `knowledge delete`.
 
 Why: The same functions under the same names in every tool mean the Agent never relearns sessions, documents or jobs.
 Check: 👀 Review of the command tree against this table.
@@ -1146,6 +1144,8 @@ A tool works in one or more of these modes. It MUST declare in each command's re
 | `session` | Drives a running instance of the application | `session list`, `session get`, `doc list`, `doc get`, `doc save`; the other `session` and `doc` commands where the adapter has their capabilities | The running instance | Only `doc save` saves |
 | `device` | Drives hardware or its controller | `device list`, `device get` | The device or its sensors | Does not apply |
 
+In file mode, `--doc` MUST be the file path, and `revision` is a hash of the file content (DCLI-210).
+
 When a command supports both file and session mode, the runtime MUST choose the mode for each call:
 
 - session mode when `--session` is given, or when exactly one running instance has the document open; that instance is then selected (DCLI-202);
@@ -1160,7 +1160,7 @@ Check: 🤖 General conformance test R01 checks the mode declarations in `refere
 
 When several instances are running and a command that acts on one instance has no `--session`, the command MUST return `E_AMBIGUOUS` with the candidates. It MUST NOT pick an instance by window focus or by recent use. With exactly one instance it MAY pick it and MUST name it in the output. A `--doc` that exactly one instance has open selects that instance (DCLI-201).
 
-The list reads `session list`, `doc list` and `job list` cover every session and MUST NOT return `E_AMBIGUOUS`. Each session in `session list`, and each instance among the candidates of `E_AMBIGUOUS`, MUST carry a summary: `documents` = `[{id, path, dirty}]` and, when the session is blocked, `blocker` = `{action, title}`, where `title` is untrusted (DSEC-021). When the adapter cannot see every instance, `session list` MUST return `complete: false`.
+The list reads `session list`, `doc list` and `job list` cover every session and MUST NOT return `E_AMBIGUOUS`. Each session in `session list`, and each instance among the candidates of `E_AMBIGUOUS`, MUST carry a summary: `documents` = `[{id, path, dirty}]` and, when the session is blocked, `blocker` = `{action, title}`, where `title` is untrusted (DSEC-021), with `knowledge` when the adapter knows an entry for the dialog (DSKL-124). When the adapter cannot see every instance, `session list` MUST return `complete: false`.
 
 Why: With two projects open, picking by focus changes the wrong project; with each instance's documents in view, the Agent can name the right one.
 Check: 🤖 Driver conformance test D01.
@@ -1197,9 +1197,10 @@ Writes, and reads that need the application's main thread, MUST react to each se
 | `unresponsive` | Connected, but the instance gave no reply within 2 seconds; `since_at` says since when | `E_BUSY`, retryable; nothing was dispatched |
 | `blocked` | A dialog, license window or similar needs a person | `E_HUMAN_REQUIRED` with the dialog title (untrusted) and the resume command |
 | `lost` | A discovery file and a live process exist, but the connection fails (DCLI-278) | `E_BACKEND_UNAVAILABLE`; writes already dispatched are recorded as outcome unknown |
+| `unreachable` | The process runs, but the tool cannot drive it, such as a second instance when the application lets a tool reach only one | `E_BACKEND_UNAVAILABLE`; nothing was dispatched |
 | `closed` | The process has ended | The session ID is no longer valid; `E_NOT_FOUND` |
 
-The standard observe commands `session list`, `session get`, `doc list`, `doc get`, `device list`, `device get`, `job list` and `job get` MUST return the state as data and MUST NOT fail because of it. Halt commands run in every state but `lost` and `closed` (DSEC-018).
+The standard observe commands `session list`, `session get`, `doc list`, `doc get`, `device list`, `device get`, `job list` and `job get` MUST return the state as data and MUST NOT fail because of it. Halt commands run in every state but `lost`, `unreachable` and `closed` (DSEC-018).
 
 Why: Each state has one fixed reaction, so a busy or blocked application never leaves a call hanging, and the Agent can always see the state.
 Check: 🤖 Driver conformance tests D04, D05, D21 and D22.
@@ -1213,7 +1214,7 @@ Check: 🤖 Driver conformance test D22.
 
 ### DCLI-206 Opening and closing sessions
 
-`session open` MUST start a new instance and return its session ID. `session close` MUST refuse to close an instance that has unsaved changes, with `E_CONFLICT` and `conflict` `unsaved_changes`. Closing an instance the tool did not start (`owned: false`) is dangerous (DCLI-051). When the adapter lacks `open_session` or `close_session`, the matching command returns `E_UNSUPPORTED` (DCLI-260).
+`session open` MUST start a new instance and return its session ID. When the application runs a separate program for some kinds of document, `--kind` names the kind and the adapter starts that program. `session close` MUST refuse to close an instance that has unsaved changes, with `E_CONFLICT` and `conflict` `unsaved_changes`. Closing an instance the tool did not start (`owned: false`) is dangerous (DCLI-051). When the adapter lacks `open_session` or `close_session`, the matching command returns `E_UNSUPPORTED` (DCLI-260).
 
 Why: Closing loses unsaved work, and an instance the tool did not start may hold a person's work.
 Check: 👀 Review of the behavior matrix (DVER-030).
@@ -1271,10 +1272,7 @@ Check: 🤖 Driver conformance test D10.
 
 ### DCLI-213 Documents in file mode
 
-In file mode, `--doc` MUST be the file path. Writing the file is saving: the receipt reports `persistence: saved`, and read-back MUST read the file again. `revision` is a hash of the file content (DCLI-210). File mode needs only `doc get`; `doc list` is optional (DCLI-201).
-
-Why: Without an application in between, the file on disk is the only truth.
-Check: 👀 Review of the adapter.
+Removed: its rules are part of DCLI-201 and DCLI-210.
 
 ## Long Jobs
 
@@ -1333,7 +1331,7 @@ Check: 🤖 Driver conformance test D12; `check_project` regenerates the manifes
 
 ### DCLI-260 Adapter capabilities
 
-Besides the domain commands, the tool author writes only the adapter capabilities in this table; the runtime does everything else (DCLI-261). When a capability is missing, the runtime MUST return `E_UNSUPPORTED` for the commands that need it, with no tool code.
+Besides the domain commands, the tool author writes only the adapter capabilities in this table; the runtime does everything else (DREPO-032). When a capability is missing, the runtime MUST return `E_UNSUPPORTED` for the commands that need it, with no tool code.
 
 <!-- contract:adapter_capabilities -->
 | Capability | Side | File | Session | Device | Description |
@@ -1353,14 +1351,14 @@ Besides the domain commands, the tool author writes only the adapter capabilitie
 | `preview` | instance | with writes | with writes | with writes | Builds the preview, with the values the application will store |
 | `apply` | instance | with writes | with writes | with writes | Applies the change and reports what happened |
 | `read_back` | instance | with writes | with writes | with writes | Reads back the changed fields, per target key |
-| `job_status` | instance | with long jobs | with long jobs | with long jobs | Reports the state of a long job |
-| `cancel` | instance | with long jobs | with long jobs | with long jobs | Cancels a long job |
+| `job_status` | instance | with `jobs` commands | with `jobs` commands | with `jobs` commands | Reports the state of a long job |
+| `cancel` | instance | with `jobs` commands | with `jobs` commands | with `jobs` commands | Cancels a long job |
 | `devices` | CLI | — | — | required | Lists devices and their states |
 | `plugin_status` | CLI | with a host component | with a host component | with a host component | Reports the host component versions |
 | `plugin_install` | CLI | with a host component | with a host component | with a host component | Installs the host component |
 | `plugin_remove` | CLI | with a host component | with a host component | with a host component | Removes the host component |
 
-- A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with long jobs" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
+- A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with `jobs` commands" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
 - CLI-side capabilities run in the CLI process. Instance-side capabilities run in the adapter or, as host methods, in a host component (DCLI-262, DCLI-274).
 - `contract/schemas/adapter.schema.json` defines the request and the result of every capability. The in-process adapter interface and the host methods MUST use the same definitions.
 - A capability reports facts: the dispatch state, the change, the delivery, the persistence and the observed values. The runtime compares the read-back with the preview and derives the receipt (DCLI-057, DCLI-062).
@@ -1371,10 +1369,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-261 Runtime responsibilities
 
-The driver runtime provides everything listed for it in the table under "Runtime and Tool Responsibilities". A tool MUST NOT reimplement any of it, and MUST carry the runtime as DREPO-032 sets.
-
-Why: Shared rules implemented once behave the same in every tool.
-Check: 🤖 `check_project` checks the runtime copy by hash (DREPO-034).
+Removed: its rule is part of DREPO-032.
 
 ### DCLI-262 Where adapter code runs
 
@@ -1393,10 +1388,7 @@ Check: 👀 Review against the capability survey (DREPO-015).
 
 ### DCLI-263 Black-box conformance
 
-A driver runtime written in another language MUST pass the same conformance suites, which treat the CLI as a black box (DVER-011).
-
-Why: Tests that do not depend on the language prove the same behavior for every runtime.
-Check: 👀 Review of the conformance suites (DVER-011).
+Removed: its rule is part of DVER-011.
 
 ## Host Protocol
 
@@ -1423,7 +1415,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-273 Handshake
 
-After connecting, the CLI MUST first send `hello` with `protocol_version` and `cli_version`. The host MUST reply with `protocol_version`, `plugin_version`, `application` (name and version), `session` `{id, generation}` and `methods`, the methods it supports. When the major protocol versions differ, the CLI MUST return `E_PROTOCOL` and MUST NOT send any change.
+After connecting, the CLI MUST first send `hello` with `protocol_version` and `cli_version`. The host MUST reply with `protocol_version`, `plugin_version`, `application` (name and version), `session` `{id, generation}` and `methods`, the methods it supports. When the major protocol versions differ, the CLI MUST return `E_PROTOCOL` and MUST NOT send any change. Every connection MUST start with this handshake, so a different major version ends it before any change is sent. Host components SHOULD use the host libraries, which do the transport of DCLI-270 and this handshake (DCLI-281).
 
 Why: A CLI and a host that disagree on the protocol must stop before they misunderstand a write.
 Check: 🤖 Driver conformance test D20.
@@ -1511,7 +1503,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-280 Protocol version
 
-The protocol version MUST follow SemVer and MUST be recorded both in the contract and in the host component's manifest. This specification defines protocol version 1.1.0.
+The protocol version MUST follow SemVer and MUST be recorded both in the contract and in the host component's manifest. This specification defines protocol version 1.2.0.
 
 Why: Both sides can compare versions before they exchange a single write.
 Check: 🤖 Driver conformance test D20.
