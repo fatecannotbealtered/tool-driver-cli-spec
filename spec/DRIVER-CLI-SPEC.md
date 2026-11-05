@@ -474,7 +474,7 @@ Check: 🤖 General conformance tests R01 and R05.
 
 ### DCLI-031 reference
 
-`reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity and evidence, modes, required adapter capabilities, possible error codes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. When a clause lets a tool depart from a default, `reference` MUST show each departure on the command it affects, with the ID of the clause that allows it, in the command's `departures` list.
+`reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity, modes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. The adapter capabilities a command needs and the evidence behind its maturity appear only in the file of `reference --all`, which the project scripts check (DVER-041).
 
 - `tier` MUST give the confirmation tier for each mode the command supports. A tier that depends on the call MUST be described in `tier_when`, such as `doc close --discard`, closing an instance the tool did not start, a save-as or export over an existing file, or a condition the command registers itself, with its `description` (DCLI-029).
 - A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
@@ -483,8 +483,8 @@ Check: 🤖 General conformance tests R01 and R05.
 - `reference --command <path>` MUST return one command, within 6000 characters.
 - `reference --all --output <path>` MUST write the description of every command to that file and return only a summary (DCLI-008).
 
-Why: The Agent learns the whole tool, including the tier of each write in each mode, from one short call and never guesses.
-Check: 🤖 General conformance tests R01 and R02; 👀 review that every departure names its clause.
+Why: The Agent learns what the tool offers from one short call, and the full use of a command, including its tier in each mode, from one more; it never guesses.
+Check: 🤖 General conformance tests R01 and R02.
 
 ### DCLI-032 context
 

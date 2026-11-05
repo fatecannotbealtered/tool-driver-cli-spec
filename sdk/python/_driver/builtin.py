@@ -23,10 +23,6 @@ from .writes import read_back, same
 if TYPE_CHECKING:
     from .tool import Tool
 
-WRITE_ERRORS = ["E_FORBIDDEN", "E_CONFIRMATION_REQUIRED", "E_CONFLICT", "E_OUTCOME_UNKNOWN", "E_PARTIAL",
-                "E_VERIFY_FAILED", "E_VERIFY_INCOMPLETE", "E_IO"]
-READ_ERRORS = ["E_USAGE", "E_NOT_FOUND", "E_AMBIGUOUS", "E_UNSUPPORTED", "E_BUSY", "E_HUMAN_REQUIRED",
-               "E_BACKEND_UNAVAILABLE", "E_VALIDATION", "E_NATIVE_FAILURE", "E_PROTOCOL"]
 
 
 def commands(tool: Tool) -> list[Command]:
@@ -101,8 +97,9 @@ def tier_of(tool: Tool, command: Command) -> str | dict[str, str]:
     return tool.tiers.per_mode(command)
 
 
-def describe(tool: Tool, command: Command) -> dict[str, Any]:
-    """One command as ``reference`` shows it (DCLI-031)."""
+def describe(tool: Tool, command: Command, full: bool = False) -> dict[str, Any]:
+    """One command as ``reference`` shows it (DCLI-031). ``full``: for ``--all``, with the adapter
+    capabilities and evidence the project scripts check."""
     flags = []
     for flag in command.flags:
         entry: dict[str, Any] = {"name": flag.name, "summary": flag.summary}
@@ -129,15 +126,13 @@ def describe(tool: Tool, command: Command) -> dict[str, Any]:
                            "effects": command.effects, "tier": tier_of(tool, command)}
     if command.writes and command.tier_when:
         out["tier_when"] = command.tier_when
-    out.update(maturity=command.maturity, evidence=command.evidence, modes=command.modes,
-               capabilities=command.adapter_capabilities,
-               errors=READ_ERRORS + (WRITE_ERRORS if command.writes or command.path == "operation resolve" else []))
+    out.update(maturity=command.maturity, modes=command.modes)
+    if full:
+        out.update(evidence=command.evidence, capabilities=command.adapter_capabilities)
     if command.default_fields:
         out["default_fields"] = command.default_fields
     if command.related_knowledge:
         out["related_knowledge"] = command.related_knowledge
-    if command.departures:
-        out["departures"] = command.departures
     out["formats"] = command.formats
     if command.output_coordinate_system:
         out["output_coordinate_system"] = command.output_coordinate_system
@@ -160,7 +155,7 @@ def reference(run: Run) -> Result:
     if call.values.get("--all"):
         if not call.has("--output"):
             raise usage("reference --all writes every command to a file; add --output <path>.", "--output")
-        full = {**head, "commands": [describe(tool, c) for c in tool.commands.values()]}
+        full = {**head, "commands": [describe(tool, c, full=True) for c in tool.commands.values()]}
         text = json.dumps(full, ensure_ascii=False, indent=1)
         path = call.values["--output"]
         try:
@@ -175,7 +170,7 @@ def reference(run: Run) -> Result:
         if path not in tool.commands:
             raise usage(f"There is no command {path!r}.", "--command", f"Run `{tool.name} reference` to list the commands.")
         return Result(describe(tool, tool.commands[path]))
-    index = [{"path": c.path, "summary": c.summary, "effects": c.effects, "tier": tier_of(tool, c)} for c in tool.commands.values()]
+    index = [{"path": c.path, "summary": c.summary} for c in tool.commands.values()]
     return Result({**head, "index": index})
 
 
