@@ -70,12 +70,12 @@ Each step names the clauses to read, what to fill, the check and when it is done
 - Read: DREPO-001 to DREPO-004, DREPO-019, DREPO-030 to DREPO-034, DREPO-053.
 - Fill: the person decides `--tool`, `--package` (under an npm scope they own), `--repo` and `--author`. Run `python <spec>/scripts/instantiate.py <new project folder> --tool <tool> --package <package> --application <name> --versions "<range>" --modes <modes>`, adding `--host-component`, `--platforms`, `--repo` and `--author`. In the project, run `git init`, commit the generated files and continue on a branch. Move the survey into `docs/APPLICATION.md` and `docs/APPLICATION_zh.md`. Fill each `{{fill: ...}}` text when its step comes; each says what to write.
 - Check: `python scripts/spec.py check --json`.
-- Done when it lists only DREPO-019 placeholders and the DREPO-061 note that no domain command is registered.
+- Done when it lists only DREPO-019 placeholders and the DCLI-029 note that no domain command is registered.
 
 ### 4 Register commands
 
-- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-064, DCLI-065, DCLI-068, DCLI-080 to DCLI-085, DCLI-212, DREPO-061, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
-- Fill: one registration per command in `<pkg>/commands/__init__.py`, with `survey_ids`; set those capabilities to `provided` in both survey files. Mark work that can take longer than a call `long`, list `doc_kinds` when the application has several kinds of document, set `verify_after_save` when the application shows a change correctly only after a save, use a `json` flag for a structured value such as a pad table, and give each write an output schema that shows what the change made (DCLI-068). New documents come from `doc create`, never a domain command. Then run `python scripts/spec.py generate`.
+- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-064, DCLI-065, DCLI-068, DCLI-080 to DCLI-085, DCLI-212, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
+- Fill: one registration per command in `<pkg>/commands/__init__.py`; set the capabilities it offers to `provided` in both survey files. Mark work that can take longer than a call `long`, list `doc_kinds` when the application has several kinds of document, set `verify_after_save` when the application shows a change correctly only after a save, use a `json` flag for a structured value such as a pad table, and give each write an output schema that shows what the change made (DCLI-068). New documents come from `doc create`, never a domain command. Then run `python scripts/spec.py generate`.
 - Check: `python -m <pkg> reference` starts and lists each command with its tier; `python scripts/spec.py check` reports nothing but DREPO-019 placeholders. The person reviews the command list: the names, and the effects and `irreversible` marks, which set the confirmation tiers.
 - Done when every `provided` capability has its command, every command traces to the survey, and the person agreed to the list.
 

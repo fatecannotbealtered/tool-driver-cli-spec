@@ -99,7 +99,7 @@ class ProjectTest(unittest.TestCase):
         found = self.problems(self.fresh)
         self.assertTrue(found)
         rest = [p.text() for p in found if p.clause != "DREPO-019"
-                and not (p.clause == "DREPO-061" and p.path == "contract/commands.json")]
+                and not (p.clause == "DCLI-029" and p.path == "contract/commands.json")]
         self.assertEqual(rest, [])
 
     def test_the_filled_project_conforms(self):
@@ -265,7 +265,7 @@ class ProjectTest(unittest.TestCase):
         self.edit("docs/APPLICATION.md", "| CAP-001 | Move parts | The automation API | provided | - |",
                   "| CAP-1 | Move parts | The automation API | maybe | - |")
         found = self.clauses()
-        self.assertTrue({"DREPO-060", "DREPO-061"} <= found, found)
+        self.assertIn("DREPO-060", found)
 
     # -------------------------------------------------------------- Skills
 
@@ -282,12 +282,12 @@ class ProjectTest(unittest.TestCase):
         folder = self.project / "skills" / "demo-parts"
         folder.mkdir()
         (folder / "SKILL.md").write_text("---\nname: demo-parts\ndescription: Parts. 零件。\nmetadata:\n  version: 0.1.0\n"
-                                         "  commands: [part get, part move, part fly]\n---\n\nRead the demo-cli Skill first.\n",
+                                         "  commands: [part get, part move, part fly]\n---\n\nParts and their values.\n",
                                          encoding="utf-8")
         other = self.project / "skills" / "demo-boards"
         other.mkdir()
         (other / "SKILL.md").write_text("---\nname: demo-boards\ndescription: Boards. 电路板。\nmetadata:\n  version: 0.1.0\n"
-                                        "  requires: demo-cli\n  commands: [part get]\n---\n\nRead the demo-cli Skill first.\n",
+                                        "  commands: [part get]\n---\n\nRead the demo-cli Skill first.\n",
                                         encoding="utf-8")
         found = self.clauses()
         self.assertTrue({"DSKL-024", "DSKL-026", "DSKL-027"} <= found, found)
@@ -297,8 +297,8 @@ class ProjectTest(unittest.TestCase):
     def test_knowledge_rules(self):
         self.edit("knowledge/demo-troubleshooting.md", "kind: troubleshooting", "kind: guide")
         self.edit("knowledge/demo-troubleshooting.md", "id: demo-troubleshooting", "id: demo-basics")
-        self.edit("knowledge/demo-basics.md", "lang: en\n", "")
-        self.edit("knowledge/demo-basics.md", "\n---\n", "\n---\n\nSee [the guide](missing.md).\n")
+        self.edit("knowledge/demo-basics.md", "tags: [basics]\n", "")
+        self.edit("knowledge/demo-basics.md", "\n---\n", "\n---\n\nSee [the guide](missing.md).\n" + "word " * 1300)
         found = self.clauses()
         self.assertTrue({"DSKL-120", "DSKL-121", "DSKL-126", "DSKL-127"} <= found, found)
 
@@ -488,7 +488,7 @@ class ProjectTest(unittest.TestCase):
         folder = self.project / "skills" / "demo-part"
         folder.mkdir()
         (folder / "SKILL.md").write_text("---\nname: demo-part\ndescription: Parts. 零件。\nmetadata:\n  version: 0.1.0\n"
-                                         f"  requires: demo-cli\n  commands: [part move]\n---\n\nRead demo-cli first.\n\n{line}\n",
+                                         f"  commands: [part move]\n---\n\nRead demo-cli first.\n\n{line}\n",
                                          encoding="utf-8")
         self.fix()
         self.expect("DSKL-023")
@@ -524,7 +524,7 @@ class ProjectTest(unittest.TestCase):
         folder = self.project / "skills" / "demo-part"
         folder.mkdir()
         stub = ("---\nname: demo-part\ndescription: Renamed; read demo-cli. 已改名，请读 demo-cli。\nmetadata:\n"
-                "  version: 0.1.0\n  requires: demo-cli\n  replaced_by: demo-cli\n---\n\n# demo-part\n\nThis Skill was merged into `demo-cli`; read it instead.\n\n"
+                "  version: 0.1.0\n  replaced_by: demo-cli\n---\n\n# demo-part\n\nThis Skill was merged into `demo-cli`; read it instead.\n\n"
                 "<!-- driver:command-map:start -->\n<!-- driver:command-map:end -->\n")
         (folder / "SKILL.md").write_text(stub, encoding="utf-8")
         self.fix()
@@ -543,7 +543,7 @@ class ProjectTest(unittest.TestCase):
     def test_runtime_parser_reads_knowledge(self):
         self.edit("knowledge/demo-basics.md", "\nkind: guide", "\n# a comment\nkind: guide")
         self.assertEqual([p.text() for p in self.problems()], [])
-        self.edit("knowledge/demo-basics.md", "based_on: Filled in by the author", "based_on:")
+        self.edit("knowledge/demo-basics.md", "\ntags: [basics]", "\ntags:")
         self.expect("DSKL-120")
 
     def test_evidence_records_validate(self):

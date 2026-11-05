@@ -2,7 +2,7 @@
 
 A domain command is registered as a dict with the contract's registration fields plus the
 fields ``reference`` shows: ``output_schema``, ``examples``, ``maturity`` and ``evidence``,
-and optionally ``departures``, ``formats`` and ``output_coordinate_system``. The runtime
+and optionally ``formats`` and ``output_coordinate_system``. The runtime
 checks every registration and refuses to run a tool whose registration breaks a rule. The
 confirmation tier and the risk tier are derived here, never taken from the author
 (DCLI-051, DCLI-052, DSEC-001, DSEC-003).
@@ -77,8 +77,7 @@ class Command:
     flags: list[Flag]
     kind: str  # domain, builtin or standard
     untrusted_fields: list[str] = field(default_factory=list)
-    adapter_capabilities: list[str] = field(default_factory=list)
-    survey_ids: list[str] = field(default_factory=list)
+    adapter_capabilities: list[str] = field(default_factory=list)  # derived for a domain command
     irreversible: bool = False
     halt: bool = False
     tolerances: dict[str, float] = field(default_factory=dict)
@@ -88,13 +87,13 @@ class Command:
     examples: list[str] = field(default_factory=list)
     maturity: str = "draft"
     evidence: list[str] = field(default_factory=list)
-    departures: list[dict[str, str]] = field(default_factory=list)
     formats: list[str] = field(default_factory=lambda: ["json", "text"])
     output_coordinate_system: str | None = None
     tier_when: list[dict[str, str]] = field(default_factory=list)
     doc_kinds: list[str] = field(default_factory=list)
     verify_after_save: bool = False
     long: bool = False
+    jobs: bool = False
     needs_scope: bool = True
     counts_for_risk: bool = True
     handler: Callable[..., Any] | None = None
@@ -115,8 +114,7 @@ class Command:
         return {
             "path": self.path, "summary": self.summary, "effects": list(self.effects), "modes": list(self.modes),
             "target_kind": self.target_kind, "flags": [f.registration() for f in self.flags],
-            "untrusted_fields": list(self.untrusted_fields), "adapter_capabilities": list(self.adapter_capabilities),
-            "survey_ids": list(self.survey_ids), "irreversible": self.irreversible, "halt": self.halt,
+            "untrusted_fields": list(self.untrusted_fields), "irreversible": self.irreversible, "halt": self.halt,
             "tolerances": dict(self.tolerances), "default_fields": list(self.default_fields),
             "related_knowledge": list(self.related_knowledge),
             **({"tier_when": [dict(t) for t in self.tier_when if "description" in t]}
@@ -124,6 +122,7 @@ class Command:
             **({"doc_kinds": list(self.doc_kinds)} if self.doc_kinds else {}),
             **({"verify_after_save": True} if self.verify_after_save else {}),
             **({"long": True} if self.long else {}),
+            **({"jobs": True} if self.jobs else {}),
         }
 
 
@@ -163,7 +162,7 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
     path = reg.get("path", "")
     where = f"command {path!r}"
     extra = set(reg) - set(contract["registration_fields"]) - {
-        "output_schema", "examples", "maturity", "evidence", "departures", "formats", "output_coordinate_system",
+        "output_schema", "examples", "maturity", "evidence", "formats", "output_coordinate_system",
     } - set(contract["registration_optional_fields"])
     if extra:
         raise RegistrationError(f"{where}: unknown fields {sorted(extra)}")
@@ -204,13 +203,6 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
     names = [f.name for f in flags]
     if len(set(names)) != len(names):
         raise RegistrationError(f"{where}: a flag is declared twice")
-    caps = list(reg["adapter_capabilities"])
-    unknown = [c for c in caps if c not in contract.capabilities]
-    if unknown:
-        raise RegistrationError(f"{where}: unknown adapter capabilities {unknown}")
-    needed = list(WRITE_CAPABILITIES) if any(e != "observe" for e in effects) else ["read"]
-    if any(c not in caps for c in needed):
-        raise RegistrationError(f"{where}: the command needs the adapter capabilities {needed}")
     if reg["maturity"] not in [m["level"] for m in contract["maturity_levels"]]:
         raise RegistrationError(f"{where}: unknown maturity {reg['maturity']!r}")
     if not reg["examples"]:
@@ -246,18 +238,24 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
     long = reg.get("long", False)
     if not isinstance(long, bool) or (long and halt):
         raise RegistrationError(f"{where}: long is true or false, and a halt command is never long (DCLI-065)")
+    jobs = reg.get("jobs", False)
+    if not isinstance(jobs, bool) or (jobs and (not writes or halt or long)):
+        raise RegistrationError(f"{where}: jobs is true only for a write the application may run as a long job; "
+                                "a halt command and a long command are never such a write (DCLI-065)")
+    # The adapter capabilities follow from the effects; jobs add the ones that follow a job (DCLI-260).
+    caps = (list(WRITE_CAPABILITIES) + (["job_status", "cancel"] if jobs else [])) if writes else ["read"]
     if long and any(f.secret for f in flags):
         raise RegistrationError(f"{where}: a long command takes no secret flag; its worker never sees a secret (DCLI-065, DSEC-040)")
     return Command(
         path=path, summary=reg["summary"], effects=effects, modes=modes, target_kind=reg["target_kind"],
         flags=flags, kind="domain", untrusted_fields=list(reg["untrusted_fields"]), adapter_capabilities=caps,
-        survey_ids=list(reg["survey_ids"]), irreversible=bool(reg["irreversible"]), halt=halt,
+        irreversible=bool(reg["irreversible"]), halt=halt,
         tolerances=dict(reg["tolerances"]), default_fields=list(reg["default_fields"]),
         related_knowledge=list(reg["related_knowledge"]), output_schema=dict(reg["output_schema"]),
         examples=list(reg["examples"]), maturity=reg["maturity"], evidence=list(reg["evidence"]),
-        departures=list(reg.get("departures", [])), formats=list(reg.get("formats", ["json", "text"])),
+        formats=list(reg.get("formats", ["json", "text"])),
         output_coordinate_system=reg.get("output_coordinate_system"), tier_when=[dict(t) for t in tier_when],
-        doc_kinds=list(doc_kinds), verify_after_save=verify_after_save, long=long,
+        doc_kinds=list(doc_kinds), verify_after_save=verify_after_save, long=long, jobs=jobs,
     )
 
 

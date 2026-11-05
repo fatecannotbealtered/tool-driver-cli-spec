@@ -7,8 +7,6 @@ registration that breaks a rule, so a mistake shows up at once. A command needs:
 - ``summary``: one line
 - ``effects``: what it changes (DCLI-051); the runtime derives the confirmation and risk tiers
 - ``modes``, ``target_kind``, ``flags`` (with a unit for every physical quantity), ``untrusted_fields``
-- ``adapter_capabilities``: the adapter methods it calls (DCLI-260)
-- ``survey_ids``: the capability IDs of docs/APPLICATION.md it provides (DREPO-061)
 - ``irreversible``, ``halt``, ``tolerances``, ``default_fields``, ``related_knowledge``
 - ``output_schema``, ``examples``, ``maturity`` and ``evidence``
 

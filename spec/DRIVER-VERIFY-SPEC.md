@@ -130,7 +130,7 @@ The driver suite MUST contain the tests below, and every tool MUST pass every te
 - `direct_writes`: the tool has a write command that runs in the direct tier, in at least one mode (DCLI-052);
 - `documents`: the tool acts on documents, in file or session mode;
 - `dangerous`: the tool has a command that runs in the dangerous tier, at least in some cases (DCLI-051);
-- `jobs`: the tool has long jobs that the application runs, with the adapter capability `job_status`;
+- `jobs`: the tool has a command registered with `jobs: true`, whose long jobs the application runs;
 - `session` or `device`: the tool supports that mode;
 - `host_component`: the tool has a host component;
 - `physical`: the tool has commands with the `physical` effect;

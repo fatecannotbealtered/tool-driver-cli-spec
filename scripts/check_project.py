@@ -10,8 +10,8 @@ evidence and maturity. Each problem names the clause it breaks. The exit code is
 there is a problem.
 
 With ``--fix`` it first writes the generated content: ``contract/commands.json``, the
-command maps, the badge row, the info card, the risk block, the support matrix, the evidence
-index and ``knowledge/index.json``. Everything else is for the author to fix.
+command maps, the badge row, the info card, the risk block, the support matrix and the
+evidence index. Everything else is for the author to fix.
 
 The project's own Python runs the tool once, to read its command registration and
 ``reference --all``. Validation uses jsonschema.
@@ -629,13 +629,6 @@ def runtime_front_matter() -> Any:
     return parse
 
 
-def knowledge_index(facts: Facts) -> str:
-    keys = ["id", "title", "kind", "applies_to", "tags", "lang"]
-    entries = [{**{k: front.get(k) for k in keys}, "file": path.name} for path, front, _ in knowledge_entries(facts)
-               if front.get("id")]
-    return json.dumps({"entries": sorted(entries, key=lambda e: str(e["id"]))}, ensure_ascii=False, indent=2) + "\n"
-
-
 def skills(facts: Facts) -> list[tuple[Path, dict[str, Any], str, int]]:
     folder = facts.root / "skills"
     out = []
@@ -706,8 +699,6 @@ def generate(facts: Facts) -> dict[Path, str]:
             else:
                 text = set_region(text, region_name, content)
         out[path] = text
-    if (root / "knowledge").is_dir():
-        out[root / "knowledge" / facts.contract["knowledge"]["index_file"]] = knowledge_index(facts)
     manifest = plugin_manifest(facts)
     if manifest is not None:
         out[root / "plugin" / "manifest.json"] = manifest
@@ -1026,7 +1017,7 @@ class Checker:
         clauses = {"commands.json": "DREPO-031", "README.md": "DREPO-020", "README_zh.md": "DREPO-020",
                    "SECURITY.md": "DSEC-002", "SECURITY_zh.md": "DSEC-002", "COMPATIBILITY.md": "DREPO-016",
                    "COMPATIBILITY_zh.md": "DREPO-016", "E2E.md": "DREPO-017", "E2E_zh.md": "DREPO-017",
-                   "index.json": "DSKL-121", "SKILL.md": "DSKL-006", "manifest.json": "DCLI-240"}
+                   "SKILL.md": "DSKL-006", "manifest.json": "DCLI-240"}
         for path, text in generate(self.facts).items():
             name = path.relative_to(self.root).as_posix()
             old = read(path) if path.is_file() else None
@@ -1047,7 +1038,7 @@ class Checker:
                 self.add(clause, name, f"generated content is out of date ({', '.join(which) or path.name}); "
                          "run `python scripts/spec.py generate`")
         if self.facts.registration is not None and not self.facts.registration.get("commands"):
-            self.add("DREPO-061", "contract/commands.json", f"no domain command is registered yet; register them in "
+            self.add("DCLI-029", "contract/commands.json", f"no domain command is registered yet; register them in "
                      f"{self.facts.pkg}/commands/ (DCLI-029), then run `python scripts/spec.py generate`")
         elif self.facts.registration is not None:
             for message in self.validate(self.facts.registration, "commands.schema.json"):
@@ -1210,7 +1201,7 @@ class Checker:
                 return out
         return None
 
-    # -------------------------------------------------------------- capability survey (DREPO-060, DREPO-061)
+    # -------------------------------------------------------------- capability survey (DREPO-060)
 
     def survey(self) -> None:
         text = self.text("docs/APPLICATION.md")
@@ -1239,12 +1230,7 @@ class Checker:
             ids.append(cap)
             value = row[column] if column < len(row) else ""
             if value not in dispositions:
-                self.add("DREPO-061", "docs/APPLICATION.md", f"{cap} has disposition {value!r}, not one of {dispositions}")
-        for command in (self.facts.registration or {}).get("commands", []):
-            missing = [s for s in command.get("survey_ids", []) if s not in ids]
-            if missing or not command.get("survey_ids"):
-                self.add("DREPO-061", "contract/commands.json", f"`{command['path']}` names survey IDs that are not in "
-                         f"the capability survey: {missing or 'none given'}")
+                self.add("DREPO-060", "docs/APPLICATION.md", f"{cap} has disposition {value!r}, not one of {dispositions}")
 
     # -------------------------------------------------------------- Skills (DSKL-001 to DSKL-032)
 
@@ -1299,15 +1285,15 @@ class Checker:
             if str(meta.get("version", "")) != facts.version:
                 self.add("DSKL-030", rel, f"metadata.version must be the tool version {facts.version}")
             if name == facts.tool:
-                if "requires" in meta or "commands" in meta or "replaced_by" in meta:
-                    self.add("DSKL-002", rel, "only domain Skills carry metadata.requires and metadata.commands, "
-                             "and only rename stubs metadata.replaced_by")
+                if "commands" in meta or "replaced_by" in meta:
+                    self.add("DSKL-002", rel, "only domain Skills carry metadata.commands, and only rename stubs metadata.replaced_by")
                 self.playbooks(rel, body)
                 continue
             if not facts.product or not name.startswith(facts.product + "-"):
                 self.add("DSKL-023", rel, f"a domain Skill lives in skills/{facts.product}-<area>/")
-            if meta.get("requires") != facts.tool:
-                self.add("DSKL-024", rel, f"metadata.requires names the entry Skill {facts.tool!r}")
+            opening = next((x for x in body.splitlines() if x.strip() and not x.lstrip().startswith("#")), "")
+            if "replaced_by" not in meta and facts.tool and facts.tool not in opening:
+                self.add("DSKL-024", rel, f"the body starts by telling the Agent to read the entry Skill {facts.tool!r} first")
             listed = meta.get("commands")
             if "replaced_by" in meta:
                 # A rename stub owns no commands and names the Skill to read instead (DSKL-026, DSKL-028).
@@ -1382,6 +1368,9 @@ class Checker:
             for name in kn["rule_fields"] + kn["resource_fields"]:
                 if name in front and name not in required:
                     self.add("DSKL-120", rel, f"`{name}` belongs only to {'rule' if name in kn['rule_fields'] else 'resource'} entries")
+            for name in front:
+                if name not in kn["builtin_fields"] + kn["rule_fields"] + kn["resource_fields"]:
+                    self.add("DSKL-120", rel, f"`{name}` is not a field of a builtin entry; remove it")
             if kind not in kn["kinds"]:
                 self.add("DSKL-127", rel, f"kind {kind!r} is not one of {kn['kinds']}")
             kinds.add(kind)
@@ -1391,8 +1380,6 @@ class Checker:
             elif entry_id in ids:
                 self.add("DSKL-127", rel, f"id {entry_id} is also used by {ids[entry_id]}")
             ids[entry_id] = rel
-            if front.get("lang") not in kn["langs"]:
-                self.add("DSKL-120", rel, f"lang is one of {kn['langs']}")
             if kind == "rule" and front.get("severity") not in kn["severities"]:
                 self.add("DSKL-120", rel, f"severity is one of {kn['severities']}")
             if len(body.strip()) > kn["max_body_chars"]:

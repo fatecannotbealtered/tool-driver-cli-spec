@@ -15,7 +15,7 @@
     "applies_to": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "builtin_front_matter": {
       "type": "object",
-      "required": ["id", "title", "kind", "applies_to", "tags", "lang", "based_on", "updated_on"],
+      "required": ["id", "title", "kind", "applies_to", "tags"],
       "additionalProperties": false,
       "properties": {
         "id": {"$ref": "#/$defs/id"},
@@ -23,9 +23,6 @@
         "kind": {"$ref": "#/$defs/kind"},
         "applies_to": {"$ref": "#/$defs/applies_to"},
         "tags": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}},
-        "lang": {"enum": ["zh", "en"]},
-        "based_on": {"type": "string", "minLength": 1},
-        "updated_on": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
         "severity": {"enum": ["error", "warning", "info"]},
         "check": {"type": "string", "minLength": 1},
         "location": {"type": "string", "minLength": 1},
@@ -53,7 +50,7 @@
     },
     "team_entry": {
       "type": "object",
-      "required": ["id", "title", "kind", "url", "provider", "added_at"],
+      "required": ["id", "title", "kind", "url"],
       "additionalProperties": false,
       "properties": {
         "id": {"$ref": "#/$defs/id"},
@@ -61,9 +58,7 @@
         "kind": {"$ref": "#/$defs/kind"},
         "url": {"$ref": "#/$defs/feishu_url"},
         "about": {"type": "string", "maxLength": 200},
-        "applies_to": {"$ref": "#/$defs/applies_to"},
-        "provider": {"const": "feishu"},
-        "added_at": {"$ref": "error.schema.json#/$defs/utc"}
+        "applies_to": {"$ref": "#/$defs/applies_to"}
       }
     },
     "registration_file": {

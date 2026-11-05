@@ -21,8 +21,8 @@ CONTRACT = json.loads((ROOT / "contract" / "driver-contract.json").read_text(enc
 COMMANDS = [
     {
         "path": "footprint move", "summary": "Moves footprints.", "effects": ["change"], "modes": ["file", "session"],
-        "target_kind": "footprint", "untrusted_fields": [], "adapter_capabilities": ["preview", "apply", "read_back"],
-        "survey_ids": [], "irreversible": False, "halt": False, "tolerances": {"x_mm": 0.001, "y_mm": 0.001},
+        "target_kind": "footprint", "untrusted_fields": [],
+        "irreversible": False, "halt": False, "tolerances": {"x_mm": 0.001, "y_mm": 0.001},
         "default_fields": [], "related_knowledge": [],
         "flags": [
             {"name": "--x", "type": "number", "quantity": "length"},
@@ -31,20 +31,20 @@ COMMANDS = [
     },
     {
         "path": "plot export", "summary": "Plots a board.", "effects": ["artifact"], "modes": ["session"],
-        "target_kind": "file", "untrusted_fields": [], "adapter_capabilities": ["preview", "apply", "read_back"],
-        "survey_ids": [], "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
+        "target_kind": "file", "untrusted_fields": [],
+        "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
         "related_knowledge": [], "flags": [{"name": "--to", "type": "path", "output": True}],
     },
     {
         "path": "axis move", "summary": "Moves an axis.", "effects": ["physical"], "modes": ["device"],
-        "target_kind": "axis", "untrusted_fields": [], "adapter_capabilities": ["preview", "apply", "read_back"],
-        "survey_ids": [], "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
+        "target_kind": "axis", "untrusted_fields": [],
+        "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
         "related_knowledge": [], "flags": [{"name": "--position", "type": "number", "quantity": "length"}],
     },
     {
         "path": "stop", "summary": "Stops the device.", "effects": ["lifecycle"], "modes": ["device"],
-        "target_kind": "device", "untrusted_fields": [], "adapter_capabilities": ["apply"],
-        "survey_ids": [], "irreversible": False, "halt": True, "tolerances": {}, "default_fields": [],
+        "target_kind": "device", "untrusted_fields": [],
+        "irreversible": False, "halt": True, "tolerances": {}, "default_fields": [],
         "related_knowledge": [], "flags": [],
     },
 ]

@@ -36,7 +36,7 @@ On Windows, activate the environment with `.venv\Scripts\activate` instead. `req
 | Command | What it does |
 |---|---|
 | `python scripts/spec.py check` | Runs the project check: layout, documents and their fixed text, generated content, pinned copies, versions, Skills, knowledge, behavior matrices, evidence and maturity |
-| `python scripts/spec.py generate` | Regenerates `contract/commands.json`, the command maps, the badge row, the info card, the risk block, the support matrix, the evidence index and `knowledge/index.json` |
+| `python scripts/spec.py generate` | Regenerates `contract/commands.json`, the command maps, the badge row, the info card, the risk block, the support matrix and the evidence index |
 | `python scripts/spec.py suites` | Runs both conformance suites against {{tool}}, with the fake host in place of {{application}} |
 | `python scripts/spec.py sync <version>` | Replaces the pinned copies with those of another tool-driver-cli-spec release |
 | `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` | Runs the behavior matrix of one command on the real {{application}}, on authorized targets, and writes a live record |
@@ -125,7 +125,7 @@ Evidence counts only while its tool version has the same major and minor version
 
 1. **Survey.** Find the capability in the Capabilities table of `docs/APPLICATION.md`. When it is missing, add a row with a new `CAP-nnn`. Set its disposition to `provided` once a command offers it.
 2. **Name.** Use the form `noun verb`. Take the verb from the fixed list: `list`, `get`, `search`, `check`, `create`, `update`, `delete`, `move`, `import`, `render`, `export`, `run`, `stop`. Take the noun from the terms of {{application}}, written as a full word. A noun never takes the name of a built-in or standard command, such as `session`, `doc` or `job`.
-3. **Register.** Register the command in `{{pkg}}/commands/` with its summary, effects, modes, target type, flags with their types, the unit quantity of every physical value, its secret parameters, its untrusted output fields, the adapter capabilities it calls and its capability IDs in `survey_ids`. Declare every effect. Mark a change {{application}} cannot take back with `irreversible: true`, and a command that only stops work with `halt: true`. Give read-back tolerances where {{application}} rounds or snaps values, and name related knowledge entries in `related_knowledge`.
+3. **Register.** Register the command in `{{pkg}}/commands/` with its summary, effects, modes, target type, flags with their types, the unit quantity of every physical value, its secret parameters and its untrusted output fields. Declare every effect. Mark a change {{application}} cannot take back with `irreversible: true`, and a command that only stops work with `halt: true`. Give read-back tolerances where {{application}} rounds or snaps values, and name related knowledge entries in `related_knowledge`.
 4. **Implement.** Write the adapter capabilities the command needs in `{{pkg}}/adapter/`, or in the host component in `plugin/` when the interface of {{application}} works only inside its process or on its main thread. Never reimplement what the driver runtime does.
 5. **Matrix.** Write the behavior matrix in `tests/matrix/`, with every row. The `normal` row of a write command is its sample.
 6. **Generate and check.** Run `python scripts/spec.py generate`, then `python scripts/spec.py check`, `python -m unittest discover -s tests` and `python scripts/spec.py suites`.

@@ -14,15 +14,6 @@
       "target_kind": "document",
       "flags": [],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-011"
-      ],
       "irreversible": false,
       "halt": true,
       "tolerances": {},

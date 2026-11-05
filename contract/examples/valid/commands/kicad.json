@@ -24,12 +24,6 @@
         "value",
         "description"
       ],
-      "adapter_capabilities": [
-        "read"
-      ],
-      "survey_ids": [
-        "CAP-003"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -74,15 +68,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-004"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {
@@ -110,15 +95,6 @@
       "target_kind": "document",
       "flags": [],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-011"
-      ],
       "irreversible": false,
       "halt": true,
       "tolerances": {},

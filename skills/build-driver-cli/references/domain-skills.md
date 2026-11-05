@@ -22,7 +22,6 @@ description: >-
   不负责布板和生产文件，这些请用 kicad-board。
 metadata:
   version: 1.4.0
-  requires: kicad-cli
   commands: [symbol list, symbol create, wire create, label create, schematic check]
 ---
 
@@ -49,9 +48,9 @@ Read the entry Skill `kicad-cli` first and follow its write recipe, STOP checkpo
 Rules for the fields and the body (DSKL-002, DSKL-024 to DSKL-026):
 
 - `name` is the directory name. `metadata.version` is the version in `package.json`.
-- `metadata.requires` names the entry Skill. `metadata.commands` lists the command paths this Skill owns. Every command belongs to exactly one Skill; commands no domain Skill lists belong to the entry Skill. The entry Skill has neither field.
+- `metadata.commands` lists the command paths this Skill owns. Every command belongs to exactly one Skill; commands no domain Skill lists belong to the entry Skill. The entry Skill has no such field.
 - The description says what the Skill covers, what it does not cover and which Skill covers that, in English and Chinese. No two Skills of the tool compete for the same request.
-- The body starts with the instruction to read the entry Skill first.
+- The body starts with the instruction to read the entry Skill first, naming it; `check_project` checks that the first line names it (DSKL-024).
 - The body holds only its command map, knowledge pointers and domain playbooks. Never repeat the write recipe, the STOP checkpoints, the driver playbooks or the report; never add error or exit code tables (DSKL-005); never copy knowledge content, only say which knowledge to look up (DSKL-100).
 - Leave the command map empty between its two marker lines; `python scripts/spec.py generate` writes it (DSKL-006).
 
@@ -66,7 +65,7 @@ Then add a row to the routing table of the entry Skill:
 
 ## Rename stub
 
-When a Skill is renamed or merged into another, keep its old directory as a stub (DSKL-028). `update` replaces only the Skill directories already installed, so without a stub the old copy keeps teaching. A stub only says which Skill to read instead. It owns no commands: it keeps `metadata.requires`, names the Skill to read in `metadata.replaced_by`, has no `metadata.commands` (DSKL-026), and its command map stays empty (DSKL-006).
+When a Skill is renamed or merged into another, keep its old directory as a stub (DSKL-028). `update` replaces only the Skill directories already installed, so without a stub the old copy keeps teaching. A stub only says which Skill to read instead. It owns no commands: it names the Skill to read in `metadata.replaced_by`, has no `metadata.commands` (DSKL-026), and its command map stays empty (DSKL-006).
 
 ```markdown
 ---
@@ -76,7 +75,6 @@ description: >-
   已改名：封装相关的任务请改用 kicad-board。
 metadata:
   version: 1.5.0
-  requires: kicad-cli
   replaced_by: kicad-board
 ---
 

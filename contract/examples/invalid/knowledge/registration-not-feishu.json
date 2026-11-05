@@ -4,9 +4,7 @@
       "id": "rules",
       "title": "Rules",
       "kind": "rule",
-      "url": "https://docs.example.com/rules",
-      "provider": "feishu",
-      "added_at": "2026-11-02T08:30:00Z"
+      "url": "https://docs.example.com/rules"
     }
   ]
 }

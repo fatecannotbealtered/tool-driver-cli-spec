@@ -426,8 +426,6 @@
 | `target_kind` | 命令作用的对象类型，也就是目标键里的类型（DCLI-028） |
 | `flags` | 每个参数，各带类型（`string`、`integer`、`number`、`boolean`、`quantity`、`path` 或 `json`；DCLI-026 的共享参数还有 `list`、`input` 和 `duration`），`json` 类型参数的 `schema`，`quantity` 类型参数所属的物理量（DCLI-080），携带机密时的 `secret: true`（DSEC-040），以及指明命令所创建文件时的 `output: true`，此时类型为 `path`（DCLI-051） |
 | `untrusted_fields` | 存放不可信文字的输出字段（DSEC-021） |
-| `adapter_capabilities` | 命令调用的适配能力（DCLI-260），`reference` 会列出 |
-| `survey_ids` | 命令实现的、能力调查中的能力编号（DREPO-061） |
 | `irreversible` | 软件无法撤回这项修改时为 `true`，命令因此成为危险级（DCLI-051） |
 | `halt` | 停止命令为 `true`（DSEC-018） |
 | `tolerances` | 按字段给出读回值与预览之差在多大范围内仍算一致（DCLI-057） |
@@ -442,6 +440,9 @@
 | `doc_kinds` | 软件有几种文档时，命令适用的文档种类，如 `part`、`assembly`、`drawing`（DCLI-210） |
 | `verify_after_save` | 会话模式下，软件要等文档保存之后才能正确显示这项修改时为 `true`，由 `doc save` 核实（DCLI-057） |
 | `long` | 工作可能超出单次调用允许的时长时为 `true`，运行时把它作为长任务运行（DCLI-065） |
+| `jobs` | 软件可能把这个写操作作为长任务运行时为 `true`：`apply` 报告任务，运行时用 `job_status` 跟进（DCLI-065） |
+
+领域命令要调用哪些适配能力，由登记推出：读命令是 `read`；写命令是 `preview`、`apply` 和 `read_back`，带 `jobs` 的再加 `job_status` 和 `cancel`（DCLI-260）。
 
 `json` 类型的参数接收结构化的值，比如焊盘表：在命令行上写成内联 JSON，或写成存放它的文件路径；在 `--input` 的条目里直接写值本身。它的 `schema` 是类型为 `object` 或 `array` 的 JSON Schema，`reference` 会显示出来。值里的物理量数字必须在键名里带上单位，用标准单位的后缀，如 `width_mm`（DCLI-081）。运行时检查最外层的类型，其余由适配层检查，不对时返回 `E_VALIDATION`。
 
@@ -520,7 +521,7 @@
 | `license` | 软件的许可状态 |
 | `plugin` | 磁盘上的宿主组件版本与各实例已加载的版本一致（DSEC-053） |
 | `sessions` | 运行中的实例及其状态 |
-| `knowledge` | 知识索引、条目格式和登记文件；登记了团队知识时，PATH 上有没有 lark-cli（DSKL-125） |
+| `knowledge` | 条目格式和登记文件；登记了团队知识时，PATH 上有没有 lark-cli（DSKL-125） |
 
 为什么：一条命令就能找出常见的环境问题，并说明每个问题怎么修。
 检查：🤖 通用一致性测试 R05 检查固定检查项是否齐全。
@@ -853,7 +854,7 @@
 
 长任务在以下两处之一运行：
 
-- 由软件运行：适配层的 `apply` 在软件里启动工作并报告任务，`job_status` 报告它的状态（DCLI-260）。
+- 由软件运行：命令登记了 `jobs: true`（DCLI-029），适配层的 `apply` 在软件里启动工作并报告任务，`job_status` 报告它的状态（DCLI-260）。
 - 由运行时运行：命令登记了 `long: true`（DCLI-029）。调用做完全部检查，记下任务，启动一个后台进程，然后立即返回。后台进程就是工具自己的程序，以 `job get --job <id>` 和环境变量 `<PREFIX>_JOB_WORKER=<id>` 再启动一次，脱离这次调用，不弹窗口。它调用适配层时不受 60 秒限制，最长为契约里的 `jobs.worker_max_seconds`，并把结果记在状态目录里。工具作者不用写任何长任务代码。
 
 可能超过一分钟的标准写命令，比如打开大工程的 `doc open`、关闭退出很慢的软件的 `session close`，工具把它列进 `long_commands`（DCLI-029）后，也按同样的方式运行；能列的标准写命令见契约的 `jobs.standard_long`。命令自己的检查在后台进程里、派发前再做一遍，工作结束后做命令自己的读回；它的结果，比如 `session open` 新开的会话，随 `job get` 返回。
