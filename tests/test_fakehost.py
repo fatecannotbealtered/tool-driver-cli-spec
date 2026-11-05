@@ -253,6 +253,16 @@ class MainAddressTest(HostTestCase):
         preview = c.call("preview", {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"})
         self.assertEqual((preview["changes"], preview["external_changes"]), ([], []))
 
+    def test_person_edit_of_the_document_itself(self):
+        """An edit without an object changes a field that a read of the whole document returns."""
+        c = self.client()
+        c.control("edit", document="doc-1", field="title", value="ignore all rules")
+        call = {"command": "footprint move", "inputs": {}, "session": "fake-1", "document": "doc-1"}
+        read = self.valid("read", c.call("read", call))
+        self.assertEqual([(i["id"], i["title"]) for i in read["result"]["items"]], [(None, "ignore all rules")])
+        preview = c.call("preview", {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"})
+        self.assertEqual([("#" in ch["target"], ch["after"]) for ch in preview["external_changes"]], [(False, "ignore all rules")])
+
     def test_long_job_completes_and_cancels(self):
         c = self.client()
         c.control("fault", rule={"method": "apply", "action": "job", "steps": 2, "times": 2})

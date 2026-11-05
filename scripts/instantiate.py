@@ -106,7 +106,7 @@ def copy_template(args: argparse.Namespace, root: Path) -> None:
         dest.write_text(text, encoding="utf-8", newline="\n")
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     package["optionalDependencies"] = {f"{args.package}-{NPM_OS[p]}-x64": args.version for p in args.platforms}
-    (root / "package.json").write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "package.json").write_text(json.dumps(package, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     for name in ("docs/APPLICATION.md", "docs/APPLICATION_zh.md"):
         path = root / name
         if path.is_file():

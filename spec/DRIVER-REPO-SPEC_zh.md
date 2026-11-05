@@ -115,6 +115,7 @@
 ├── scripts/                        构建、打 npm 平台包、冒烟测试、检查脚本
 ├── tests/                          工具的测试和一致性测试的运行
 │   ├── matrix/                     行为矩阵，每条命令一个 JSON 文件
+│   ├── inputs/                     样例只读取的文件，即 {inputs}（DVER-002）
 │   └── eval/                       评测题（命令要标 stable 时必需）
 └── .github/                        工作流 ci.yml 和 release.yml、Issue 与 PR 模板
 ```

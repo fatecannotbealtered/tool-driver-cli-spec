@@ -2,8 +2,9 @@
 """Run a behavior matrix on the real application: the matrix runner (DVER-030, DVER-042).
 
     python scripts/run_matrix.py <project> --command "<path>" --set doc=<file> [--set session=<id>]
-        [--set device=<id>] [--set dir=<folder>] [--row normal,busy] [--mode session]
-        [--kind part] [--pause 120] [--tamper "<command>"] [--application-version 10.0.1]
+        [--set device=<id>] [--set dir=<folder>] [--set job=<id>] [--job-from "<long command>"]
+        [--row normal,busy] [--mode session] [--kind part] [--pause 120] [--tamper "<command>"]
+        [--application-version 10.0.1]
 
 It fills the sample placeholders of each row with the ``--set`` values, runs the rows that
 apply (all, or those named with ``--row``; rows marked ``unrunnable`` never run), and writes
@@ -19,9 +20,14 @@ does, with ``TOOL_DRIVER_PAUSE_FILE`` naming the tool's ``pause.json``. The run 
 ``tampered``. The ``normal`` row of a command registered with ``verify_after_save`` is followed
 by ``doc save`` on the same document, and passes only when that save verified the change.
 
+``{inputs}`` is the project's ``tests/inputs/`` folder. ``{job}`` is the ``--set job=`` value, or
+else the job that the ``normal`` row of a long command starts at the beginning of the run: the
+command ``--job-from`` names, or the tool's only long command.
+
 Every file, folder and device a run uses, through ``--set`` or written in a row, must be listed
-under Authorized Targets in ``docs/E2E.md`` (DVER-050); otherwise nothing runs. The fake host is
-never used, and a simulated result never counts as a pass (DVER-021).
+under Authorized Targets in ``docs/E2E.md`` (DVER-050); otherwise nothing runs. A file a command
+only reads from ``tests/inputs/`` is not a target. The fake host is never used, and a simulated
+result never counts as a pass (DVER-021).
 """
 from __future__ import annotations
 
@@ -32,6 +38,7 @@ import json
 import os
 import platform
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -109,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kind", help="the kind of the document, for a command that lists doc_kinds")
     parser.add_argument("--pause", type=int, default=120, help="seconds the tool waits before the read-back in read_back_mismatch")
     parser.add_argument("--tamper", help="a command that changes the written result while the tool waits")
+    parser.add_argument("--job-from", help="the long command whose normal row starts the job that fills {job}")
     parser.add_argument("--application-version", help="default: the version context reports")
     args = parser.parse_args(argv)
     root = args.project.resolve()
@@ -139,14 +147,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("docs/E2E.md lists no authorized target; only a person adds targets")
     values: dict[str, str] = {}
     used: set[str] = set()
+    settable = [p for p in facts.contract["sample_placeholders"] if p != "{inputs}"]
     for item in args.set:
         name, _, value = item.partition("=")
-        if f"{{{name}}}" not in facts.contract["sample_placeholders"] or not value:
-            raise SystemExit(f"--set takes one of {facts.contract['sample_placeholders']} as name=value, not {item!r}")
+        if f"{{{name}}}" not in settable or not value:
+            raise SystemExit(f"--set takes one of {settable} as name=value, not {item!r}")
         if name in ("doc", "dir") and path_like(value):
             value = str(Path(value).resolve())  # the tool runs in the project, not where this was started
         values[name] = value
-        if name == "session" or (name == "doc" and not path_like(value)):
+        if name in ("session", "job") or (name == "doc" and not path_like(value)):
             continue
         target = target_of(name, value)
         if covered(target, authorized) is None:
@@ -159,29 +168,32 @@ def main(argv: list[str] | None = None) -> int:
     rows = [r for r in matrix["rows"] if r["applies"] and not r.get("unrunnable") and (not wanted or r["row"] in wanted)]
     if not rows:
         raise SystemExit("no row to run")
-    path_flags = {f["name"] for f in command.get("flags", []) if f.get("type") in ("path", "file") or f.get("output")}
-    path_flags |= {"--doc", "--output", "--dir"}
+    inputs = root / "tests" / "inputs"
+    values["inputs"] = str(inputs)
     secret = {f["name"] for f in command.get("flags", []) if f.get("secret")}
+    needs_job = "job" not in values and any("{job}" in a for r in rows for a in r["arguments"])
+    starter = None
+    if needs_job:
+        starter = _job_starter(root, facts, args.job_from, values, authorized)
+    elif args.job_from:
+        raise SystemExit("--job-from fills {job}; no row to run uses it, or --set job= already does")
     filled = []
     for row in rows:
         arguments = [_fill(a, values) for a in row["arguments"]]
-        missing = sorted({m for a in arguments for m in re.findall(r"\{(session|doc|device|dir)\}", a)})
-        if missing:
-            raise SystemExit(f"row {row['row']} needs --set {', '.join(missing)}")
-        for flag, value in pairs(arguments):
-            if flag == "--device" and covered(f"device:{value}", authorized) is None:
-                raise SystemExit(f"row {row['row']} uses device {value}, which is not an authorized target")
-            if flag in path_flags and path_like(value) and covered(target_of("doc", value), authorized) is None:
-                raise SystemExit(f"row {row['row']} uses {value}, which is not inside an authorized target")
+        _check_row(row["row"], command, arguments, authorized, inputs, needs_job)
         filled.append((row, arguments, mode_of(command, arguments, args.mode)))
 
     env = {k: v for k, v in os.environ.items() if not k.startswith(facts.prefix + "_FAKE_HOST")}
     tool = [sys.executable, "-m", facts.pkg]
     app_version = args.application_version or _context_version(tool, root, env)
+    job_note = None
+    if starter is not None:
+        values["job"], job_note = _start_job(tool, root, env, starter)
+        filled = [(row, [a.replace("{job}", values["job"]) for a in arguments], mode) for row, arguments, mode in filled]
     runs = []
     state_dir = Path(env.get(f"{facts.prefix}_STATE_DIR") or Path.home() / f".{facts.tool}")
     for row, arguments, mode in filled:
-        notes = []
+        notes = [job_note] if job_note and any(values["job"] in a for a in arguments) else []
         tampered = row["row"] == "read_back_mismatch"
         row_env = env
         watcher = None
@@ -242,21 +254,119 @@ def main(argv: list[str] | None = None) -> int:
               "targets": sorted(used), "runs": runs}
     folder = root / "docs" / "evidence"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / name).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (folder / name).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     for row, _, _ in filled:
         row["evidence"] = f"live:docs/evidence/{name}#{row['row']}"
-    matrix_path.write_text(json.dumps(matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    matrix_path.write_text(json.dumps(matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")
     return 0 if all(r["result"] == "pass" for r in runs) else 1
 
 
-def _run(argv: list[str], root: Path, env: dict[str, str], notes: list[str]) -> tuple[int, bytes]:
+def _check_row(name: str, command: dict[str, Any], arguments: list[str], authorized: list[str], inputs: Path,
+               job_pending: bool = False) -> None:
+    """Every target a row names is authorized (DVER-050); a file it only reads from tests/inputs/ is not a target."""
+    missing = sorted({m for a in arguments for m in re.findall(r"\{(session|doc|device|dir|job)\}", a)
+                      if not (m == "job" and job_pending)})
+    if missing:
+        raise SystemExit(f"row {name} needs --set {', '.join(missing)}")
+    outputs = {f["name"] for f in command.get("flags", []) if f.get("output")} | {"--output", "--dir"}
+    written = outputs | ({"--doc"} if command.get("effects") != ["observe"] else set())
+    path_flags = {f["name"] for f in command.get("flags", []) if f.get("type") in ("path", "file")} | outputs | {"--doc"}
+    for flag, value in pairs(arguments):
+        if flag == "--device" and covered(f"device:{value}", authorized) is None:
+            raise SystemExit(f"row {name} uses device {value}, which is not an authorized target")
+        if flag not in path_flags or not path_like(value):
+            continue
+        if flag not in written and _inside(value, inputs):
+            continue  # read only, from the project's own sample inputs
+        if covered(target_of("doc", value), authorized) is None:
+            raise SystemExit(f"row {name} uses {value}, which is not inside an authorized target")
+
+
+def _inside(value: str, folder: Path) -> bool:
     try:
-        proc = subprocess.run(argv, cwd=root, env=env, capture_output=True, timeout=TIMEOUT_S, creationflags=NO_WINDOW)
-        return proc.returncode, proc.stdout
-    except subprocess.TimeoutExpired as exc:
-        notes.append(f"no answer within {TIMEOUT_S} s")
-        return -1, exc.stdout or b""
+        Path(value).resolve().relative_to(folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _job_starter(root: Path, facts: Any, named: str | None, values: dict[str, str],
+                 authorized: list[str]) -> tuple[str, list[str]]:
+    """The long command, and its filled normal row, that starts the job filling {job}."""
+    long = [c["path"] for c in facts.commands if c.get("long")]
+    if named is None:
+        if len(long) != 1:
+            raise SystemExit("a row uses {job}: pass --set job=<id>, or --job-from with the long command that starts one"
+                             + (f" (one of {', '.join(long)})" if long else "; the tool has no long command"))
+        named = long[0]
+    elif named not in long:
+        raise SystemExit(f"--job-from takes a long command; {named!r} is not one" + (f" (long: {', '.join(long)})" if long else ""))
+    source = next(c for c in facts.commands if c["path"] == named)
+    path = root / "tests" / "matrix" / (named.replace(" ", "-") + ".json")
+    rows = [r for r in json.loads(check_project.read(path))["rows"] if r["row"] == "normal" and r["applies"]]
+    if not rows:
+        raise SystemExit(f"{path.name} has no normal row to start a job with")
+    arguments = [_fill(a, values) for a in rows[0]["arguments"]]
+    if any("{job}" in a for a in arguments):
+        raise SystemExit(f"the normal row of {named} itself uses {{job}}")
+    _check_row("normal of " + named, source, arguments, authorized, Path(values["inputs"]))
+    return named, arguments
+
+
+def _start_job(tool: list[str], root: Path, env: dict[str, str], starter: tuple[str, list[str]]) -> tuple[str, str]:
+    named, arguments = starter
+    notes: list[str] = []
+    _, stdout = _confirmed(tool + named.split(" ") + arguments, root, env, None, notes)
+    data = _envelope(stdout).get("data") or {}
+    job = (data.get("result") or {}).get("job") or data.get("job") or {}
+    if not job.get("id"):
+        raise SystemExit(f"{named} started no job for {{job}}: {stdout.decode('utf-8', 'replace').strip()[-300:]}")
+    print(f"{{job}} is {job['id']}, started by {named}.")
+    return str(job["id"]), f"{{job}} is {job['id']}, started by `{named}`"
+
+
+def _run(argv: list[str], root: Path, env: dict[str, str], notes: list[str], timeout: float = TIMEOUT_S) -> tuple[int, bytes]:
+    """Run one call; when it does not answer in time, end it with every process it started, so
+    a child that still holds the output cannot keep the runner waiting."""
+    options: dict[str, Any] = {"cwd": root, "env": env, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+    if os.name == "nt":
+        options["creationflags"] = NO_WINDOW
+    else:
+        options["start_new_session"] = True  # its own process group, so killpg ends them all
+    proc = subprocess.Popen(argv, **options)
+    try:
+        stdout, _ = proc.communicate(timeout=timeout)
+        return proc.returncode, stdout
+    except subprocess.TimeoutExpired:
+        notes.append(f"no answer within {int(timeout)} s")
+        kill_tree(proc)
+        try:
+            stdout, _ = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            stdout = b""
+            for stream in (proc.stdout, proc.stderr):
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+        return -1, stdout or b""
+
+
+def kill_tree(proc: subprocess.Popen) -> None:
+    """End a process and every process it started."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, creationflags=NO_WINDOW, check=False)
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
 
 
 class _Watcher(threading.Thread):
@@ -366,9 +476,9 @@ def _fill(argument: str, values: dict[str, str]) -> str:
 
 
 def _context_version(tool: list[str], root: Path, env: dict[str, str]) -> str:
-    proc = subprocess.run(tool + ["context"], cwd=root, env=env, capture_output=True, timeout=120, creationflags=NO_WINDOW)
+    _, stdout = _run(tool + ["context"], root, env, [], 120)
     try:
-        version = json.loads(proc.stdout.decode("utf-8"))["data"]["application"]["version"]
+        version = json.loads(stdout.decode("utf-8"))["data"]["application"]["version"]
     except (ValueError, KeyError, TypeError):
         version = None
     if not version:

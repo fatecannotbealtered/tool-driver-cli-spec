@@ -11,8 +11,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
@@ -579,6 +581,8 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual((record["targets"], record["runs"][0]["mode"]), ([url], "session"))
         row = json.loads((self.project / "tests" / "matrix" / "part-get.json").read_text(encoding="utf-8"))["rows"][0]
         self.assertTrue(row["evidence"].startswith("live:docs/evidence/"))
+        for written in (records[0], self.project / "tests" / "matrix" / "part-get.json"):
+            self.assertNotIn(b"\r\n", written.read_bytes(), written.name)  # LF, like every file in the repository
         self.fix()
         problems = [p.message for p in self.problems() if p.clause == "DVER-030"]
         self.assertTrue(any("row normal failed" in m for m in problems), problems)
@@ -596,6 +600,60 @@ class ProjectTest(unittest.TestCase):
     def test_run_matrix_masks_secrets_and_never_passes_simulated_results(self):
         self.assertTrue(run_matrix.simulated({"data": {"receipt": {"simulated": True}}}))
         self.assertEqual(run_matrix.pairs(["--token=abc", "--id", "R1", "--dry-run"]), [("--token", "abc"), ("--id", "R1")])
+
+
+class RunMatrixTest(unittest.TestCase):
+    def tmp(self) -> Path:
+        path = Path(tempfile.mkdtemp(prefix="run-matrix-"))
+        self.addCleanup(shutil.rmtree, path, True)
+        return path
+
+    def test_a_call_that_does_not_answer_ends_with_every_process_it_started(self):
+        # The child starts a grandchild that holds the output pipe and outlives the child.
+        child = ("import os, subprocess, sys, time\n"
+                 "flags = 0x08000000 if os.name == 'nt' else 0\n"
+                 "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(90)'], creationflags=flags)\n"
+                 "time.sleep(90)\n")
+        notes: list[str] = []
+        started = time.monotonic()
+        code, _ = run_matrix._run([sys.executable, "-c", child], self.tmp(), dict(os.environ), notes, timeout=3)
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertEqual((code, notes), (-1, ["no answer within 3 s"]))
+
+    def test_files_a_command_only_reads_from_tests_inputs_are_not_targets(self):
+        root = self.tmp()
+        inputs = root / "tests" / "inputs"
+        authorized = [(root / "authorized").resolve().as_uri() + "/"]
+        command = {"path": "design import", "effects": ["change"],
+                   "flags": [{"name": "--from", "type": "path"}, {"name": "--to", "type": "path", "output": True}]}
+        run_matrix._check_row("normal", command, ["--from", str(inputs / "design.json")], authorized, inputs)
+        run_matrix._check_row("normal", command, ["--to", str(root / "authorized" / "out.json")], authorized, inputs)
+        for arguments in (["--from", str(root / "elsewhere" / "design.json")],  # read, but not from tests/inputs
+                          ["--to", str(inputs / "out.json")],                   # written
+                          ["--doc", str(inputs / "board.fake")]):               # the document a write changes
+            with self.assertRaises(SystemExit):
+                run_matrix._check_row("normal", command, arguments, authorized, inputs)
+        observe = {**command, "effects": ["observe"]}
+        run_matrix._check_row("normal", observe, ["--doc", str(inputs / "board.fake")], authorized, inputs)
+        with self.assertRaises(SystemExit):
+            run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs)
+        run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs, job_pending=True)
+
+    def test_job_comes_from_the_normal_row_of_a_long_command(self):
+        root = self.tmp()
+        (root / "tests" / "matrix").mkdir(parents=True)
+        row = {"row": "normal", "applies": True, "arguments": ["--session", "{session}"]}
+        (root / "tests" / "matrix" / "route-run.json").write_text(json.dumps({"command": "route run", "rows": [row]}), encoding="utf-8")
+        facts = SimpleNamespace(commands=[{"path": "route run", "long": True, "effects": ["change"], "flags": []},
+                                          {"path": "job get", "effects": ["observe"], "flags": []}])
+        values = {"session": "s1", "inputs": str(root / "tests" / "inputs")}
+        self.assertEqual(run_matrix._job_starter(root, facts, None, values, []), ("route run", ["--session", "s1"]))
+        self.assertEqual(run_matrix._job_starter(root, facts, "route run", values, []), ("route run", ["--session", "s1"]))
+        with self.assertRaises(SystemExit):
+            run_matrix._job_starter(root, facts, "job get", values, [])  # not a long command
+        facts.commands.append({"path": "design check", "long": True, "effects": ["observe"], "flags": []})
+        with self.assertRaises(SystemExit):
+            run_matrix._job_starter(root, facts, None, values, [])  # two long commands: name one
 
 
 class GeneratorTest(unittest.TestCase):

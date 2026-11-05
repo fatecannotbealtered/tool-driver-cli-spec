@@ -874,7 +874,7 @@
       {"id": "D26", "title": "long job in the tool's own worker", "applies_when": ["long_jobs"]}
     ]
   },
-  "sample_placeholders": ["{session}", "{doc}", "{device}", "{dir}"],
+  "sample_placeholders": ["{session}", "{doc}", "{device}", "{dir}", "{job}", "{inputs}"],
   "matrix": {"pause_env": "<PREFIX>_TEST_PAUSE_BEFORE_READ_BACK", "pause_file": "pause.json", "max_pause_seconds": 600},
   "fake_host": {"env": "<PREFIX>_FAKE_HOST", "receipt_key": "simulated"},
   "behavior_matrix_rows": [

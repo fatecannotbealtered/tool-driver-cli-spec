@@ -115,6 +115,7 @@ The tree below shows a typical tool project. It illustrates the layout and is no
 ├── scripts/                        build, npm platform packages, smoke test, checks
 ├── tests/                          the tool's tests and conformance runs
 │   ├── matrix/                     behavior matrices, one JSON file per command
+│   ├── inputs/                     files that samples only read, as {inputs} (DVER-002)
 │   └── eval/                       evaluation questions (required before a command is marked stable)
 └── .github/                        workflows ci.yml and release.yml, issue and pull request templates
 ```

@@ -59,7 +59,7 @@ Every domain command, and every standard command whose adapter capabilities the 
 ```
 
 - The `normal` row of a write command is its sample: the general suite runs it against the fake host (DVER-002).
-- Name sessions, documents, devices and output folders only with `{session}`, `{doc}`, `{device}` and `{dir}`.
+- Name sessions, documents, devices and output folders only with `{session}`, `{doc}`, `{device}` and `{dir}`, a job with `{job}`, and a file the command only reads, such as a design description, with `{inputs}`: put it in `tests/inputs/`.
 - A row that applies but cannot happen for this command becomes `"applies": false` with the reason.
 - A row that applies but cannot be caused on demand on the real application, such as `disconnect`, may keep its arguments and add `"unrunnable": "<reason>"`. `normal`, `dialog` and `read_back_mismatch` never may.
 - A complete example is `contract/examples/valid/behavior-matrix/footprint-move.json` in the release.
