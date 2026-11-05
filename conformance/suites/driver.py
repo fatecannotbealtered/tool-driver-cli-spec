@@ -46,7 +46,8 @@ def _device_writes(subject: Subject) -> list[Sample]:
 
 def _field_samples(subject: Subject) -> list[Sample]:
     """The writes whose verification reads fields back rather than files."""
-    found = [s for s in _own(subject) if "artifact" not in subject.registrations[s.path]["effects"]]
+    found = [s for s in _own(subject) if "artifact" not in subject.registrations[s.path]["effects"]
+             and not subject.registrations[s.path].get("verify_after_save")]  # those are verified at the save
     if not found:
         raise NotApplicable("the registration has no write that changes fields")
     return found

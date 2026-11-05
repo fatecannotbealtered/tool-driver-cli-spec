@@ -726,8 +726,8 @@ class World:
         return {"items": [d.view() for d in docs]}
 
     def cap_create_doc(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Untitled in an instance; at a path in an instance (not yet saved); or, without a
-        session, a new file on disk (file mode, DCLI-212)."""
+        """Untitled in an instance; or at a path, written at once, in an instance or, without a
+        session, in file mode (DCLI-212)."""
         session = params.get("session")
         if session is not None:
             self._gate(params)
@@ -738,15 +738,13 @@ class World:
             raise HostError("E_VALIDATION", f"{path} exists")
         objects = self._load(params["template"]) if params.get("template") else {}
         spec = {"untitled": True} if path is None else {"path": path, "objects": objects}
-        doc = self._add_document(spec, session, write=session is None)
+        doc = self._add_document(spec, session, write=path is not None)
         if params.get("kind"):
             doc.kind = params["kind"]
         out = {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
-               "persistence": "saved" if session is None else "unchanged", "document": doc.view()}
-        if session is None:
+               "persistence": "saved" if path is not None else "unchanged", "document": doc.view()}
+        if path is not None:
             out["files"] = [{"path": path}]
-        else:
-            doc.dirty = path is not None
         return out
 
     def cap_open_doc(self, params: dict[str, Any]) -> dict[str, Any]:

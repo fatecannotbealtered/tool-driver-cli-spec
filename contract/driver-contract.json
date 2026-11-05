@@ -489,7 +489,7 @@
     },
     {"path": "doc list", "effect": "observe", "modes": ["file", "session"], "tier": "none"},
     {"path": "doc get", "effect": "observe", "modes": ["file", "session"], "tier": "none"},
-    {"path": "doc create", "effect": "lifecycle", "modes": ["file", "session"], "tier": "direct", "optional": true},
+    {"path": "doc create", "effect": "lifecycle", "modes": ["file", "session"], "tier": "direct", "two_step_when": "target_exists", "optional": true},
     {"path": "doc open", "effect": "lifecycle", "modes": ["session"], "tier": "direct", "optional": true},
     {"path": "doc save", "effect": "persist", "modes": ["session"], "tier": "two_step"},
     {

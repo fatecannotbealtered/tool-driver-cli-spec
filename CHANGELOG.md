@@ -11,17 +11,17 @@ Changes from reworking three tools onto 1.0.0. Every change serves the same goal
 ### Added
 
 - DCLI-068: the result of a write shows what the change made, such as a track's end points, net and connections, with only the direct effects and nothing that takes long to compute. DSKL-011: Skills check results as data, never by recognizing a screenshot.
-- Long jobs the runtime runs itself (DCLI-065): a command registered `long: true` returns a job at once and runs its work in a worker of the same tool. A long read, such as a design rule check of a large board, needs no scope and returns its result through `job get`. Driver conformance test D26 checks it.
+- Long jobs the runtime runs itself (DCLI-065): a command registered `long: true` returns a job at once and runs its work in a worker of the same tool, which claims the job once and runs the same checks before dispatch. A long read, such as a design rule check of a large board, needs no scope and returns its result through `job get`. A write job the tool runs cannot be cancelled midway (DCLI-221). Driver conformance test D26 checks it.
 - Document kinds (DCLI-029, DCLI-210): a command lists the kinds of document it works on in `doc_kinds`. It refuses a document of another kind, and its normal row must pass on every kind (DVER-030, DVER-040). `run_matrix --kind` records the kind of each run.
-- Verification after the save (DCLI-057): a command registered `verify_after_save` reports verification `deferred` in session mode, and the next `doc save` verifies it.
-- `doc create --path` and `--template`, in file mode too (DCLI-212).
+- Verification after the save (DCLI-057): a command registered `verify_after_save` reports verification `deferred` in session mode, and the next `doc save` verifies it; closing without a save settles it as `not_run`.
+- `doc create --path` and `--template`, in file mode too; with `--path` the file exists when the call returns (DCLI-212).
 - The flag type `json` for structured values such as pad tables, and batch items of a `create` command without `id` (DCLI-029, DCLI-064).
 - Conditions a command registers in `tier_when`, which the adapter's preview raises with `tier_raises` (DCLI-052).
 - The adapter may answer `E_AMBIGUOUS`, `E_CONFLICT`, `E_BACKEND_UNAVAILABLE` and `E_TIMEOUT` (DCLI-279). The host protocol is now version 1.1.0.
 
 ### Changed
 
-- The `read_back_mismatch` row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back, and a person or `--tamper` changes the result meanwhile (DVER-030).
+- The `read_back_mismatch` row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back, and a person or `--tamper` changes the result meanwhile (DVER-030). `run_matrix` now confirms two-step rows with their token and judges a long command by how its job ends.
 - A file-mode write is refused while an instance has the file open only when it changes or saves the file; an export goes ahead, with a notice (DCLI-201).
 - `dirty` may be `null` when the application cannot tell, and then counts as possibly unsaved (DCLI-210).
 - The adapter and the host component mix capability by capability (DCLI-262).

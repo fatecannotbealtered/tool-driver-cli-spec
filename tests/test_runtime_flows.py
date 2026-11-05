@@ -269,9 +269,6 @@ class UntitledDocuments(unittest.TestCase):
             self.assertEqual(closed.data["receipt"]["target"]["key"], doc["key"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 
 
@@ -345,3 +342,67 @@ class CreateDocuments(unittest.TestCase):
             self.assertEqual(first.data["receipt"]["outcome"]["verification"], "passed", first.stdout[:600])
             again = case.run("doc", "create", "--path", path)
             self.assertEqual(again.code, "E_CONFIRMATION_REQUIRED", again.stdout[:400])
+
+
+
+class ReviewFixes(unittest.TestCase):
+    """Edges the 1.0.1 review found."""
+
+    def test_a_write_job_the_tool_runs_cannot_be_cancelled_midway(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            job = out.data["result"]["job"]["id"]
+            cancel = case.run("job", "cancel", "--job", job)
+            self.assertIn(cancel.code, ("E_UNSUPPORTED", "E_VALIDATION"), cancel.stdout[:400])
+            done = case.run("job", "get", "--job", job, "--wait", "60s")
+            self.assertTrue(done.data["ok"], done.stdout[:400])
+
+    def test_a_job_id_never_names_a_path(self):
+        with Case(subject()) as case:
+            for args in (("job", "get", "--job", "../../planted"), ("job", "cancel", "--job", "../../planted")):
+                out = case.run(*args)
+                self.assertEqual(out.code, "E_NOT_FOUND", out.stdout[:400])
+            self.assertFalse(list(case.state_dir.rglob("*planted*")))
+
+    def test_doc_create_refuses_a_file_an_instance_has_open(self):
+        with Case(subject()) as case:
+            path = case.doc_path("doc-1")
+            out = case.run("doc", "create", "--path", path)
+            self.assertEqual(out.details.get("conflict"), "file_open_in_session", out.stdout[:400])
+
+    def test_a_change_shown_only_after_a_save_is_verified_by_the_save(self):
+        with Case(subject()) as case:
+            out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--name", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(out.data["receipt"]["outcome"]["verification"], "deferred")
+            operation = out.data["operation_id"]
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            saved = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertTrue(saved.ok, saved.stdout[:600])
+            self.assertEqual(saved.data["receipt"]["outcome"]["verification"], "passed", saved.stdout[:600])
+            record = case.run("operation", "get", "--id", operation)
+            self.assertEqual(record.data["receipt"]["outcome"]["verification"], "passed", record.stdout[:600])
+
+    def test_a_deferred_change_that_did_not_land_fails_the_save(self):
+        with Case(subject()) as case:
+            out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--name", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            case.control("edit", document="doc-1", object="N1", field="name", value="OTHER")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            saved = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertEqual(saved.code, "E_VERIFY_FAILED", saved.stdout[:600])
+
+    def test_discarding_a_deferred_change_settles_it_as_not_run(self):
+        with Case(subject()) as case:
+            out = case.run("net", "update", "--session", "fake-1", "--doc", "doc-1", "--id", "N1", "--name", "GND")
+            operation = out.data["operation_id"]
+            first = case.run("doc", "close", "--session", "fake-1", "--doc", "doc-1", "--discard")
+            closed = case.run("doc", "close", "--session", "fake-1", "--doc", "doc-1", "--discard",
+                              "--confirm", first.details["confirm_token"], "--dangerous")
+            self.assertTrue(closed.ok, closed.stdout[:600])
+            record = case.run("operation", "get", "--id", operation)
+            self.assertEqual(record.data["receipt"]["outcome"]["verification"], "not_run", record.stdout[:600])
+
+
+if __name__ == "__main__":
+    unittest.main()

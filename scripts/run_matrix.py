@@ -34,6 +34,8 @@ import platform
 import re
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +46,7 @@ import check_project  # noqa: E402
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 PLATFORMS = {"win32": "windows", "darwin": "macos", "linux": "linux"}
 TIMEOUT_S = 300
+JOB_WAIT_S = 3600  # how long the runner follows a long job (DCLI-065)
 
 
 def target_of(name: str, value: str) -> str:
@@ -180,15 +183,25 @@ def main(argv: list[str] | None = None) -> int:
     for row, arguments, mode in filled:
         notes = []
         tampered = row["row"] == "read_back_mismatch"
+        row_env = env
+        watcher = None
         if tampered:
-            exit_code, stdout = _tampered(tool + args.command.split(" ") + arguments, root, env, facts, state_dir, args, notes)
-        else:
-            exit_code, stdout = _run(tool + args.command.split(" ") + arguments, root, env, notes)
-        try:
-            envelope = json.loads(stdout.decode("utf-8", "replace").strip().splitlines()[-1])
-        except (ValueError, IndexError):
-            envelope = None
-        envelope = envelope if isinstance(envelope, dict) else {}
+            row_env = {**env, facts.contract["matrix"]["pause_env"].replace("<PREFIX>", facts.prefix):
+                       str(min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"])))}
+            watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, row_env, args, notes)
+            watcher.start()
+        expected_code = row["expected"].get("code")
+        exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes)
+        envelope = _envelope(stdout)
+        if command.get("long") and envelope.get("ok") is True:
+            exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)
+        if tampered and command.get("verify_after_save") and mode == "session" and envelope.get("ok") is True:
+            # The change is verified at the save, so the mismatch is caused there (DVER-030).
+            exit_code, stdout = _confirmed(tool + ["doc", "save", "--session", values.get("session", ""), "--doc", values.get("doc", "")],
+                                           root, row_env, expected_code, notes)
+            envelope = _envelope(stdout)
+        if watcher is not None:
+            watcher.join(timeout=5)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
         code = error.get("code") if isinstance(error.get("code"), str) else None
         shown_exit = exit_code if exit_code in (*range(10), 130) else 1  # the exit codes of DCLI-014
@@ -209,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 shown.append(argument)
         entry = {"command": args.command, "arguments": shown, "exit": exit_code, "result": "pass" if passed else "fail",
-                 "matrix_row": row["row"], "mode": mode, "envelope_sha256": hashlib.sha256(stdout.strip()).hexdigest()}
+                 "matrix_row": row["row"], "mode": mode,
+                 "envelope_sha256": hashlib.sha256(stdout.strip()).hexdigest()}
         if args.kind:
             entry["doc_kind"] = args.kind
         if tampered:
@@ -245,37 +259,80 @@ def _run(argv: list[str], root: Path, env: dict[str, str], notes: list[str]) -> 
         return -1, exc.stdout or b""
 
 
-def _tampered(argv: list[str], root: Path, env: dict[str, str], facts: Any, state_dir: Path, args: Any,
-              notes: list[str]) -> tuple[int, bytes]:
-    """The read_back_mismatch row: the tool waits before its read-back while the result is
-    changed from outside, by the person or by --tamper (DVER-030)."""
-    pause = state_dir / facts.contract["matrix"]["pause_file"]
-    seconds = min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"]))
-    env = {**env, facts.contract["matrix"]["pause_env"].replace("<PREFIX>", facts.prefix): str(seconds)}
-    proc = subprocess.Popen(argv, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW)
-    end = datetime.datetime.now() + datetime.timedelta(seconds=TIMEOUT_S)
-    while not pause.exists() and proc.poll() is None and datetime.datetime.now() < end:
-        import time
+class _Watcher(threading.Thread):
+    """The read_back_mismatch row: once the tool pauses before its read-back, the result is
+    changed from outside, by --tamper or by the person (DVER-030)."""
 
-        time.sleep(0.2)
-    if pause.exists():
-        info = json.loads(pause.read_text(encoding="utf-8"))
-        if args.tamper:
-            done = subprocess.run(args.tamper, shell=True, cwd=root, env={**env, "TOOL_DRIVER_PAUSE_FILE": str(pause)},
-                                  creationflags=NO_WINDOW)
-            notes.append(f"--tamper exited {done.returncode}")
+    def __init__(self, pause: Path, root: Path, env: dict[str, str], args: Any, notes: list[str]) -> None:
+        super().__init__(daemon=True)
+        self.pause, self.root, self.env, self.args, self.notes = pause, root, env, args, notes
+        self.stopped = threading.Event()
+
+    def run(self) -> None:
+        end = time.monotonic() + TIMEOUT_S + JOB_WAIT_S
+        while not self.pause.exists():
+            if time.monotonic() > end or self.stopped.is_set():
+                self.notes.append("the tool never paused before its read-back")
+                return
+            time.sleep(0.2)
+        try:
+            info = json.loads(self.pause.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            info = {}
+        if self.args.tamper:
+            done = subprocess.run(self.args.tamper, shell=True, cwd=self.root,
+                                  env={**self.env, "TOOL_DRIVER_PAUSE_FILE": str(self.pause)}, creationflags=NO_WINDOW)
+            self.notes.append(f"--tamper exited {done.returncode}")
         else:
             print(f"Now change {', '.join(info.get('fields') or ['the result'])} of {', '.join(info.get('targets', []))} "
-                  f"in the application, or the file it made; the tool waits up to {seconds} s.", file=sys.stderr, flush=True)
+                  f"in the application, or delete the file it made; the tool waits up to {info.get('seconds')} s.",
+                  file=sys.stderr, flush=True)
+
+    def join(self, timeout: float | None = None) -> None:
+        self.stopped.set()
+        super().join(timeout)
+
+
+def _confirmed(argv: list[str], root: Path, env: dict[str, str], expected_code: str | None,
+               notes: list[str]) -> tuple[int, bytes]:
+    """Run a row; a two-step or dangerous write is confirmed with its token, unless the row
+    expects the confirmation itself (DCLI-053)."""
+    exit_code, stdout = _run(argv, root, env, notes)
+    out = _envelope(stdout)
+    details = (out.get("error") or {}).get("details") or {}
+    if (out.get("error") or {}).get("code") == "E_CONFIRMATION_REQUIRED" and expected_code != "E_CONFIRMATION_REQUIRED" \
+            and details.get("confirm_token"):
+        extra = ["--confirm", details["confirm_token"]]
+        if (details.get("preview") or {}).get("tier") == "dangerous":
+            extra.append("--dangerous")
+        exit_code, stdout = _run(argv + extra, root, env, notes)
+    return exit_code, stdout
+
+
+def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[str, Any], contract: dict[str, Any],
+             notes: list[str]) -> tuple[int, dict[str, Any]]:
+    """A long command's row is decided by how its job ends (DCLI-065)."""
+    data = envelope.get("data") or {}
+    job = (data.get("result") or {}).get("job") or data.get("job") or {}
+    if not job.get("id"):
+        notes.append("the long command returned no job")
+        return 1, envelope
+    end = time.monotonic() + JOB_WAIT_S
+    view: dict[str, Any] = {}
+    while time.monotonic() < end:
+        out = _envelope(_run(tool + ["job", "get", "--job", job["id"], "--wait", "600s"], root, env, notes)[1])
+        view = out.get("data") or {}
+        if view.get("state") in ("completed", "failed", "partial", "unknown", "cancelled"):
+            break
     else:
-        notes.append("the tool never paused before its read-back")
-    try:
-        stdout, _ = proc.communicate(timeout=TIMEOUT_S + seconds)
-        return proc.returncode, stdout
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        notes.append(f"no answer within {TIMEOUT_S + seconds} s")
-        return -1, b""
+        notes.append(f"job {job['id']} did not end within {JOB_WAIT_S} s")
+        return 1, {"ok": False, "error": {"code": "E_TIMEOUT"}}
+    notes.append(f"job {job['id']} ended {view.get('state')}")
+    if view.get("ok"):
+        return 0, {"ok": True, "data": view}
+    exits = {e["code"]: e["exit"] for e in contract["error_codes"]}
+    code = view.get("code") or "E_UNKNOWN"
+    return exits.get(code, 1), {"ok": False, "error": {"code": code}, "data": view}
 
 
 def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dict[str, str], notes: list[str]) -> bool:

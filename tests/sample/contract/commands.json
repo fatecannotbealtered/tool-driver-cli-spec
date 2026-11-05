@@ -509,6 +509,61 @@
       "long": true
     },
     {
+      "path": "net update",
+      "summary": "Rename a net; the application shows it only after a save.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "net",
+      "flags": [
+        {
+          "name": "--session",
+          "type": "string",
+          "summary": "The session ID of the instance (DCLI-202)."
+        },
+        {
+          "name": "--doc",
+          "type": "string",
+          "summary": "The document: its ID or path; in file mode, the file path."
+        },
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "The net.",
+          "required": true
+        },
+        {
+          "name": "--name",
+          "type": "string",
+          "summary": "The new name."
+        },
+        {
+          "name": "--output",
+          "type": "path",
+          "summary": "Write the full preview, with every change, to this file."
+        }
+      ],
+      "untrusted_fields": [],
+      "adapter_capabilities": [
+        "read",
+        "preview",
+        "apply",
+        "read_back"
+      ],
+      "survey_ids": [
+        "CAP-001"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": [],
+      "verify_after_save": true
+    },
+    {
       "path": "design check",
       "summary": "Check the design rules; the runtime runs the check as a long job.",
       "effects": [

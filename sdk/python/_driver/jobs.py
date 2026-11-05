@@ -13,6 +13,7 @@ not operations. Write jobs live in their operation record, like a job the applic
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -29,8 +30,22 @@ WINDOWS = sys.platform == "win32"
 FINAL = ("completed", "failed", "partial", "unknown", "cancelled")
 
 
+JOB_ID = re.compile(r"job-[0-9a-f]{10}")
+
+
 def new_job_id() -> str:
     return "job-" + secrets.token_hex(5)
+
+
+def new_nonce() -> str:
+    return secrets.token_hex(8)
+
+
+def worker_of(run: Run, job_id: str, nonce: str | None) -> bool:
+    """Whether this process is the worker started for this job: its variable names the job
+    and the nonce the job recorded before the worker started."""
+    job, _, given = (run.worker or "").partition(":")
+    return bool(nonce) and job == job_id and secrets.compare_digest(given, nonce or "")
 
 
 def worker_deadline_ms(run: Run) -> int:
@@ -51,10 +66,10 @@ def worker_command(run: Run) -> list[str]:
     return [sys.executable, os.path.abspath(sys.argv[0])]
 
 
-def start_worker(run: Run, job_id: str) -> dict[str, int]:
+def start_worker(run: Run, job_id: str, nonce: str) -> dict[str, int]:
     """Start the worker detached from this call, with no window (DCLI-065)."""
     env = dict(run.env)
-    env[f"{run.tool.prefix}_JOB_WORKER"] = job_id
+    env[f"{run.tool.prefix}_JOB_WORKER"] = f"{job_id}:{nonce}"
     args = worker_command(run) + ["job", "get", "--job", job_id]
     kwargs: dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
                               "env": env, "close_fds": True}
@@ -90,6 +105,8 @@ class ReadJobs:
         write_json(self._dir() / f"{job['id']}.json", job)
 
     def load(self, job_id: str) -> dict[str, Any] | None:
+        if not JOB_ID.fullmatch(job_id):
+            return None  # the ID names a file, so it never holds a path (DSEC-030)
         path = self.run.state.path / "jobs" / f"{job_id}.json"
         if not path.is_file():
             return None
@@ -118,29 +135,47 @@ def submit_read(run: Run, request: dict[str, Any], untrusted: list[str]) -> dict
     store = ReadJobs(run)
     job = {"id": new_job_id(), "kind": "read", "command": request["command"], "state": "running",
            "cancel_requested": False, "started_at": utc_now(), "finished_at": None, "_request": request,
-           "_untrusted": untrusted}
-    store.save(job)
+           "_untrusted": untrusted, "worker": {"nonce": new_nonce()}}
+    store.save(job)  # recorded before the worker starts, so the worker finds itself named
     try:
-        job["worker"] = start_worker(run, job["id"])
+        started = start_worker(run, job["id"], job["worker"]["nonce"])
     except OSError as exc:
-        job.update(state="failed", ok=False, code="E_UNKNOWN", message=f"The worker could not start: {exc}",
-                   finished_at=utc_now())
-    store.save(job)
-    return job
+        with run.mutex.hold():
+            latest = store.load(job["id"]) or job
+            latest.update(state="failed", ok=False, code="E_UNKNOWN", message=f"The worker could not start: {exc}",
+                          finished_at=utc_now())
+            store.save(latest)
+        return latest
+    with run.mutex.hold():
+        latest = store.load(job["id"]) or job
+        latest["worker"] = {**latest.get("worker", {}), **started}
+        store.save(latest)
+    return latest
 
 
 def run_read(run: Run, job: dict[str, Any]) -> None:
-    """In the worker: make the read with the long deadline and record what came back."""
+    """In the worker: claim the job, make the read with the long deadline and record what came back."""
     from .errors import DriverError
 
     store = ReadJobs(run)
+    with run.mutex.hold():
+        latest = store.load(job["id"]) or job
+        if latest.get("worker", {}).get("claimed") or latest["state"] in FINAL:
+            return  # another worker has it: a job runs once
+        latest.setdefault("worker", {})["claimed"] = True
+        store.save(latest)
+    job = latest
     try:
         result = run.capability("read", job["_request"], worker_deadline_ms(run)).get("result")
         job.update(state="completed", ok=True, code=None, result=result)
     except DriverError as exc:
         job.update(state="failed", ok=False, code=exc.code, message=exc.message)
     job["finished_at"] = utc_now()
-    store.save(job)
+    with run.mutex.hold():
+        latest = store.load(job["id"]) or job
+        job["worker"] = {**latest.get("worker", {}), **job.get("worker", {})}
+        job["cancel_requested"] = latest.get("cancel_requested", False)
+        store.save(job)
 
 
 def settle_dead_read(run: Run, job: dict[str, Any]) -> dict[str, Any]:
@@ -149,8 +184,11 @@ def settle_dead_read(run: Run, job: dict[str, Any]) -> dict[str, Any]:
         latest = ReadJobs(run).load(job["id"]) or job
         if latest["state"] in FINAL:
             return latest
-        latest.update(state="failed", ok=False, code="E_UNKNOWN", finished_at=utc_now(),
-                      message="The worker that ran this job ended without a result.")
+        if latest.get("cancel_requested"):
+            latest.update(state="cancelled", ok=False, code="E_INTERRUPTED", finished_at=utc_now())
+        else:
+            latest.update(state="failed", ok=False, code="E_UNKNOWN", finished_at=utc_now(),
+                          message="The worker that ran this job ended without a result.")
         ReadJobs(run).save(latest)
         return latest
     return job
@@ -158,9 +196,9 @@ def settle_dead_read(run: Run, job: dict[str, Any]) -> dict[str, Any]:
 
 def read_view(job: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {"id": job["id"], "operation_id": None, "state": job["state"],
-                           "cancel_requested": job.get("cancel_requested", False), "started_at": job["started_at"]}
+                           "cancel_requested": job.get("cancel_requested", False), "started_at": job["started_at"],
+                           "finished_at": job.get("finished_at") if job["state"] in FINAL else None}
     if job["state"] in FINAL:
-        out["finished_at"] = job.get("finished_at")
         out["ok"] = bool(job.get("ok"))
         if job.get("code"):
             out["code"] = job["code"]
@@ -185,10 +223,13 @@ def stop_read(run: Run, job: dict[str, Any]) -> dict[str, Any]:
                 os.kill(pid, 15)
         except OSError:
             pass
-    if not worker_alive(job):
-        job.update(state="cancelled", ok=False, code="E_INTERRUPTED", finished_at=utc_now())
-    ReadJobs(run).save(job)
-    return job
+    with run.mutex.hold():
+        latest = ReadJobs(run).load(job["id"]) or job
+        latest["cancel_requested"] = True
+        if latest["state"] not in FINAL and not worker_alive(latest):
+            latest.update(state="cancelled", ok=False, code="E_INTERRUPTED", finished_at=utc_now())
+        ReadJobs(run).save(latest)
+    return latest
 
 
 __all__ = ["FINAL", "ReadJobs", "new_job_id", "read_view", "run_read", "settle_dead_read", "start_worker",

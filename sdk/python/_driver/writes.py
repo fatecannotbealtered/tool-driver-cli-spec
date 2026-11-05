@@ -75,6 +75,11 @@ class WriteSpec:
                child: int | None = None) -> Verification:
         raise NotImplementedError
 
+    def probe(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]],
+              child: int | None = None) -> Verification:
+        """A read-back with no side effect, for the pause of DVER-030."""
+        return self.verify(operation_id, facts, changes, child)
+
     def result(self, facts: dict[str, Any], verification: Verification) -> Any:
         return facts.get("result", {})
 
@@ -282,6 +287,44 @@ def same(expected: Any, actual: Any, tolerance: float | None) -> bool:
     return expected == actual
 
 
+def pause_before_read_back(run: Run, operation_id: str, command: str, facts: dict[str, Any],
+                           changes: list[dict[str, Any]], check: Any) -> str | None:
+    """For the read_back_mismatch row of a live behavior matrix (DVER-030): wait before the
+    read-back so that a person or a script can change what was just written in the
+    application, or delete the file it made. The wait ends early only on a real mismatch; a
+    busy or blocked application keeps it waiting. The variable only makes the tool wait, and
+    the receipt says that it waited; this wait is the one exception to the 60-second limit."""
+    name = f"{run.tool.prefix}_TEST_PAUSE_BEFORE_READ_BACK"
+    raw = run.env.get(name)
+    if not raw:
+        return None
+    try:
+        seconds = min(float(raw), float(run.contract["matrix"]["max_pause_seconds"]))
+    except ValueError:
+        return None
+    path = run.state.path / run.contract["matrix"]["pause_file"]
+    keys = sorted({c["target"] for c in changes if c.get("origin", "tool") == "tool"}
+                  | {file_key(f["path"]) for f in facts.get("files", []) if isinstance(f, dict) and f.get("path")})
+    path.write_text(json.dumps({"operation_id": operation_id, "command": command, "targets": keys,
+                                "fields": sorted({c["field"] for c in changes if "field" in c}),
+                                "seconds": seconds}), encoding="utf-8")
+    end = time.monotonic() + seconds
+    try:
+        while time.monotonic() < end:
+            time.sleep(1)
+            try:
+                if check().status == "failed":
+                    break
+            except Exception:  # noqa: BLE001 - a read that fails now is tried again; the final read-back decides
+                continue
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    return f"The tool waited up to {seconds:g} s before the read-back, as {name} asked."
+
+
 def is_file_target(key: str) -> bool:
     """A ``file:`` key that names a whole file, not an object inside it."""
     return key.startswith("file:///") and "#" not in key
@@ -345,6 +388,11 @@ class Engine:
         changes = self._changes(pv)
         keys = _keys(targets, changes) or self.named_keys(spec)
         tier = self.tier(spec, targets, changes)
+        approved = (token_record or {}).get("preview", {}).get("tier")
+        if approved and self.contract.tier_rank(tier) > self.contract.tier_rank(approved):
+            # The call became stricter than the person confirmed (DCLI-052, DCLI-056 step 8).
+            raise conflict("preview_changed", f"The call is now {tier}, not the {approved} that was confirmed; nothing was sent.",
+                           "Run the command again without --confirm to see the new preview.")
         dangerous = tier == "dangerous"
         if command.needs_scope:
             self.check_scope(command, dangerous, keys, spec.halt)
@@ -808,41 +856,16 @@ class Engine:
 
     def pause_before_read_back(self, spec: WriteSpec, operation_id: str, facts: dict[str, Any],
                                changes: list[dict[str, Any]], child: int | None) -> str | None:
-        """For the read_back_mismatch row of a live behavior matrix (DVER-030): wait before the
-        read-back so that a person or a script can change what was just written in the
-        application, or the file it made. The wait ends early once a read-back no longer
-        matches. The variable only makes the tool wait; the receipt says that it waited."""
-        name = f"{self.run.tool.prefix}_TEST_PAUSE_BEFORE_READ_BACK"
-        raw = self.run.env.get(name)
-        if not raw:
-            return None
-        try:
-            seconds = min(float(raw), float(self.contract["matrix"]["max_pause_seconds"]))
-        except ValueError:
-            return None
-        path = self.run.state.path / "pause.json"
-        keys = sorted({c["target"] for c in changes if c.get("origin", "tool") == "tool"} | {file_key(f["path"]) for f in facts.get("files", [])})
-        path.write_text(json.dumps({"operation_id": operation_id, "command": spec.command.path, "targets": keys,
-                                    "fields": sorted({c["field"] for c in changes if "field" in c}),
-                                    "seconds": seconds}), encoding="utf-8")
-        end = time.monotonic() + seconds
-        try:
-            while time.monotonic() < end:
-                time.sleep(1)
-                if spec.verify(operation_id, facts, changes, child).status != "passed":
-                    break
-        finally:
-            try:
-                path.unlink()
-            except OSError:
-                pass
-        return f"The tool waited up to {seconds:g} s before the read-back, as {name} asked."
+        if spec.command.verify_after_save and spec.where.mode == "session":
+            return None  # its read-back happens at the save, where the pause applies (DVER-030)
+        return pause_before_read_back(self.run, operation_id, spec.command.path, facts, changes,
+                                      lambda: spec.probe(operation_id, facts, changes, child))
 
     def _failed(self, spec: WriteSpec, out: dict[str, Any], exc: CapabilityError) -> dict[str, Any]:
         receipt = out["receipt"]
         code, ds = exc.code, exc.dispatch_state
         receipt.update(observed={}, mismatched=[])
-        error = self.run.host_error(exc, ds)
+        error = self.run.host_error(exc, ds, write=True)
         if ds == "not_started":
             receipt["outcome"] = _outcome("not_started", "not_applied")
             out.update(error=error, unspend=code in ("E_BUSY", "E_HUMAN_REQUIRED"), stop=code in STATE_STOPS_BATCH)
@@ -915,19 +938,24 @@ class Engine:
             run.dispatching = None
             run.locks.hold_as(operation_id, "job", record["_keys"])
             if job.get("worker"):
-                from .jobs import start_worker
+                from .jobs import new_nonce, start_worker
 
+                # Recorded before the worker starts, so the worker finds itself named (DCLI-065).
+                record["_job"]["worker"] = {"nonce": new_nonce()}
+                run.records.save(record)
                 try:
-                    record["_job"]["worker"] = start_worker(run, job["id"])
+                    started = start_worker(run, job["id"], record["_job"]["worker"]["nonce"])
                 except OSError as exc:
-                    record["_job"].update(state="failed", ok=False, code="E_UNKNOWN",
-                                          finished_at=utc_now())
+                    record["_job"].update(state="failed", ok=False, code="E_UNKNOWN", finished_at=utc_now())
                     receipt["outcome"] = _outcome("not_started", "not_applied")
                     record.update(state="failed", receipt=receipt, finished_at=utc_now())
                     run.records.save(record)
                     run.locks.release(operation_id)
                     raise DriverError("E_UNKNOWN", f"The worker of long job {job['id']} could not start: {exc}. Nothing was sent.") from None
-                run.records.save(record)
+                with run.mutex.hold():
+                    latest = run.records.load(operation_id) or record
+                    latest["_job"]["worker"] = {**latest["_job"].get("worker", {}), **started}
+                    run.records.save(latest)
             result = self.safe_result(spec, out["facts"], Verification("not_applicable"), receipt)
             result = dict(result) if isinstance(result, dict) else {"value": result}
             result["job"] = {"id": job["id"], "state": job.get("state", "running"),

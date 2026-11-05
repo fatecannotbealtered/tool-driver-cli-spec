@@ -146,12 +146,18 @@ class Run:
         except BadProtocol as exc:
             raise DriverError("E_PROTOCOL", f"The host component cannot be used: {exc}. Nothing was sent.") from None
 
-    def host_error(self, exc: CapabilityError, dispatch_state: str) -> DriverError:
+    def host_error(self, exc: CapabilityError, dispatch_state: str, write: bool = False) -> DriverError:
         """Turn an error the adapter or a host reported into the runtime's error (DCLI-279)."""
         data = exc.data
         code = data.get("code")
         if code not in self.contract["host_protocol"]["allowed_error_codes"]:
             return DriverError("E_PROTOCOL", f"The adapter answered with an error it may not use: {code}.",
+                               dispatch_state=dispatch_state)
+        if code in ("E_AMBIGUOUS", "E_CONFLICT", "E_BACKEND_UNAVAILABLE", "E_TIMEOUT") and exc.dispatch_state != "not_started":
+            return DriverError("E_PROTOCOL", f"The adapter answered {code} after sending the change; it comes only before.",
+                               dispatch_state=dispatch_state)
+        if code == "E_TIMEOUT" and write:
+            return DriverError("E_PROTOCOL", "The adapter answered E_TIMEOUT to a write; it belongs to reads.",
                                dispatch_state=dispatch_state)
         extra: dict[str, Any] = {}
         untrusted = []

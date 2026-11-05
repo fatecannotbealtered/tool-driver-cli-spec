@@ -374,17 +374,9 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
         change = "partial"
     verification = Verification("not_applicable")
     if execution == "completed" and (change in ("applied", "partial") or persistence == "saved" or delivery == "delivered"):
-        if status.get("files"):
-            verification = verify_files(status, [])
-        elif record.get("_request"):
-            changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
-            request = {**record["_request"], "operation_id": record["operation_id"],
-                       "targets": sorted({c["target"] for c in changes}) or None,
-                       "fields": sorted({c["field"] for c in changes if "field" in c}) or None}
-            request = {k: v for k, v in request.items() if v is not None}
-            verification = read_back(run, request, changes, record.get("_tolerances", {}))
-        else:
-            verification = Verification("incomplete", notes=["The job's outputs cannot be read back."])
+        verification = _job_verification(run, record, status)
+    if status.get("_note"):
+        verification.notes.insert(0, status["_note"])
     receipt = dict(record.get("receipt") or {})
     receipt["outcome"] = {"execution": execution, "change": change, "delivery": delivery, "persistence": persistence,
                           "verification": verification.status}
@@ -404,6 +396,29 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
         run.locks.release(record["operation_id"])
 
 
+def _job_verification(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Verification:
+    """A job's outputs: the files it made and the fields it changed, both when it did both (DCLI-057)."""
+    from .writes import combine, is_file_target
+
+    command = run.tool.commands.get(record.get("command", ""))
+    if command is not None and command.verify_after_save and (record.get("_call") or {}).get("mode") == "session":
+        return Verification("deferred", notes=["The application shows this change correctly only after a save; doc save verifies it."])
+    changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
+    files = [c for c in changes if c.get("field") == "exists" and is_file_target(c["target"])]
+    fields = [c for c in changes if c not in files]
+    parts = []
+    if status.get("files") or files:
+        parts.append(verify_files(status, files))
+    if fields and record.get("_request"):
+        request = {**record["_request"], "operation_id": record["operation_id"],
+                   "targets": sorted({c["target"] for c in fields}),
+                   "fields": sorted({c["field"] for c in fields if "field" in c})}
+        parts.append(read_back(run, request, fields, record.get("_tolerances", {})))
+    if not parts:
+        return Verification("incomplete", notes=["The job's outputs cannot be read back."])
+    return combine(parts)
+
+
 def run_write_job(run: Run, record: dict[str, Any]) -> None:
     """In the worker: apply the write with the long deadline, then settle it like any job (DCLI-065)."""
     from .adapter import BadProtocol, BadReply, CapabilityError, Lost, Unanswered
@@ -412,9 +427,18 @@ def run_write_job(run: Run, record: dict[str, Any]) -> None:
     request = {**(record.get("_request") or {}), "operation_id": record["operation_id"]}
     status: dict[str, Any]
     try:
+        # The checks that run right before any dispatch run here too (DCLI-057, DSEC-061).
+        if request.get("device"):
+            run.gate_device(run.fresh_device(request["device"]))
+        if request.get("session"):
+            run.gate_session(run.session(request["session"]))
+        if not run.backend.has("apply", request.get("session")):
+            raise DriverError("E_UNSUPPORTED", "This tool's adapter has no apply capability, so it cannot do this.")
         facts = run.backend.call("apply", request, worker_deadline_ms(run))
+    except DriverError as exc:
+        status = {"state": "failed", "change": "not_applied", "code": exc.code, "native_message": exc.message}
     except CapabilityError as exc:
-        code, ds = exc.code, exc.dispatch_state
+        code, ds = run.host_error(exc, exc.dispatch_state, write=True).code, exc.dispatch_state
         if ds == "not_started" or (ds == "dispatched" and code in ("E_VALIDATION", "E_NOT_FOUND", "E_UNSUPPORTED")):
             status = {"state": "failed", "change": "not_applied", "code": code}
         elif ds == "dispatched" and code == "E_NATIVE_FAILURE":
@@ -425,7 +449,9 @@ def run_write_job(run: Run, record: dict[str, Any]) -> None:
             status["native_message"] = exc.data["native_message"]
     except Unanswered as exc:
         status = {"state": "unknown"} if exc.sent else {"state": "failed", "change": "not_applied", "code": "E_BUSY"}
-    except (Lost, BadReply, BadProtocol) as exc:
+    except (Lost, BadProtocol) as exc:
+        status = {"state": "failed", "change": "not_applied", "code": "E_BACKEND_UNAVAILABLE", "native_message": str(exc)}
+    except BadReply as exc:
         status = {"state": "unknown", "native_message": str(exc)}
     else:
         if not isinstance(facts, dict) or facts.get("dispatch_state") not in ("not_started", "dispatched", "unknown"):
@@ -437,6 +463,15 @@ def run_write_job(run: Run, record: dict[str, Any]) -> None:
         else:
             status = {"state": "completed", **{d: facts[d] for d in ("change", "delivery", "persistence", "files", "result",
                                                                        "native_message") if d in facts}}
+    if status["state"] == "completed":
+        # The read_back_mismatch row of a long write is caused here, in the worker (DVER-030).
+        from .writes import pause_before_read_back
+
+        changes = record.get("_changes") or []
+        note = pause_before_read_back(run, record["operation_id"], record.get("command", ""), status, changes,
+                                      lambda: _job_verification(run, record, status))
+        if note:
+            status["_note"] = note
     record["_job"]["state"] = status["state"]
     _settle_job(run, record, status)
     run.records.save(record)
@@ -446,7 +481,7 @@ def job_list(run: Run) -> Result:
     state = run.call.values.get("--state", "all")
     records = [r for r in run.records.all() if "_job" in r]
     for record in records:
-        if record["_job"]["state"] not in FINAL_JOB_STATES and run.backend.has("job_status"):
+        if record["_job"]["state"] not in FINAL_JOB_STATES and (record["_job"].get("worker") or run.backend.has("job_status")):
             try:
                 poll_job(run, record)
             except DriverError:
@@ -462,7 +497,7 @@ def job_list(run: Run) -> Result:
 
 
 def job_get(run: Run) -> Result:
-    from .jobs import FINAL, ReadJobs, read_view, run_read, settle_dead_read
+    from .jobs import FINAL, ReadJobs, read_view, run_read, settle_dead_read, worker_of
 
     call = run.call
     wait = call.values.get("--wait", 0.0)
@@ -471,7 +506,7 @@ def job_get(run: Run) -> Result:
     job_id = call.values["--job"]
     read_job = ReadJobs(run).load(job_id)
     if read_job is not None:
-        if run.worker == job_id and read_job["state"] not in FINAL:
+        if run.worker and worker_of(run, job_id, read_job.get("worker", {}).get("nonce")):
             run_read(run, read_job)  # this process is the job's worker (DCLI-065)
             return Result({"id": job_id, "state": "completed"}, [])
         end = time.monotonic() + wait
@@ -485,8 +520,15 @@ def job_get(run: Run) -> Result:
             view["poll_after_ms"] = POLL_AFTER_MS
         return Result(view, [".message"] + [".result" + p for p in read_job.get("_untrusted", [])])
     record = _job_record(run, job_id)
-    if run.worker == job_id and record["_job"].get("worker") and record["_job"]["state"] not in FINAL_JOB_STATES:
-        run_write_job(run, record)  # this process is the job's worker (DCLI-065)
+    if run.worker and worker_of(run, job_id, (record["_job"].get("worker") or {}).get("nonce")):
+        with run.mutex.hold():
+            latest = run.records.load(record["operation_id"]) or record
+            claimed = latest["_job"]["worker"].get("claimed") or latest["_job"]["state"] in FINAL_JOB_STATES
+            if not claimed:
+                latest["_job"]["worker"]["claimed"] = True
+                run.records.save(latest)
+        if not claimed:
+            run_write_job(run, latest)  # this process is the job's worker; a job runs once (DCLI-065)
         return Result({"id": job_id, "state": "completed"}, [])
     end = time.monotonic() + wait
     while True:
@@ -589,6 +631,7 @@ class SessionClose(_Lifecycle):
             return Verification("incomplete", notes=[f"The session list could not be read: {exc.message}"])
         if alive:
             return Verification("failed", {"session": {"id": sid, "state": alive[0]["state"]}}, ["closed@session"])
+        drop_deferred(self.run, sid, None, "The session was closed without a save; the change was not verified.")
         return Verification("passed", {"session": {"id": sid, "state": "closed"}})
 
     def facts_result(self, facts: dict[str, Any]) -> Any:
@@ -645,6 +688,12 @@ class DocCreate(_Lifecycle):
             session = run.session(values.get("--session"))
             self.where = Where("session", session=session)
         self.exists = bool(self.path) and os.path.exists(self.path)
+        if self.exists and file_mode and "session" in run.tool.modes:
+            holders = run.holders(self.path)
+            if holders:
+                raise DriverError("E_CONFLICT", f"Session {holders[0]['id']} has {self.path} open; creating it again would undo its changes.",
+                                  conflict="file_open_in_session",
+                                  next_action="Choose another path, or close the document there first.")
         if self.exists:
             self.conditions.append("target_exists")
         inputs: dict[str, Any] = {"kind": kind, "path": self.path}
@@ -688,8 +737,8 @@ class DocCreate(_Lifecycle):
                 parts.append(Verification("passed", {"document": {"id": doc_id, "exists": True}}))
             else:
                 parts.append(Verification("failed", {"document": {"id": doc_id, "exists": False}}, ["exists@document"]))
-        if self.path and (self.where.session is None or facts.get("files") or facts.get("persistence") == "saved"):
-            # The file exists once the tool or the application wrote it (DCLI-057).
+        if self.path:
+            # With --path the file exists once the call returns, written by the tool or the application (DCLI-212).
             parts.append(verify_files(facts, changes))
         return combine(parts) if parts else Verification("incomplete", notes=["Nothing could be checked."])
 
@@ -786,13 +835,20 @@ class DocSave(_OnDocument):
         self._settle_deferred(deferred, expected, verification, operation_id)
         return verification
 
+    def probe(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
+        """The same read-back as verify, without settling the deferred records."""
+        fields = [c for c in changes if c.get("field")]
+        known = {(c["target"], c["field"]) for c in fields}
+        for record in self._deferred():
+            for change in record.get("_changes", []):
+                if change.get("field") and (change["target"], change["field"]) not in known:
+                    fields.append(change)
+                    known.add((change["target"], change["field"]))
+        return self._verify_fields(operation_id, fields)
+
     def _deferred(self) -> list[dict[str, Any]]:
         """The writes on this document whose verification waits for a save, oldest first."""
-        doc_id = self.where.document["id"]
-        out = [r for r in self.run.records.all()
-               if (r.get("receipt") or {}).get("outcome", {}).get("verification") == "deferred"
-               and (r.get("receipt") or {}).get("document", {}).get("id") == doc_id]
-        return sorted(out, key=lambda r: r.get("planned_at", ""))
+        return deferred_records(self.run, self.where.session["id"], self.where.document["id"])
 
     def _settle_deferred(self, deferred: list[dict[str, Any]], expected: dict[tuple[str, str], dict[str, Any]],
                          verification: Verification, save_id: str) -> None:
@@ -829,6 +885,23 @@ class DocSave(_OnDocument):
                    "operation_id": operation_id, "targets": sorted({c["target"] for c in fields}),
                    "fields": sorted({c["field"] for c in fields})}
         return read_back(self.run, request, fields, {})
+
+
+def deferred_records(run: Run, session: str, doc_id: str | None) -> list[dict[str, Any]]:
+    """The writes in a session, on one document or on all, whose verification waits for a save."""
+    out = [r for r in run.records.all()
+           if (r.get("receipt") or {}).get("outcome", {}).get("verification") == "deferred"
+           and (r.get("receipt") or {}).get("session", {}).get("id") == session
+           and (doc_id is None or (r.get("receipt") or {}).get("document", {}).get("id") == doc_id)]
+    return sorted(out, key=lambda r: r.get("planned_at", ""))
+
+
+def drop_deferred(run: Run, session: str, doc_id: str | None, why: str) -> None:
+    """Changes discarded before a save can never be verified: their records say so (DCLI-057)."""
+    for record in deferred_records(run, session, doc_id):
+        record["receipt"]["outcome"]["verification"] = "not_run"
+        record["receipt"].setdefault("notes", []).append(why)
+        run.records.save(record)
 
 
 class DocSaveAs(_OnDocument):
@@ -890,6 +963,7 @@ class DocClose(_OnDocument):
         doc_id = self.where.document["id"]
         if any(d["id"] == doc_id for d in self.run.documents(self.where.session["id"])):
             return Verification("failed", {"document": {"id": doc_id, "open": True}}, ["closed@document"])
+        drop_deferred(self.run, self.where.session["id"], doc_id, "The document was closed without a save; the change was not verified.")
         return Verification("passed", {"document": {"id": doc_id, "open": False}})
 
     def facts_result(self, facts: dict[str, Any]) -> Any:
@@ -975,6 +1049,11 @@ class JobCancel(_Lifecycle):
         job = self.job_record["_job"]
         if job["state"] in FINAL_JOB_STATES:
             raise DriverError("E_VALIDATION", f"Job {job['id']} has already ended ({job['state']}); there is nothing to cancel.")
+        if job.get("worker"):
+            # The runtime's worker is applying the change; stopping it midway would leave the
+            # outcome unknown, so the job runs to its end (DCLI-221).
+            raise DriverError("E_UNSUPPORTED", f"Job {job['id']} is a write the tool runs itself; it cannot be stopped midway. "
+                                               "Wait for it to end.", next_action=f"Run `{run.tool.name} job get --job {job['id']} --wait 60s`.")
         info = self.job_record.get("_call") or {}
         session = run.session(info["session"]) if info.get("session") else None
         device = run.device(info["device"]) if info.get("device") else None
@@ -999,8 +1078,10 @@ class JobCancel(_Lifecycle):
         if info.get("session"):
             request["session"] = info["session"]
         facts = dispatch(self.run, "cancel", request)
-        self.job_record["_job"]["cancel_requested"] = True
-        self.run.records.save(self.job_record)
+        with self.run.mutex.hold():
+            latest = self.run.records.load(self.job_record["operation_id"]) or self.job_record
+            latest["_job"]["cancel_requested"] = True
+            self.run.records.save(latest)
         return facts
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:

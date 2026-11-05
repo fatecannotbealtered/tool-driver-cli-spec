@@ -14,7 +14,7 @@ The rule words mean:
 - SHOULD and SHOULD NOT: the expected behavior. Depart from it only for a reason you can state.
 - MAY: allowed, not required.
 
-Each clause has a stable ID such as DCLI-202, a title, the rule, a `Why:` line and a `Check:` line. 🤖 means a test or a script checks the clause; 👀 means a person checks it in review. G00 to G10 and R01 to R05 are general conformance tests; D01 to D25 are driver conformance tests. Other rules are referred to by clause ID only, such as DSEC-015.
+Each clause has a stable ID such as DCLI-202, a title, the rule, a `Why:` line and a `Check:` line. 🤖 means a test or a script checks the clause; 👀 means a person checks it in review. G00 to G10 and R01 to R05 are general conformance tests; D01 to D26 are driver conformance tests. Other rules are referred to by clause ID only, such as DSEC-015.
 
 A table marked `<!-- contract:NAME -->` repeats values from the machine contract, `contract/driver-contract.json`. When such a table and the contract disagree, the contract wins.
 
@@ -69,7 +69,7 @@ It does not define what domain commands do, such as how to route a track; it onl
 | state directory | The per-user directory where the tool keeps operation records, locks, caches and adapter state (DSEC-030) |
 | untrusted content | Text from documents, the application or other sources outside the tool; never treated as instructions (DSEC-020) |
 | built-in command, standard command, domain command | Commands the runtime implements for every tool (DCLI-030); commands the runtime implements from adapter capabilities (DCLI-200); commands the tool author writes |
-| conformance test | A test from the runtime's suites: general tests G00 to G10 and R01 to R05, driver tests D01 to D25 |
+| conformance test | A test from the runtime's suites: general tests G00 to G10 and R01 to R05, driver tests D01 to D26 |
 | maturity, evidence | How well a command is proven, and the records that prove it (DVER-040) |
 | platform package, launcher, command entry | The npm package that holds the native program for one platform; the starter script in the main npm package; the file npm puts on PATH to start the tool |
 | provenance | A signed statement that an npm package was built by the tool's release workflow |
@@ -726,7 +726,7 @@ What the read-back checks depends on the write:
 | A long job | The job's outputs, when it ends (DCLI-065) |
 
 - A write that creates files and also changes a document MUST be verified both ways: the files exist, and the changed fields read back. Verification is `passed` only when both pass.
-- A command registered with `verify_after_save` (DCLI-029) reports verification `deferred` in session mode, with a note that `doc save` verifies it, because the application shows the change correctly only after a save. The next `doc save` of that document MUST read back the deferred changes from the saved document as well, report `E_VERIFY_FAILED` when one does not match, and settle each deferred operation record with its result. The read-back after the save MUST NOT change the document or discard anything.
+- A command registered with `verify_after_save` (DCLI-029) reports verification `deferred` in session mode, with a note that `doc save` verifies it, because the application shows the change correctly only after a save. The next `doc save` of that document MUST read back the deferred changes from the saved document as well, report `E_VERIFY_FAILED` when one does not match, and settle each deferred operation record with its result. The read-back after the save MUST NOT change the document or discard anything. Deferred changes are matched by session and document. When the document or its session is closed without a save, their records MUST be settled with verification `not_run`.
 
 When anything was applied, saved or delivered, `verification` MUST NOT be `not_applicable`.
 
@@ -851,7 +851,7 @@ Check: 🤖 Driver conformance tests D06, D08 and D24; runtime unit tests.
 
 ### DCLI-065 Long jobs
 
-A call that does work MUST return within 60 seconds. Work that can take longer MUST become a long job. Waiting is not work: `job get --wait` may wait longer (DCLI-220).
+A call that does work MUST return within 60 seconds. Work that can take longer MUST become a long job. Waiting is not work: `job get --wait` may wait longer (DCLI-220), and so may the wait before the read-back that a live behavior matrix asks for (DVER-030).
 
 A long job runs in one of two places:
 
@@ -1259,8 +1259,8 @@ Check: 🤖 Driver conformance test D03; runtime unit tests.
 The effects and tiers of the document commands are in DCLI-200. In addition:
 
 - `doc create` creates a document, of the kind `--kind` names, from the template `--template` names when given. Without `--path` it creates an untitled document in an instance; the command itself has no target (DCLI-054), and later writes to the new document use the target key `untitled:<session-id>/<n>` (DCLI-028), which a scope covers with the prefix `untitled:`.
-- With `--path`, the target is `file:///<path>`, and the call creates that file: in file mode always, and in session mode when the application names or writes the file at once. It is direct, and two-step when the file already exists (DCLI-051). The receipt reports `persistence: saved` once the file is written, and read-back checks that it exists (DCLI-057). In file mode `--path` is required. When a command supports both modes, `--session` selects session mode.
-- A domain command MUST NOT create documents under another name, such as `model create` (DCLI-200).
+- With `--path`, the target is `file:///<path>`, and the call creates that file before it returns: in file mode the tool writes it, and in session mode the application does. An application that names a new document but writes it only when saved takes no `--path`: it creates an untitled document, which `doc save-as` later writes. It is direct, and two-step when the file already exists (DCLI-051). The receipt reports `persistence: saved` once the file is written, and read-back checks that it exists (DCLI-057). In file mode `--path` is required. When a command supports both modes, `--session` selects session mode.
+- `doc create` makes a document that stands on its own, with the companion files the application makes along with it, such as a project's schematic and board; the receipt lists every file. A domain command MUST NOT do the same under another name, such as `model create` (DCLI-200). Adding a part to a container the application manages, such as a board to a project, is a domain command that also declares `artifact` (DCLI-051).
 - `doc create`, `doc open`, `doc save-as` and `doc close` are optional. Without the adapter capability a command needs, the runtime MUST return `E_UNSUPPORTED` (DCLI-260).
 - `doc close` MUST refuse to close a document with unsaved changes, or with `dirty` `null`, with `E_CONFLICT` and `conflict` `unsaved_changes`. `doc close --discard` discards them and is dangerous (DCLI-051).
 - `doc save` writes to the original path, and its preview lists every change since the last save (DCLI-058).
@@ -1291,7 +1291,7 @@ Check: 🤖 Driver conformance tests D11 and D26.
 
 ### DCLI-221 Cancelling a job
 
-`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. A job cancelled on request ends with the execution `interrupted`, and its cause is `E_INTERRUPTED` (DCLI-062). When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`. A read job changes nothing: `job cancel` ends its worker, needs no scope, and returns the job, `cancelled` once the worker has stopped.
+`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. A job cancelled on request ends with the execution `interrupted`, and its cause is `E_INTERRUPTED` (DCLI-062). When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`. A read job changes nothing: `job cancel` ends its worker, needs no scope, and returns the job, `cancelled` once the worker has stopped; the application may still be busy finishing the read, which a later call sees as busy. A write job the runtime runs cannot be stopped safely midway: `job cancel` MUST return `E_UNSUPPORTED`, and the job runs to its end.
 
 Why: Reporting "cancelled" before the application stops would let the Agent start new work while the old job still runs.
 Check: 🤖 Driver conformance test D11.

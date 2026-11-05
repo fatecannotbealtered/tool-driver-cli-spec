@@ -40,7 +40,7 @@ One idea runs through this specification: only what is tested counts. Not run is
 | domain command | A command the tool author registers, as opposed to the built-in and standard commands of the runtime |
 | write command | A command whose declared effect is anything other than `observe` (DCLI-051) |
 | halt command | A command that only stops work in progress: a `stop` command or `job cancel`, registered with `halt: true`. It runs at once, without confirmation (DSEC-018) |
-| conformance test | One test of the two suites in this specification: general (G00 to G10, R01 to R05) and driver (D01 to D25) |
+| conformance test | One test of the two suites in this specification: general (G00 to G10, R01 to R05) and driver (D01 to D26) |
 | write sample | The arguments of one valid call to a write command, kept in the `normal` row of its behavior matrix and used by the general suite (DVER-002) |
 | fake host | A small program from the tool-driver-cli-spec repository that stands in for the application in tests (DVER-020) |
 | behavior matrix | A JSON file per command, with one row per situation: arguments, expected and actual result, and evidence (DVER-030) |
@@ -128,11 +128,12 @@ The driver suite MUST contain the tests below, and every tool MUST pass every te
 - `direct_writes`: the tool has a write command that runs in the direct tier, in at least one mode (DCLI-052);
 - `documents`: the tool acts on documents, in file or session mode;
 - `dangerous`: the tool has a command that runs in the dangerous tier, at least in some cases (DCLI-051);
-- `jobs`: the tool has long jobs;
+- `jobs`: the tool has long jobs that the application runs, with the adapter capability `job_status`;
 - `session` or `device`: the tool supports that mode;
 - `host_component`: the tool has a host component;
 - `physical`: the tool has commands with the `physical` effect;
-- `halt`: the tool has a halt command (DSEC-018) in session or device mode.
+- `halt`: the tool has a halt command (DSEC-018) in session or device mode;
+- `long_jobs`: the tool has a command registered `long: true`, whose job the runtime runs (DCLI-065).
 
 The runtime, not the tool author, decides from the command registration (DCLI-029) which tests apply. It reports a test that does not apply as not applicable, with its condition. The suite runs the CLI with the fake host in place of the application, so its results are simulated results (DVER-021). The last column names the clauses each test checks.
 
@@ -167,7 +168,7 @@ The runtime, not the tool author, decides from the command registration (DCLI-02
 | `D26` | `long_jobs` | Each command registered `long: true` runs its sample; a long write also runs with a read-back that does not match; a long read runs with no scope | The call returns a job at once; `job get` reports the write's receipt with verification `passed`, applied once, or `E_VERIFY_FAILED` for the mismatch; the read job returns its result, with `operation_id` `null` | DCLI-065, DCLI-220 |
 
 Why: These are the failures specific to driving an application: two open projects, an unsaved change taken as done, a dialog that hangs the call, a lost connection after a write, a stop that waits behind the work it should stop.
-Check: 🤖 Driver conformance tests D01 to D25.
+Check: 🤖 Driver conformance tests D01 to D26.
 
 ### DVER-011 Black-box testing
 
@@ -194,7 +195,7 @@ The fake host implements the standard adapter capabilities itself. For a domain 
 The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
 
 Why: The failures that matter most, such as a dialog or a lost connection, are rare and hard to cause on demand in a real application.
-Check: 🤖 Driver conformance tests D01 to D25, which need each of these situations.
+Check: 🤖 Driver conformance tests D01 to D26, which need each of these situations.
 
 ### DVER-021 Simulated results are not evidence
 
@@ -256,11 +257,11 @@ The file lists each row of the table below once; each row is one situation. A ro
 
 A row whose condition does not hold MUST be marked as not applying. A row whose condition holds but that cannot happen for the command MUST also stay in the file, marked as not applying, with the reason.
 
-The `read_back_mismatch` row checks that the read-back reads the application, not the tool's own expectation. A correct preview predicts what the application stores, so the row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back (the variable `<PREFIX>_TEST_PAUSE_BEFORE_READ_BACK`, up to `matrix.max_pause_seconds`; the tool writes `pause.json` in its state directory while it waits), and during the wait a person, or a command given with `--tamper`, changes what was just written in the application, or deletes or changes the file a write made. The row passes when the tool reports `E_VERIFY_FAILED`; the live record marks the run `tampered`. The row applies to every write whose result can be changed from outside in that wait, artifact writes included. It is not applicable only when it cannot be, such as a delivery to an outside system or a physical action, and the reason MUST say so.
+The `read_back_mismatch` row checks that the read-back reads the application, not the tool's own expectation. A correct preview predicts what the application stores, so the row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back (the variable `<PREFIX>_TEST_PAUSE_BEFORE_READ_BACK`, up to `matrix.max_pause_seconds`; the tool writes `pause.json` in its state directory while it waits), and during the wait a person, or a command given with `--tamper`, changes what was just written in the application, or deletes the file a write made. The wait ends early only on a real mismatch: a busy or blocked application keeps the tool waiting. `run_matrix` confirms a two-step or dangerous write with its token, as it does for every row, so the pause falls on the call that dispatches. For a long command it falls in the worker, and the row is decided by how the job ends; for a command registered with `verify_after_save` it falls at the `doc save` that follows the write. The row passes when the tool reports `E_VERIFY_FAILED`; the live record marks the run `tampered`. The row applies to every write whose result can be changed from outside in that wait, artifact writes included. It is not applicable only when it cannot be, such as a delivery to an outside system or a physical action, and the reason MUST say so.
 
 A command that registers `doc_kinds` (DCLI-029) MUST pass its `normal` row on a document of every kind it lists; `run_matrix --kind <kind>` records the kind of each run. The other rows need one kind. The `normal` row of a command registered with `verify_after_save` runs `doc save` on the same document after the write, and passes only when that save verified the change (DCLI-057).
 
-The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner `run_matrix`, which comes with this specification, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
+The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner `run_matrix`, which comes with this specification, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row whose write asks for confirmation is confirmed with its token, unless the row expects `E_CONFIRMATION_REQUIRED`; the row of a long command waits for the job to end and takes the job's outcome. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
 
 A row that applies but cannot be caused on demand on the real application, such as `disconnect`, MAY be marked `unrunnable`, with the reason. It then needs no live run, and the driver suite covers how the runtime handles it (DVER-010). The `normal`, `dialog` and `read_back_mismatch` rows MUST NOT be marked `unrunnable` (DVER-031).
 
