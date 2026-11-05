@@ -5,8 +5,5 @@
   "applies_to": [
     "footprint move"
   ],
-  "tags": [],
-  "lang": "en",
-  "based_on": "x",
-  "updated_on": "2026-11-01"
+  "tags": []
 }

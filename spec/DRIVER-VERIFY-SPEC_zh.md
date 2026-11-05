@@ -128,7 +128,7 @@
 - `direct_writes`：工具有写命令至少在一种模式下属于直接执行级（DCLI-052）；
 - `documents`：工具在文件模式或会话模式下操作文档；
 - `dangerous`：工具有在危险级运行的命令，哪怕只在某些情况下（DCLI-051）；
-- `jobs`：工具有由软件运行的长任务，适配层有 `job_status` 能力；
+- `jobs`：工具有登记了 `jobs: true` 的命令，它的长任务由软件运行；
 - `session` 或 `device`：工具支持该模式；
 - `host_component`：工具有宿主组件；
 - `physical`：工具有带 `physical` 效果的命令；

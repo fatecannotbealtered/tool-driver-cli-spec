@@ -22,8 +22,6 @@ COMMANDS = [
             {"name": "--y", "type": "quantity", "quantity": "length", "summary": "Y position.", "coordinate_system": BOARD},
         ],
         "untrusted_fields": ["value"],
-        "adapter_capabilities": ["read", "preview", "apply", "read_back"],
-        "survey_ids": ["CAP-004"],
         "irreversible": False,
         "halt": False,
         "tolerances": {"x_mm": 0.001, "y_mm": 0.001},
@@ -43,7 +41,8 @@ COMMANDS = [
 - Every physical value is a `quantity` flag with its quantity from the units table; the user writes the unit in the value, such as `12.5mm`, and output fields carry the unit in their name, such as `x_mm` (DCLI-080 to DCLI-085).
 - Declare every effect (DCLI-051). The runtime derives the confirmation tier; you never set it (DCLI-052). Mark a change the application cannot take back `irreversible`, and a `stop` command `halt` (DSEC-018).
 - List in `untrusted_fields` every output field that holds text from the application or its files (DSEC-021). Mark a flag that carries a secret with `secret: true` (DSEC-040).
-- `survey_ids` names the capability IDs the command provides; set their disposition to `provided` in both survey files (DREPO-061).
+- Set the disposition of the capabilities the command provides to `provided` in both survey files (DREPO-060).
+- Register `jobs: true` only for a write the application itself may run as a long job; the runtime then follows the job with `job_status` (DCLI-065).
 - Start every command at `draft` with no evidence; raise it only as DVER-040 allows.
 
 Then run `python scripts/spec.py generate`. It writes `contract/commands.json`, the command maps and a first behavior matrix for each command that has none.

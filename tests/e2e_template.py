@@ -66,7 +66,7 @@ def generate(work: Path, modes: str, host: bool) -> Path:
     run(args, REPO)
     problems = json.loads(run([sys.executable, str(REPO / "scripts" / "check_project.py"), str(project), "--json"], REPO,
                               check=False).stdout)
-    other = [p for p in problems if p["clause"] != "DREPO-019" and not (p["clause"] == "DREPO-061" and p["path"] == "contract/commands.json")]
+    other = [p for p in problems if p["clause"] != "DREPO-019" and not (p["clause"] == "DCLI-029" and p["path"] == "contract/commands.json")]
     if other or not problems:
         raise SystemExit(f"FAILED: right after instantiate, check_project must report only placeholders: {other or 'none'}")
     print(f"   {len(problems)} things to fill in, nothing else")
@@ -105,10 +105,8 @@ BOARD = "board: origin at the top-left corner, x right, y down"
 
 def command(path: str, summary: str, effects: list[str], modes: list[str], flags: list[dict[str, Any]], example: str,
             **extra: Any) -> dict[str, Any]:
-    writes = effects != ["observe"]
     return {"path": path, "summary": summary, "effects": effects, "modes": modes, "target_kind": extra.get("target_kind", "part"),
-            "flags": flags, "untrusted_fields": [], "survey_ids": ["CAP-001"], "irreversible": False, "halt": False,
-            "adapter_capabilities": ["read", "preview", "apply", "read_back"] if writes else ["read"],
+            "flags": flags, "untrusted_fields": [], "irreversible": False, "halt": False,
             "tolerances": extra.get("tolerances", {}), "default_fields": [], "related_knowledge": [],
             "output_schema": PART, "examples": [f"demo-cli {example}"], "maturity": "draft", "evidence": []}
 

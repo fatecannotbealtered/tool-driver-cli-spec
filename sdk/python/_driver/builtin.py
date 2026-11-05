@@ -136,8 +136,6 @@ def describe(tool: Tool, command: Command) -> dict[str, Any]:
         out["default_fields"] = command.default_fields
     if command.related_knowledge:
         out["related_knowledge"] = command.related_knowledge
-    if command.departures:
-        out["departures"] = command.departures
     out["formats"] = command.formats
     if command.output_coordinate_system:
         out["output_coordinate_system"] = command.output_coordinate_system

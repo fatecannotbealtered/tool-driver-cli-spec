@@ -740,15 +740,13 @@
     "kinds": ["guide", "rule", "resource", "troubleshooting", "concept"],
     "sources": ["builtin", "team"],
     "id_pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-    "builtin_fields": ["id", "title", "kind", "applies_to", "tags", "lang", "based_on", "updated_on"],
+    "builtin_fields": ["id", "title", "kind", "applies_to", "tags"],
     "rule_fields": ["severity", "check"],
     "resource_fields": ["location", "version", "units", "license"],
     "severities": ["error", "warning", "info"],
-    "langs": ["zh", "en"],
     "max_body_chars": 6000,
-    "index_file": "index.json",
     "required_builtin_kinds": ["guide", "troubleshooting"],
-    "team_fields": ["id", "title", "kind", "url", "about", "applies_to", "provider", "added_at"],
+    "team_fields": ["id", "title", "kind", "url", "about", "applies_to"],
     "registration_file": "knowledge-links.json",
     "max_url_chars": 2048,
     "max_about_chars": 200,
@@ -757,7 +755,7 @@
   },
   "skill": {
     "max_lines": 150,
-    "frontmatter": ["name", "description", "metadata.version", "metadata.requires", "metadata.commands", "metadata.replaced_by"],
+    "frontmatter": ["name", "description", "metadata.version", "metadata.commands", "metadata.replaced_by"],
     "command_map_markers": ["<!-- driver:command-map:start -->", "<!-- driver:command-map:end -->"],
     "dangerous_marker": "(dangerous)",
     "stop_checkpoints": [
@@ -1006,7 +1004,7 @@
         "Capabilities",
         "Risks"
       ],
-      "docs/COMPATIBILITY.md": ["Support Matrix", "Client and Host", "Host Component Versions", "Known Limitations"],
+      "docs/COMPATIBILITY.md": ["Support Matrix", "Known Limitations"],
       "docs/E2E.md": ["Authorized Targets", "Procedure", "Evidence Records"]
     },
     "sections_zh": {
@@ -1015,7 +1013,7 @@
       "SECURITY.md": ["支持的版本", "报告漏洞", "风险等级", "授权", "写入确认", "宿主组件", "物理动作", "状态目录", "凭据", "不可信内容", "供应链", "自更新"],
       "CONTRIBUTING.md": ["开发环境", "常用命令", "分支与提交约定", "CI 检查", "测试与证据", "新增或修改命令", "合并请求", "安全"],
       "docs/APPLICATION.md": ["软件", "自动化接口", "对象模型", "单位与坐标", "线程与阻塞", "读回", "保存与撤销", "实例与并发", "许可", "能力", "风险"],
-      "docs/COMPATIBILITY.md": ["支持矩阵", "客户端与宿主", "宿主组件版本", "已知限制"],
+      "docs/COMPATIBILITY.md": ["支持矩阵", "已知限制"],
       "docs/E2E.md": ["授权目标", "步骤", "证据记录"]
     },
     "optional_sections": {"SECURITY.md": {"Host Component": "host_component", "Physical Effects": "device_mode"}},
@@ -1061,13 +1059,11 @@
     "target_kind",
     "flags",
     "untrusted_fields",
-    "adapter_capabilities",
-    "survey_ids",
     "irreversible",
     "halt",
     "tolerances",
     "default_fields",
     "related_knowledge"
   ],
-  "registration_optional_fields": ["tier_when", "doc_kinds", "verify_after_save", "long"]
+  "registration_optional_fields": ["tier_when", "doc_kinds", "verify_after_save", "long", "jobs"]
 }

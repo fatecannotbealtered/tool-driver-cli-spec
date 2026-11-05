@@ -36,7 +36,7 @@ python scripts/spec.py check
 | 命令 | 作用 |
 |---|---|
 | `python scripts/spec.py check` | 运行项目检查：布局、文档及其固定原文、生成的内容、固定副本、版本、Skill、知识、行为矩阵、证据和成熟度 |
-| `python scripts/spec.py generate` | 重新生成 `contract/commands.json`、命令地图、徽章行、信息卡、风险块、支持矩阵、证据索引和 `knowledge/index.json` |
+| `python scripts/spec.py generate` | 重新生成 `contract/commands.json`、命令地图、徽章行、信息卡、风险块、支持矩阵和证据索引 |
 | `python scripts/spec.py suites` | 用模拟宿主代替 {{application}}，对 {{tool}} 运行两套一致性测试 |
 | `python scripts/spec.py sync <version>` | 用 tool-driver-cli-spec 另一个发布里的副本替换固定副本 |
 | `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` | 在真实的 {{application}} 上、在授权目标上运行一个命令的行为矩阵，并写下真实软件记录 |
@@ -125,7 +125,7 @@ def grade(run):
 
 1. **调查。** 在 `docs/APPLICATION_zh.md` 的能力表里找到这项能力。没有时，加一行并给它新的 `CAP-nnn`。有命令提供它之后，把处置改为 `provided`。
 2. **命名。** 用 `noun verb` 的形式。动词从固定列表里选：`list`、`get`、`search`、`check`、`create`、`update`、`delete`、`move`、`import`、`render`、`export`、`run`、`stop`。名词用 {{application}} 自己的术语，写成完整的英文单词。名词不能用内置命令或标准命令的名称，如 `session`、`doc` 或 `job`。
-3. **登记。** 在 `{{pkg}}/commands/` 里登记命令，写明说明、效果、模式、目标类型、参数及其类型、每个物理量的单位量、机密参数、输出中的不可信字段、调用的适配层能力，以及 `survey_ids` 里的能力编号。每个效果都要声明。{{application}} 无法撤回的修改标 `irreversible: true`，只用来停止工作的命令标 `halt: true`。{{application}} 会取整或吸附数值的地方，给出读回容差；相关的知识条目写在 `related_knowledge` 里。
+3. **登记。** 在 `{{pkg}}/commands/` 里登记命令，写明说明、效果、模式、目标类型、参数及其类型、每个物理量的单位量、机密参数和输出中的不可信字段。每个效果都要声明。{{application}} 无法撤回的修改标 `irreversible: true`，只用来停止工作的命令标 `halt: true`。{{application}} 会取整或吸附数值的地方，给出读回容差；相关的知识条目写在 `related_knowledge` 里。
 4. **实现。** 在 `{{pkg}}/adapter/` 里实现命令需要的适配层能力；{{application}} 的接口只能在它的进程里或主线程上调用时，写在 `plugin/` 的宿主组件里。禁止重新实现驱动运行时已经做的事。
 5. **矩阵。** 在 `tests/matrix/` 里写行为矩阵，每一行都要有。写命令的 `normal` 行就是它的样例。
 6. **生成与检查。** 运行 `python scripts/spec.py generate`，再运行 `python scripts/spec.py check`、`python -m unittest discover -s tests` 和 `python scripts/spec.py suites`。

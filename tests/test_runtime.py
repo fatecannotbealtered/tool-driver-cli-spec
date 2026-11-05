@@ -184,9 +184,12 @@ class Registration(unittest.TestCase):
         self.assertRejected(registration(path="part get"), "observe")
         self.assertRejected(registration(path="part stop"), "DSEC-018")
         self.assertRejected(registration(halt=True), "DSEC-018")
-        self.assertRejected(registration(adapter_capabilities=["read"]), "preview")
-        self.assertRejected(registration(adapter_capabilities=["read", "preview", "apply", "read_back", "teleport"]), "unknown")
-        self.assertRejected({k: v for k, v in registration().items() if k != "survey_ids"}, "missing")
+        self.assertRejected(registration(adapter_capabilities=["read"]), "unknown")
+        self.assertRejected(registration(survey_ids=["CAP-001"]), "unknown")
+        self.assertRejected(registration(departures=[]), "unknown")
+        self.assertRejected({k: v for k, v in registration().items() if k != "tolerances"}, "missing")
+        self.assertRejected(registration(jobs=True, long=True), "DCLI-065")
+        self.assertRejected(registration(path="part list", effects=["observe"], jobs=True), "DCLI-065")
 
     def test_flags(self):
         for flag, words in (({"name": "--dry-run", "type": "boolean"}, "global"), ({"name": "--version", "type": "string"}, "global"),

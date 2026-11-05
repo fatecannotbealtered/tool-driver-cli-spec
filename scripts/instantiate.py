@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         shutil.rmtree(cache, ignore_errors=True)  # running the new tool leaves bytecode; the project starts clean
     print(f"Generated {args.tool} in {root}, pinned to tool-driver-cli-spec {check_project.bundle_version()}.")
     left = [p for p in problems if p.clause == "DREPO-019"]
-    commands = [p for p in problems if p.clause == "DREPO-061" and p.path == "contract/commands.json"]
+    commands = [p for p in problems if p.clause == "DCLI-029" and p.path == "contract/commands.json"]
     other = [p for p in problems if p not in left and p not in commands]
     print(f"Next: fill {len(left)} placeholder(s) and register the domain commands; `python scripts/spec.py check` lists "
           "what is left.")

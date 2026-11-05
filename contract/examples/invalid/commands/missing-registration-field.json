@@ -35,15 +35,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-004"
-      ],
       "irreversible": false,
       "halt": false,
       "default_fields": [

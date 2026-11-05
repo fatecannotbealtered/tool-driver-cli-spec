@@ -34,12 +34,6 @@
       "untrusted_fields": [
         "value"
       ],
-      "adapter_capabilities": [
-        "read"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -80,12 +74,6 @@
       ],
       "untrusted_fields": [
         "value"
-      ],
-      "adapter_capabilities": [
-        "read"
-      ],
-      "survey_ids": [
-        "CAP-001"
       ],
       "irreversible": false,
       "halt": false,
@@ -154,15 +142,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {
@@ -208,15 +187,6 @@
       "untrusted_fields": [
         "value"
       ],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -261,15 +231,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": true,
       "halt": false,
       "tolerances": {},
@@ -306,15 +267,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -354,22 +306,12 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back",
-        "job_status",
-        "cancel"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
       "default_fields": [],
-      "related_knowledge": []
+      "related_knowledge": [],
+      "jobs": true
     },
     {
       "path": "axis move",
@@ -407,15 +349,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -445,15 +378,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": true,
       "tolerances": {},
@@ -493,15 +417,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -564,15 +479,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read",
-        "preview",
-        "apply",
-        "read_back"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},
@@ -604,12 +510,6 @@
         }
       ],
       "untrusted_fields": [],
-      "adapter_capabilities": [
-        "read"
-      ],
-      "survey_ids": [
-        "CAP-001"
-      ],
       "irreversible": false,
       "halt": false,
       "tolerances": {},

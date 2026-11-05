@@ -427,8 +427,6 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
 | `flags` | Every flag, each with its type (`string`, `integer`, `number`, `boolean`, `quantity`, `path` or `json`, and `list`, `input` or `duration` for the shared flags of DCLI-026), the `schema` of a `json` flag, the unit quantity of a `quantity` flag (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true`, with the type `path`, when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
-| `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
-| `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |
 | `irreversible` | `true` when the application cannot take the change back; the command is then dangerous (DCLI-051) |
 | `halt` | `true` for a halt command (DSEC-018) |
 | `tolerances` | Per field, how far a read-back value may differ from the preview and still match (DCLI-057) |
@@ -443,6 +441,9 @@ A registration MAY also hold these fields:
 | `doc_kinds` | The kinds of document the command works on, when the application has several, such as `part`, `assembly` and `drawing` (DCLI-210) |
 | `verify_after_save` | `true` when, in session mode, the application shows the change correctly only after the document is saved; `doc save` then verifies it (DCLI-057) |
 | `long` | `true` when the work can take longer than one call may; the runtime then runs it as a long job (DCLI-065) |
+| `jobs` | `true` for a write the application may run as a long job: `apply` reports the job and the runtime follows it with `job_status` (DCLI-065) |
+
+The adapter capabilities a domain command calls follow from its registration: `read` for a read; `preview`, `apply` and `read_back` for a write, and also `job_status` and `cancel` with `jobs` (DCLI-260).
 
 A `json` flag takes a structured value, such as a pad table: on the command line, inline JSON or the path of a file that holds it; in an `--input` item, the value itself. Its `schema` is a JSON Schema of type `object` or `array`, and `reference` shows it. A physical number inside the value MUST carry the unit in its key, with the standard unit's suffix, such as `width_mm` (DCLI-081). The runtime checks the top-level type and the adapter checks the rest, answering `E_VALIDATION` when it is wrong.
 
@@ -521,7 +522,7 @@ Check: 🤖 General conformance test R05.
 | `license` | The application's license status |
 | `plugin` | The host component version on disk equals the version each instance has loaded (DSEC-053) |
 | `sessions` | The running instances and their states |
-| `knowledge` | The knowledge index, entry format and registration file, and lark-cli on PATH when team knowledge is registered (DSKL-125) |
+| `knowledge` | The entry format and the registration file, and lark-cli on PATH when team knowledge is registered (DSKL-125) |
 
 Why: One command finds the common setup problems and says how to fix each one.
 Check: 🤖 General conformance test R05 checks that every fixed check is present.
@@ -855,7 +856,7 @@ A call that does work MUST return within 60 seconds. Work that can take longer M
 
 A long job runs in one of two places:
 
-- The application runs it: the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
+- The application runs it: the command is registered with `jobs: true` (DCLI-029), the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
 - The runtime runs it: the command is registered with `long: true` (DCLI-029). The call does every check, records the job and starts a worker, then returns at once. The worker is the tool's own program, started again with `job get --job <id>` and the variable `<PREFIX>_JOB_WORKER=<id>`, detached from the call and with no window. It makes the adapter call without the 60-second limit, up to `jobs.worker_max_seconds` in the contract, and records the outcome in the state directory. The tool author writes no job code.
 
 A standard write that can take more than a minute, such as `doc open` of a large project or `session close` of an application that takes long to quit, runs the same way when the tool lists it in `long_commands` (DCLI-029); the contract's `jobs.standard_long` names the standard writes that may be listed. The command's own checks run again in the worker right before dispatch, its own read-back runs when the work ends, and its result, such as the new session of `session open`, comes with `job get`.

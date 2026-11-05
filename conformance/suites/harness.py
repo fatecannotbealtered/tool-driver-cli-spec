@@ -169,7 +169,7 @@ class Subject:
             "direct_writes": bool(direct) or "session" in self.modes,
             "documents": any(m in self.modes for m in ("file", "session")),
             "dangerous": "dangerous" in tiers,
-            "jobs": any("job_status" in r["adapter_capabilities"] for r in regs),
+            "jobs": any(r.get("jobs") for r in regs),
             "session": "session" in self.modes,
             "device": "device" in self.modes,
             "host_component": self.host_component,

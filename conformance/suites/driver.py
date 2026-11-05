@@ -388,7 +388,7 @@ def d10(subject: Subject) -> None:
 
 
 def d11(subject: Subject) -> None:
-    jobs = [s for s in _own(subject, halts=None) if "job_status" in subject.registrations[s.path]["adapter_capabilities"]]
+    jobs = [s for s in _own(subject, halts=None) if subject.registrations[s.path].get("jobs")]
     check(jobs, "no command with long jobs has a sample")
     sample = jobs[0]
     with Case(subject) as case:

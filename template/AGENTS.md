@@ -7,8 +7,8 @@ This file is for coding Agents that work on the {{tool}} project. Read it before
 ## Bare minimum to obey
 
 1. Never edit a pinned copy: `.agent/`, `contract/driver-contract.json`, `{{pkg}}/_driver/` and `licenses/`. They come unchanged from one tool-driver-cli-spec release. To move to another release, run `python scripts/spec.py sync <version>`, which replaces them all together.
-2. Never edit generated content by hand: `contract/commands.json`, the command maps in the README and the Skills, the badge row, the info card, the risk block, the support matrix, the evidence index and `knowledge/index.json`. Change their source, then run `python scripts/spec.py generate`.
-3. Register every domain command in `{{pkg}}/commands/` with all its effects, its modes, the unit quantity of every physical parameter, its target type and the capability IDs from `docs/APPLICATION.md` that it implements (`survey_ids`). Mark a change the application cannot take back as `irreversible`. Never lower a confirmation tier.
+2. Never edit generated content by hand: `contract/commands.json`, the command maps in the README and the Skills, the badge row, the info card, the risk block, the support matrix and the evidence index. Change their source, then run `python scripts/spec.py generate`.
+3. Register every domain command in `{{pkg}}/commands/` with all its effects, its modes, the unit quantity of every physical parameter, and its target type. Mark a change the application cannot take back as `irreversible`. Never lower a confirmation tier.
 4. Give every domain command a behavior matrix in `tests/matrix/`. The `normal` row of a write command is its sample.
 5. Before every commit, run `python -m ruff check .`, `python scripts/spec.py check`, `python -m unittest discover -s tests` and `python scripts/spec.py suites`. All four must pass. Never skip, weaken or edit a conformance test.
 6. Run live tests on the real application only on the targets listed under Authorized Targets in `docs/E2E.md`. Never add a target: only a person does. Never create or change a scope file; the evaluation runner writes the one each question needs.
