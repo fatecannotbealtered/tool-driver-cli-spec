@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-VERIFY-SPEC_zh.md)
 
-> Version 1.0.1 · Clauses DVER-001 to DVER-051
+> Version 1.0.2 · Clauses DVER-001 to DVER-051
 
 ## How to Read
 
@@ -324,7 +324,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
 - `targets`: the authorized targets the run used (DVER-050)
 - `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code, `result` and the `mode` it ran in; `doc_kind` when the command lists document kinds, and `tampered: true` for a run whose result was changed from outside during the pause (DVER-030)
 
-`result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`), its SHA-256 (`envelope_sha256`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
+`result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
 
 ```json
 {
@@ -344,8 +344,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
       "exit": 0,
       "result": "pass",
       "mode": "session",
-      "matrix_row": "normal",
-      "envelope_sha256": "090b93f6516be82d6d224af36e040f4997faff07f3cda65b9c973520bd833fc3"
+      "matrix_row": "normal"
     },
     {
       "command": "footprint move",

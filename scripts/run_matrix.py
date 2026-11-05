@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import hashlib
 import json
 import os
 import platform
@@ -234,8 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 shown.append(argument)
         entry = {"command": args.command, "arguments": shown, "exit": exit_code, "result": "pass" if passed else "fail",
-                 "matrix_row": row["row"], "mode": mode,
-                 "envelope_sha256": hashlib.sha256(stdout.strip()).hexdigest()}
+                 "matrix_row": row["row"], "mode": mode}
         if args.kind:
             entry["doc_kind"] = args.kind
         if tampered:

@@ -2,7 +2,7 @@
 
 [English](DRIVER-VERIFY-SPEC.md) | 中文
 
-> 版本 1.0.1 · 条款 DVER-001 至 DVER-051
+> 版本 1.0.2 · 条款 DVER-001 至 DVER-051
 
 ## 怎么读
 
@@ -324,7 +324,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
 - `targets`：这次运行使用的授权目标（DVER-050）
 - `runs`：每条命令一项，包括命令路径、实际运行的参数（占位符已填好，DVER-002）、退出码、`result` 和运行时所用的模式 `mode`；命令列出了文档种类时还有 `doc_kind`；在等待期间从外部改过结果的运行，带 `tampered: true`（DVER-030）
 
-命令的表现符合预期时，`result` 为 `pass`，否则为 `fail`。某一项在 `matrix_row` 里写明了行为矩阵的行时，预期就是那一行的期望结果。每一项可以另加输出的信封（`envelope`）、它的 SHA-256（`envelope_sha256`）和说明。带机密的参数必须写成 `***`（DSEC-040）。`docs/COMPATIBILITY.md` 的支持矩阵由这些记录生成（DREPO-016）。
+命令的表现符合预期时，`result` 为 `pass`，否则为 `fail`。某一项在 `matrix_row` 里写明了行为矩阵的行时，预期就是那一行的期望结果。每一项可以另加输出的信封（`envelope`）和说明。带机密的参数必须写成 `***`（DSEC-040）。`docs/COMPATIBILITY.md` 的支持矩阵由这些记录生成（DREPO-016）。
 
 ```json
 {
@@ -344,8 +344,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
       "exit": 0,
       "result": "pass",
       "mode": "session",
-      "matrix_row": "normal",
-      "envelope_sha256": "090b93f6516be82d6d224af36e040f4997faff07f3cda65b9c973520bd833fc3"
+      "matrix_row": "normal"
     },
     {
       "command": "footprint move",
