@@ -399,7 +399,7 @@ class MainAddressTest(HostTestCase):
                 self.assertEqual(ctx.exception.code, "E_VALIDATION")
         self.assertEqual(len(self.state()["violations"]), 2)
         with self.assertRaises(HostCallError):
-            c.control("fault", rule={"method": "apply", "action": "error", "error": {"code": "E_CONFLICT"}})
+            c.control("fault", rule={"method": "apply", "action": "error", "error": {"code": "E_FORBIDDEN"}})
 
 
 class HostComponentTest(HostTestCase):
