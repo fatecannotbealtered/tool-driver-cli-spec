@@ -25,6 +25,7 @@ Changes from rebuilding the Xpedition and Creo tools on the real applications, a
 - A coding Agent preparing live runs may draft the scope file and the Authorized Targets; the person saves them (DSEC-011).
 - The host protocol is version 1.2.0: `open_session` takes `kind`, a preview and a blocker may carry `knowledge`.
 - Conformance R04 checks every read with untrusted fields, and a read of a whole document on a document-level field.
+- Clauses that only repeated another now point to it: DCLI-085, DCLI-213, DCLI-261, DCLI-263, DSEC-033, DSEC-042, DSEC-054 and DSEC-060. The rule on `knowledge create` and `knowledge delete` lives only in DSKL-123.
 
 ### Removed
 
