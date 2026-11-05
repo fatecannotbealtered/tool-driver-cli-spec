@@ -372,7 +372,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DSEC-052 No restarts
 
-The tool MUST NOT restart, reload or close a person's application instance to upgrade a host component. A running instance keeps the version it loaded until the person restarts or reloads it.
+The tool MUST NOT restart, reload or close a person's application instance to upgrade a host component. A running instance keeps the version it loaded until the person restarts or reloads it. An instance the tool started itself (`owned`, DCLI-203) is not a person's: the tool MAY close it with `session close` and start a new one with `session open`, for example in a test after the host component changed.
 
 Why: Restarting an instance can lose unsaved work and interrupts the person who is using it.
 Check: 👀 Review of `plugin install` in the runtime and of the host component.

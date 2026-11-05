@@ -102,7 +102,7 @@ The tree below shows a typical tool project. It illustrates the layout and is no
 │   ├── _driver/                    driver runtime, copied unchanged
 │   ├── commands/                   domain commands (written by the tool author)
 │   └── adapter/                    adapter layer (written by the tool author)
-├── plugin/                         host component source, in a language the application supports (only when needed)
+├── plugin/                         host component, in a language the application supports (only when needed); source/ holds code that is built and not installed
 ├── skills/
 │   ├── <tool>/                     entry Skill
 │   └── <product>-<area>/           domain Skills
@@ -119,7 +119,7 @@ The tree below shows a typical tool project. It illustrates the layout and is no
 └── .github/                        workflows ci.yml and release.yml, issue and pull request templates
 ```
 
-Domain commands MUST live in `<pkg>/commands/` and adapter code in `<pkg>/adapter/`. Host component source MUST live in `plugin/`, and `plugin/` exists only when the tool has a host component (DCLI-262).
+Domain commands MUST live in `<pkg>/commands/` and adapter code in `<pkg>/adapter/`. The host component MUST live in `plugin/`, with code that is built into its installed files in `plugin/source/` (DCLI-240), and `plugin/` exists only when the tool has a host component (DCLI-262).
 
 Why: When every tool puts the same thing in the same place, people and Agents who know one tool find their way in the next.
 Check: 🤖 `check_project` checks the paths of DREPO-002 and DREPO-004; 👀 review checks where the code sits.
@@ -643,7 +643,7 @@ Before commands are designed, the author MUST fill in `docs/APPLICATION.md` with
 <!-- contract:capability_dispositions -->
 | Disposition | Meaning |
 |---|---|
-| `provided` | The tool offers it through one or more domain commands |
+| `provided` | The tool offers it through one or more domain commands, or through standard commands such as `doc open`, `doc save` and `doc close` |
 | `deferred` | Worth offering, but left for a later version |
 | `excluded` | The tool will not offer it, for example because it is unsafe or cannot be automated reliably |
 | `unknown` | Not yet known whether the application allows it |

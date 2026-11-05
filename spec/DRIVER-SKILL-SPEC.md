@@ -226,6 +226,13 @@ The report MUST answer changed, saved and verified separately. The entry Skill M
 Why: "Done" hides whether the change is on disk and checked, what failed, and what is still waiting; the person needs each answer to decide the next step.
 Check: 🤖 Evaluation scenarios `scoped_change`, `separate_save` and `partial_batch` (DSKL-040); 👀 review of the entry Skill.
 
+### DSKL-011 Check results as data
+
+A Skill MUST tell the Agent to check a change with the write's `result` and receipt (DCLI-068) and with the read commands, which give positions, sizes and connections as data. A Skill MUST NOT tell the Agent to verify a change by taking a screenshot or a render and recognizing it. A render MAY be used for the person, or for a purely visual question, such as whether a drawing looks crowded, and the Skill says so where it applies.
+
+Why: Reading a structured result is fast, exact and repeatable; recognizing an image is slow, costs more and can be wrong.
+Check: 👀 Review of the Skills; the evaluation questions grade the commands the Agent ran (DSKL-041).
+
 ## Several Skills
 
 ### DSKL-020 When to split
@@ -237,7 +244,7 @@ Check: 🤖 `check_project` counts the lines of every `SKILL.md` (DSKL-003); �
 
 ### DSKL-021 Split by the user's words
 
-When a tool splits its Skills (DSKL-020), it MUST split them by the tasks users name, such as "draw the schematic", "lay out the board" or "make fabrication files". It MUST NOT split them by code modules. When a common task needs two Skills loaded together, the tool MUST merge them into one.
+When a tool splits its Skills (DSKL-020), it MUST split them by the tasks users name, such as "draw the schematic", "lay out the board" or "make fabrication files". It MUST NOT split them by code modules. When nearly every task of one Skill also needs another, the tool MUST merge them into one. A flow that crosses Skills, such as creating a part and then placing it on the board, or carrying schematic changes to the board, belongs in the entry Skill's playbooks, which every task loads (DSKL-022).
 
 Why: The Agent picks a Skill by matching the user's request against descriptions, and Skills cut along the user's words match best.
 Check: 👀 Review.
@@ -253,7 +260,8 @@ Every tool MUST have an entry Skill in `skills/<tool>/`. It holds what all tasks
 - the driver playbooks, which cover choosing the instance and the document, saving, and what to do after a refused or uncertain write (DSKL-009);
 - the report format (DSKL-010);
 - where knowledge comes from and that lark-cli reads team knowledge (DSKL-110, DSKL-112);
-- a routing table: which task goes to which Skill.
+- a routing table: which task goes to which Skill;
+- the flows that cross Skills (DSKL-021).
 
 A tool with one Skill has only the entry Skill, which then owns every command.
 
@@ -297,7 +305,7 @@ Check: 🤖 `check_project` checks that the area is a noun of a command the Skil
 
 ### DSKL-028 Rename stubs
 
-When a Skill is renamed or merged into another, the old name MUST stay as a stub Skill. The stub only tells the Agent which Skill to read instead. It keeps `metadata.requires`, names that Skill in `metadata.replaced_by` and has no `metadata.commands`.
+When a Skill is renamed or merged into another, the old name MUST stay as a stub Skill. The stub only tells the Agent which Skill to read instead. It keeps `metadata.requires`, names that Skill in `metadata.replaced_by` and has no `metadata.commands`. This covers Skills that a release of the tool built on this specification shipped. A tool rebuilt from scratch on this specification needs no stubs for the Skills of the versions it gives up; its CHANGELOG names those Skills so that users can delete them.
 
 Why: `update` replaces only the Skill directories that are already installed (DCLI-076); without a stub, the user's old copy stays and keeps teaching outdated commands.
 Check: 🤖 `check_project` checks that `metadata.replaced_by` names another Skill of the tool and that the stub owns no commands; 👀 review.
@@ -707,6 +715,7 @@ Check: 🤖 `check_project`.
 - [ ] DSKL-008 STOP checkpoints
 - [ ] DSKL-009 Driver playbooks
 - [ ] DSKL-010 Report
+- [ ] DSKL-011 Check results as data
 - [ ] DSKL-020 When to split
 - [ ] DSKL-021 Split by the user's words
 - [ ] DSKL-022 Entry Skill

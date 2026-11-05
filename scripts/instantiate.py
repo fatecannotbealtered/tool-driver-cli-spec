@@ -127,6 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     sync_spec.sync(root)
     check_project.fix(check_project.gather(root))
     problems = check_project.check(root)
+    for cache in sorted(root.rglob("__pycache__"), reverse=True):
+        shutil.rmtree(cache, ignore_errors=True)  # running the new tool leaves bytecode; the project starts clean
     print(f"Generated {args.tool} in {root}, pinned to tool-driver-cli-spec {check_project.bundle_version()}.")
     left = [p for p in problems if p.clause == "DREPO-019"]
     commands = [p for p in problems if p.clause == "DREPO-061" and p.path == "contract/commands.json"]

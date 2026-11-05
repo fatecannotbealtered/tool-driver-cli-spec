@@ -30,6 +30,8 @@
           "result": {"enum": ["pass", "fail"]},
           "mode": {"description": "The mode the command ran in (DCLI-201).", "enum": ["file", "session", "device"]},
           "matrix_row": {"enum": ["normal", "empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog", "disconnect", "unsaved", "read_back_mismatch"]},
+          "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "tampered": {"const": true},
           "envelope": {"$ref": "envelope.schema.json"},
           "envelope_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "notes": {"type": "string"}

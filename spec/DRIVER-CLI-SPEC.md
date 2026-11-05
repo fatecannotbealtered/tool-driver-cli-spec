@@ -868,7 +868,7 @@ Writes and reads:
 - A job that ends in `unknown` is settled like any outcome-unknown write, with `operation resolve` (DCLI-063).
 
 Why: A call that hangs for minutes looks to the Agent like a dead tool, and the real outcome of a job must be reported as carefully as that of any other write.
-Check: 🤖 Driver conformance test D11; 👀 review of command durations in the behavior matrix (DVER-030).
+Check: 🤖 Driver conformance tests D11 and D26; 👀 review of command durations in the behavior matrix (DVER-030).
 
 ### DCLI-066 Human required
 
@@ -1109,7 +1109,7 @@ The runtime implements these commands from the adapter capabilities (DCLI-260). 
 | `session close` | `lifecycle` | session | direct; dangerous for an instance the tool did not start (DCLI-051) | Closes an instance; refused when it has unsaved changes; needs `close_session` |
 | `doc list` | `observe` | file, session | — | Documents in every instance: path, revision, unsaved changes, read-only, disk state |
 | `doc get` | `observe` | file, session | — | The state of one document |
-| `doc create` | `lifecycle` | session | direct | Optional: creates an untitled document (DCLI-212) |
+| `doc create` | `lifecycle` | file, session | direct; two-step when the file at `--path` exists | Optional: creates a document, untitled or at `--path`, from `--template` when given (DCLI-212) |
 | `doc open` | `lifecycle` | session | direct | Optional: opens a file in an instance |
 | `doc save` | `persist` | session | two-step | Saves to the original path; the preview lists every change since the last save |
 | `doc save-as` | `artifact` | session | direct; two-step when the target file exists | Optional: saves as a new file |
@@ -1151,7 +1151,7 @@ When a command supports both file and session mode, the runtime MUST choose the 
 - session mode when `--session` is given, or when exactly one running instance has the document open; that instance is then selected (DCLI-202);
 - file mode when no running instance has the file open.
 
-A write in file mode to a file that a running instance has open MUST be refused with `E_CONFLICT` and `conflict` `file_open_in_session`. `reference` shows the tier of each mode (DCLI-031).
+A write in file mode that changes or saves a file that a running instance has open MUST be refused with `E_CONFLICT` and `conflict` `file_open_in_session`. A tool that runs only in file mode, and so lists no instances, lets the adapter report this conflict (DCLI-279). A write that only makes other files from the document, such as an export, MAY go ahead; when the instance may have unsaved changes, the response MUST carry a notice that it used the file on disk. `reference` shows the tier of each mode (DCLI-031).
 
 Why: The mode decides where the truth lives and what saving means, so every write knows where to read back; two writers on one file, one in memory and one on disk, would undo each other.
 Check: 🤖 General conformance test R01 checks the mode declarations in `reference`; driver conformance test D03 checks `file_open_in_session`.
@@ -1228,8 +1228,9 @@ A document MUST have at least these fields; the full definition is in the contra
 - `path`: the file path, or `null` for a new document that has never been saved;
 - `key`: only for a document without a path: its target key `untitled:<session-id>/<n>` (DCLI-028). The adapter MUST give it, because only the adapter knows `<n>`. A document with a path has no `key`; its target key is `file:///<path>`;
 - `session`: the session that holds it, or `null` in file mode;
+- `kind`: the kind of document, when the application has several, such as `part`, `assembly` or `drawing`; a command that registers `doc_kinds` refuses a document of another kind with `E_VALIDATION` (DCLI-029);
 - `revision`: an opaque string, supplied by the adapter, that changes with every change and every save; in file mode it is a hash of the file content;
-- `dirty`: whether it has unsaved changes;
+- `dirty`: whether it has unsaved changes, or `null` when the application cannot tell; `null` counts as possibly unsaved, so closing it needs `--discard` (DCLI-212);
 - `readonly`: whether it may be written;
 - `disk`: how the file on disk relates to the document (DCLI-211);
 - `extra`: application-specific fields (DCLI-203).
@@ -1257,9 +1258,11 @@ Check: 🤖 Driver conformance test D03; runtime unit tests.
 
 The effects and tiers of the document commands are in DCLI-200. In addition:
 
-- `doc create` creates an untitled document. The command itself has no target (DCLI-054); later writes to the new document use the target key `untitled:<session-id>/<n>` (DCLI-028), which a scope covers with the prefix `untitled:`.
+- `doc create` creates a document, of the kind `--kind` names, from the template `--template` names when given. Without `--path` it creates an untitled document in an instance; the command itself has no target (DCLI-054), and later writes to the new document use the target key `untitled:<session-id>/<n>` (DCLI-028), which a scope covers with the prefix `untitled:`.
+- With `--path`, the target is `file:///<path>`, and the call creates that file: in file mode always, and in session mode when the application names or writes the file at once. It is direct, and two-step when the file already exists (DCLI-051). The receipt reports `persistence: saved` once the file is written, and read-back checks that it exists (DCLI-057). In file mode `--path` is required. When a command supports both modes, `--session` selects session mode.
+- A domain command MUST NOT create documents under another name, such as `model create` (DCLI-200).
 - `doc create`, `doc open`, `doc save-as` and `doc close` are optional. Without the adapter capability a command needs, the runtime MUST return `E_UNSUPPORTED` (DCLI-260).
-- `doc close` MUST refuse to close a document with unsaved changes, with `E_CONFLICT` and `conflict` `unsaved_changes`. `doc close --discard` discards them and is dangerous (DCLI-051).
+- `doc close` MUST refuse to close a document with unsaved changes, or with `dirty` `null`, with `E_CONFLICT` and `conflict` `unsaved_changes`. `doc close --discard` discards them and is dangerous (DCLI-051).
 - `doc save` writes to the original path, and its preview lists every change since the last save (DCLI-058).
 - `doc undo` is optional (DCLI-067).
 
@@ -1277,18 +1280,18 @@ Check: 👀 Review of the adapter.
 
 ### DCLI-220 Job object and commands
 
-A job MUST have at least these fields: `id`, `operation_id`, `state`, `cancel_requested`, `started_at` and `finished_at` (`null` until the job ends). When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
+A job MUST have at least these fields: `id`, `operation_id` (`null` for a read job, DCLI-065), `state`, `cancel_requested`, `started_at` and `finished_at` (`null` until the job ends). When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
 
-`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state (`completed`, `failed`, `partial`, `unknown` or `cancelled`), `job get` MUST also return its `receipt`, its `result`, and `ok`, derived from the receipt as DCLI-062 sets, with the error code in `code` when `ok` is `false` (DCLI-065). These are fields of `data`: `job get` itself succeeds, and the `error.details.receipt` of DCLI-062 belongs to the write, not to `job get`.
+`state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). When the job is in a final state (`completed`, `failed`, `partial`, `unknown` or `cancelled`), `job get` MUST also return its `receipt`, its `result`, and `ok`, derived from the receipt as DCLI-062 sets, with the error code in `code` when `ok` is `false` (DCLI-065). A read job has no receipt: it returns `ok`, the read's `result` when `ok` is `true`, and `code` and `message` when it is `false`. These are fields of `data`: `job get` itself succeeds, and the `error.details.receipt` of DCLI-062 belongs to the write, not to `job get`.
 
 `job list` lists the long jobs of every session. `job get --job <id> --wait <duration>` MUST return when the job ends or the time runs out, whichever comes first. `--wait` MAY be up to 600 seconds, because waiting is not work (DCLI-065); a longer value returns `E_USAGE`. `job get` MUST return `poll_after_ms`, the time after which asking again is useful.
 
 Why: The Agent waits for long work in bounded calls instead of one call that hangs, and reads the job's real outcome in the same shape as that of any write.
-Check: 🤖 Driver conformance test D11.
+Check: 🤖 Driver conformance tests D11 and D26.
 
 ### DCLI-221 Cancelling a job
 
-`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. A job cancelled on request ends with the execution `interrupted`, and its cause is `E_INTERRUPTED` (DCLI-062). When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`.
+`job cancel` acts only on long jobs the tool started. It is a halt command (DSEC-018), and its target is the target of the job's operation. It MUST first report `cancel_requested: true`. The state MUST become `cancelled` only after the application confirms that the job stopped. A job cancelled on request ends with the execution `interrupted`, and its cause is `E_INTERRUPTED` (DCLI-062). When the application cannot cancel, `job cancel` MUST return `E_UNSUPPORTED`. A read job changes nothing: `job cancel` ends its worker, needs no scope, and returns the job, `cancelled` once the worker has stopped.
 
 Why: Reporting "cancelled" before the application stops would let the Agent start new work while the old job still runs.
 Check: 🤖 Driver conformance test D11.
@@ -1321,6 +1324,8 @@ When a tool has a host component, it MUST offer `plugin get`, `plugin install` a
 
 The host component's source and its manifest live in `plugin/`. The manifest `plugin/manifest.json` MUST hold `version`, the tool version; `protocol_version` (DCLI-280); `files`, the SHA-256 of every file `plugin install` copies, by path inside `plugin/`; and `methods`, the instance-side capabilities the host component implements (DCLI-260). `check_project` writes the first three from the files, and the author writes `methods`. The tool passes the manifest to the runtime, and the native program carries `plugin/` with it.
 
+`plugin install` copies every file in `plugin/` except the manifest, `README.md` and the folder `plugin/source/`, which holds code that is built into the installed files and is never installed. A file that only the vendor's licensed tools can build or unlock, such as a compiled toolkit library, MAY be committed in `plugin/`; `plugin/README.md` MUST then name the tool and version that built it and say how to build it again. The manifest records its SHA-256 like any other file.
+
 Why: One install path, with its checks, keeps code that runs inside the application under control. A manifest written from the files cannot disagree with them.
 Check: 🤖 Driver conformance test D12; `check_project` regenerates the manifest and compares it.
 
@@ -1338,7 +1343,7 @@ Besides the domain commands, the tool author writes only the adapter capabilitie
 | `open_session` | CLI | — | optional | — | Starts an instance |
 | `close_session` | instance | — | optional | — | Closes an instance |
 | `documents` | instance | required | required | — | Lists documents and their states |
-| `create_doc` | instance | — | optional | — | Creates an untitled document |
+| `create_doc` | instance | optional | optional | — | Creates a document: untitled, or at a path, from a template when given |
 | `open_doc` | instance | — | optional | — | Opens a document |
 | `save_doc` | instance | — | required | — | Saves a document to its path |
 | `save_doc_as` | instance | — | optional | — | Saves a document as a new file |
@@ -1380,7 +1385,7 @@ The code for each adapter capability MUST run where the application's interface 
 | Callable from the CLI: a Python API, COM, the application's own command line, file formats | In the adapter, inside the CLI process | The runtime's language |
 | Callable only inside the application's process: a plugin SDK (.NET, Java, C++) or the application's own script language; or calls that must run on the application's main thread | In a host component inside the application's process, talking to the CLI over the host protocol | A language the application supports |
 
-- A tool MAY mix both, for example reading files in the adapter and changing the model through the host component.
+- A tool MAY mix both, capability by capability: a capability the adapter in the CLI process implements runs there, and every other instance-side capability goes to the host component. For example, reading files runs in the adapter and changing the model goes through the host component.
 - This specification provides the driver runtime in Python. Python reaches COM, most applications' Python interfaces and common file formats; every other interface connects through the host protocol, so one runtime covers every application.
 
 Why: The interface the application offers decides where code can run; one rule saves each author from deciding again.
@@ -1433,7 +1438,7 @@ The host methods MUST be the ones in this table: `hello` and the instance-side a
 | `hello` | no | Handshake (DCLI-273) |
 | `close_session` | yes | Closes the instance |
 | `documents` | no | Lists documents and their states |
-| `create_doc` | yes | Creates an untitled document |
+| `create_doc` | yes | Creates a document |
 | `open_doc` | yes | Opens a document |
 | `save_doc` | yes | Saves a document |
 | `save_doc_as` | yes | Saves a document as a new file |
@@ -1492,10 +1497,14 @@ The host MUST return only these error codes:
 | `E_NATIVE_FAILURE` | The application refused the operation and left no lasting change |
 | `E_HUMAN_REQUIRED` | A dialog or similar needs a person |
 | `E_NOT_FOUND` | The object or document does not exist |
+| `E_AMBIGUOUS` | A name matches several objects, such as two parts with the same reference; with `candidates` |
 | `E_VALIDATION` | The application rejected the content |
+| `E_CONFLICT` | A precondition does not hold, such as a file another program has open; with `conflict`, a value of DCLI-012 |
 | `E_UNSUPPORTED` | The application cannot do this |
+| `E_BACKEND_UNAVAILABLE` | The application is not installed, has no license or cannot be reached; nothing was sent |
+| `E_TIMEOUT` | A read took too long; nothing was changed |
 
-An error MUST be sent as a JSON-RPC error with code `-32000`. Its `data` MUST hold `code` and `dispatch_state`, and `native_message` when the application gave an error text. An `E_BUSY` error MUST hold `retry_after_ms`; an `E_HUMAN_REQUIRED` error SHOULD hold `action`. When a builtin knowledge entry explains the error, such as a known dialog, `data` SHOULD hold `knowledge`, the IDs of those entries; the CLI then names the `knowledge get` command in `next_action` (DSKL-124). An adapter in the CLI's process reports the same fields. The CLI adds the other `details` fields of DCLI-012, such as `next_action` and `resume`. `native_message` is the application's own text and MUST be treated as untrusted content (DSEC-020).
+An error MUST be sent as a JSON-RPC error with code `-32000`. Its `data` MUST hold `code` and `dispatch_state`, and `native_message` when the application gave an error text. An `E_BUSY` error MUST hold `retry_after_ms`; an `E_HUMAN_REQUIRED` error SHOULD hold `action`. An `E_AMBIGUOUS` error MUST hold at least two `candidates`, and an `E_CONFLICT` error MUST hold `conflict`; both, like `E_BACKEND_UNAVAILABLE` and `E_TIMEOUT`, come with `dispatch_state` `not_started`. The runtime MUST answer any other code, or a missing field, with `E_PROTOCOL`. When a builtin knowledge entry explains the error, such as a known dialog, `data` SHOULD hold `knowledge`, the IDs of those entries; the CLI then names the `knowledge get` command in `next_action` (DSKL-124). An adapter in the CLI's process reports the same fields. The CLI adds the other `details` fields of DCLI-012, such as `next_action` and `resume`. `native_message` is the application's own text and MUST be treated as untrusted content (DSEC-020).
 
 Why: A small, fixed set of host errors maps cleanly onto the error codes the Agent already knows.
 Check: 🤖 Runtime unit tests.

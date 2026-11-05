@@ -226,6 +226,13 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 为什么：一句「完成了」看不出修改是否已经写盘、是否核实过、哪些失败了、还有什么在等；人需要分别知道，才能决定下一步。
 检查：🤖 评测场景 `scoped_change`、`separate_save` 和 `partial_batch`（DSKL-040）；👀 评审入口 Skill。
 
+### DSKL-011 用数据核实结果
+
+Skill 必须让 Agent 用写操作的 `result` 和回执（DCLI-068），以及以数据给出位置、尺寸和连接关系的读命令来核实修改。Skill 禁止让 Agent 靠截图或渲染再识别来核实修改。渲染可以给人看，也可以用来判断纯视觉的问题，比如图纸排得挤不挤，Skill 在用得到的地方写明。
+
+为什么：读结构化的结果快、准，每次都一样；识别图片慢，花得多，还可能认错。
+检查：👀 评审 Skill；评测题按 Agent 运行的命令评分（DSKL-041）。
+
 ## 多个 Skill
 
 ### DSKL-020 什么时候拆分
@@ -237,7 +244,7 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 
 ### DSKL-021 按用户的说法拆
 
-工具拆分 Skill 时（DSKL-020），必须按用户说的任务拆，比如「画原理图」「布板」「出生产文件」；禁止按代码模块拆。一个常见任务如果要同时加载两个 Skill，必须把它们合成一个。
+工具拆分 Skill 时（DSKL-020），必须按用户说的任务拆，比如「画原理图」「布板」「出生产文件」；禁止按代码模块拆。一个 Skill 的几乎每个任务都还要用到另一个 Skill 时，必须把它们合成一个。跨 Skill 的流程，比如先建器件再放到板上，或把原理图的修改同步到板上，写进入口 Skill 的剧本，每个任务都会加载它（DSKL-022）。
 
 为什么：Agent 是拿用户的请求去匹配描述来选 Skill 的，按用户的说法拆最容易匹配上。
 检查：👀 评审。
@@ -253,7 +260,8 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 - 驱动剧本，包括选择实例和文档、保存，以及写操作被拒绝或结果不确定时怎么办（DSKL-009）；
 - 汇报格式（DSKL-010）；
 - 知识从哪里来，以及团队知识用 lark-cli 读（DSKL-110、DSKL-112）；
-- 路由表：什么任务用哪个 Skill。
+- 路由表：什么任务用哪个 Skill；
+- 跨 Skill 的流程（DSKL-021）。
 
 只有一个 Skill 的工具只有入口 Skill，所有命令都归它。
 
@@ -297,7 +305,7 @@ Skill 禁止包含错误码表、退出码表和信封规则，这些工具自�
 
 ### DSKL-028 改名留桩
 
-Skill 改名或并入另一个 Skill 时，旧名字必须留下一个桩 Skill。桩只告诉 Agent 改去读哪个 Skill。桩保留 `metadata.requires`，在 `metadata.replaced_by` 里写出那个 Skill，不带 `metadata.commands`。
+Skill 改名或并入另一个 Skill 时，旧名字必须留下一个桩 Skill。桩只告诉 Agent 改去读哪个 Skill。桩保留 `metadata.requires`，在 `metadata.replaced_by` 里写出那个 Skill，不带 `metadata.commands`。这条只管基于本规范发布过的 Skill。按本规范从头重做的工具，不用为它放弃的旧版本的 Skill 留桩；它的 CHANGELOG 写出这些 Skill 的名字，让用户删掉。
 
 为什么：`update` 只替换已经安装的 Skill 目录（DCLI-076）；没有桩，用户机器上的旧副本就会留下来，继续教过时的命令。
 检查：🤖 `check_project` 检查 `metadata.replaced_by` 写的是本工具的另一个 Skill，并且桩不负责任何命令；👀 评审。
@@ -707,6 +715,7 @@ Close the editor first, then run doc save.
 - [ ] DSKL-008 STOP 检查点
 - [ ] DSKL-009 驱动剧本
 - [ ] DSKL-010 汇报
+- [ ] DSKL-011 用数据核实结果
 - [ ] DSKL-020 什么时候拆分
 - [ ] DSKL-021 按用户的说法拆
 - [ ] DSKL-022 入口 Skill

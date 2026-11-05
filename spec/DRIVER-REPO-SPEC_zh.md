@@ -102,7 +102,7 @@
 │   ├── _driver/                    驱动运行时，原样复制
 │   ├── commands/                   领域命令（工具作者写）
 │   └── adapter/                    适配层（工具作者写）
-├── plugin/                         宿主组件源码，用软件支持的语言（需要时才建）
+├── plugin/                         宿主组件，用软件支持的语言（需要时才建）；source/ 放要编译、不安装的代码
 ├── skills/
 │   ├── <tool>/                     入口 Skill
 │   └── <product>-<area>/           领域 Skill
@@ -119,7 +119,7 @@
 └── .github/                        工作流 ci.yml 和 release.yml、Issue 与 PR 模板
 ```
 
-领域命令必须放在 `<pkg>/commands/`，适配层代码放在 `<pkg>/adapter/`。宿主组件源码必须放在 `plugin/`；只有工具有宿主组件时才建 `plugin/`（DCLI-262）。
+领域命令必须放在 `<pkg>/commands/`，适配层代码放在 `<pkg>/adapter/`。宿主组件必须放在 `plugin/`，要编译进安装文件的代码放在 `plugin/source/`（DCLI-240）；只有工具有宿主组件时才建 `plugin/`（DCLI-262）。
 
 为什么：每个工具把同样的东西放在同样的地方，熟悉一个工具的人和 Agent，到了下一个工具也能马上找到。
 检查：🤖 `check_project` 检查 DREPO-002 和 DREPO-004 列出的路径；👀 评审时检查代码放的位置。
@@ -643,7 +643,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 <!-- contract:capability_dispositions -->
 | 处置 | 含义 |
 |---|---|
-| `provided` 提供 | 工具通过一条或多条领域命令提供 |
+| `provided` 提供 | 工具通过一条或多条领域命令提供，或通过 `doc open`、`doc save`、`doc close` 这类标准命令提供 |
 | `deferred` 延后 | 值得提供，但留到以后的版本 |
 | `excluded` 排除 | 工具不会提供，比如因为不安全，或无法可靠地自动化 |
 | `unknown` 未知 | 还不知道软件是否允许 |

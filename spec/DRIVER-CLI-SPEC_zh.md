@@ -868,7 +868,7 @@
 - 以 `unknown` 结束的任务，与其他结果未知的写操作一样，用 `operation resolve` 查清（DCLI-063）。
 
 为什么：一次调用挂上几分钟，在 Agent 看来就和工具死掉一样；长任务的真实结果，也要和其他写操作一样认真报告。
-检查：🤖 驱动一致性测试 D11；👀 评审行为矩阵里的命令耗时（DVER-030）。
+检查：🤖 驱动一致性测试 D11 和 D26；👀 评审行为矩阵里的命令耗时（DVER-030）。
 
 ### DCLI-066 需要人处理
 
@@ -1109,7 +1109,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `session close` | `lifecycle` | 会话 | 直接执行；关闭不是本工具启动的实例为危险（DCLI-051） | 关闭实例；有未保存修改时拒绝；需要 `close_session` |
 | `doc list` | `observe` | 文件、会话 | — | 列出所有实例里的文档：路径、版本、是否有未保存修改、是否只读、磁盘状态 |
 | `doc get` | `observe` | 文件、会话 | — | 一份文档的状态 |
-| `doc create` | `lifecycle` | 会话 | 直接执行 | 可选：新建一份未命名文档（DCLI-212） |
+| `doc create` | `lifecycle` | 文件、会话 | 直接执行；`--path` 指定的文件已存在时两步确认 | 可选：新建文档，未命名或在 `--path`，给了 `--template` 时从模板开始（DCLI-212） |
 | `doc open` | `lifecycle` | 会话 | 直接执行 | 可选：在实例里打开文件 |
 | `doc save` | `persist` | 会话 | 两步确认 | 保存到原路径；预览列出上次保存以来的全部修改 |
 | `doc save-as` | `artifact` | 会话 | 直接执行；目标文件已存在时两步确认 | 可选：另存为新文件 |
@@ -1151,7 +1151,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 - 给了 `--session`，或者恰好有一个运行中的实例打开了这份文档时，用会话模式，并选中这个实例（DCLI-202）；
 - 没有任何运行中的实例打开这个文件时，用文件模式。
 
-运行中的实例已经打开了某个文件时，对它的文件模式写入必须被拒绝，返回 `E_CONFLICT`，`conflict` 为 `file_open_in_session`。`reference` 分模式给出确认级别（DCLI-031）。
+运行中的实例已经打开了某个文件时，文件模式下修改或保存这个文件的写操作必须被拒绝，返回 `E_CONFLICT`，`conflict` 为 `file_open_in_session`。只在文件模式下工作的工具看不到实例，由适配层报告这个冲突（DCLI-279）。只是用这份文档生成别的文件的写操作，比如导出，可以照常执行；实例可能有未保存的修改时，响应必须带一条提示，说明用的是磁盘上的文件。`reference` 分模式给出确认级别（DCLI-031）。
 
 为什么：模式决定了以哪里的数据为准、保存意味着什么，每次写入因此知道该从哪里读回；同一个文件一边在内存里改、一边在磁盘上改，两边会互相抹掉对方的修改。
 检查：🤖 通用一致性测试 R01 检查 `reference` 里的模式声明；驱动一致性测试 D03 检查 `file_open_in_session`。
@@ -1228,8 +1228,9 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 - `path`：文件路径；从未保存过的新文档为 `null`；
 - `key`：只用于没有路径的文档，即它的目标键 `untitled:<session-id>/<n>`（DCLI-028）。适配层必须给出，因为 `<n>` 只有适配层知道。有路径的文档没有 `key`，目标键就是 `file:///<path>`；
 - `session`：文档所在的会话；文件模式下为 `null`；
+- `kind`：软件有几种文档时，这份文档的种类，如 `part`、`assembly`、`drawing`；登记了 `doc_kinds` 的命令，遇到其他种类的文档时以 `E_VALIDATION` 拒绝（DCLI-029）；
 - `revision`：由适配层给出的不透明字符串，每次修改和每次保存都会变；文件模式下是文件内容的哈希；
-- `dirty`：有没有未保存的修改；
+- `dirty`：有没有未保存的修改；软件无法判断时为 `null`，按可能有未保存的修改处理，关闭时需要 `--discard`（DCLI-212）；
 - `readonly`：能不能写；
 - `disk`：磁盘上的文件与文档的关系（DCLI-211）；
 - `extra`：软件特有的字段（DCLI-203）。
@@ -1257,9 +1258,11 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 文档命令的效果和确认级别见 DCLI-200。此外：
 
-- `doc create` 新建一份未命名文档。这个命令本身没有目标（DCLI-054）；之后对新文档的写操作使用目标键 `untitled:<session-id>/<n>`（DCLI-028），授权范围用前缀 `untitled:` 覆盖它。
+- `doc create` 新建一份 `--kind` 指定种类的文档；给了 `--template` 时，从这个模板开始。不带 `--path` 时，在实例里新建一份未命名文档；这个命令本身没有目标（DCLI-054），之后对新文档的写操作使用目标键 `untitled:<session-id>/<n>`（DCLI-028），授权范围用前缀 `untitled:` 覆盖它。
+- 带 `--path` 时，目标为 `file:///<path>`，这次调用会新建这个文件：文件模式下总是如此，会话模式下则是软件在新建时就命名或写出文件的情况。它直接执行，文件已存在时两步确认（DCLI-051）。文件写出后，回执报告 `persistence: saved`，读回核实文件存在（DCLI-057）。文件模式下必须带 `--path`。命令同时支持两种模式时，用 `--session` 选择会话模式。
+- 领域命令禁止用别的名字新建文档，比如 `model create`（DCLI-200）。
 - `doc create`、`doc open`、`doc save-as` 和 `doc close` 是可选的。适配层没有命令所需的能力时，运行时必须返回 `E_UNSUPPORTED`（DCLI-260）。
-- `doc close` 必须拒绝关闭有未保存修改的文档，返回 `E_CONFLICT`，`conflict` 为 `unsaved_changes`。`doc close --discard` 放弃这些修改，属于危险级（DCLI-051）。
+- `doc close` 必须拒绝关闭有未保存修改、或 `dirty` 为 `null` 的文档，返回 `E_CONFLICT`，`conflict` 为 `unsaved_changes`。`doc close --discard` 放弃这些修改，属于危险级（DCLI-051）。
 - `doc save` 写回原路径，它的预览列出上次保存以来的全部修改（DCLI-058）。
 - `doc undo` 是可选的（DCLI-067）。
 
@@ -1277,18 +1280,18 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-220 长任务对象与命令
 
-长任务至少必须有以下字段：`id`、`operation_id`、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
+长任务至少必须有以下字段：`id`、`operation_id`（读操作的长任务为 `null`，DCLI-065）、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
 
-`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态（`completed`、`failed`、`partial`、`unknown` 或 `cancelled`）时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。这些都是 `data` 里的字段：`job get` 本身是成功的，DCLI-062 所说的 `error.details.receipt` 属于写操作，不属于 `job get`。
+`state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。任务处于终态（`completed`、`failed`、`partial`、`unknown` 或 `cancelled`）时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。读操作的长任务没有回执：返回 `ok`；`ok` 为 `true` 时返回读操作的 `result`，为 `false` 时返回 `code` 和 `message`。这些都是 `data` 里的字段：`job get` 本身是成功的，DCLI-062 所说的 `error.details.receipt` 属于写操作，不属于 `job get`。
 
 `job list` 列出所有会话的长任务。`job get --job <id> --wait <duration>` 必须在任务结束或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
 
 为什么：Agent 用一次次有时限的调用等待长时间的工作，而不是让一次调用一直挂着；任务的真实结果也以与其他写操作相同的形式读到。
-检查：🤖 驱动一致性测试 D11。
+检查：🤖 驱动一致性测试 D11 和 D26。
 
 ### DCLI-221 取消长任务
 
-`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。按请求取消的任务，执行维度记为 `interrupted`，原因码为 `E_INTERRUPTED`（DCLI-062）。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。
+`job cancel` 只作用于本工具启动的长任务。它属于停止命令（DSEC-018），目标就是该任务所属操作的目标。它必须先报告 `cancel_requested: true`；状态必须等软件确认任务已停止后才变为 `cancelled`。按请求取消的任务，执行维度记为 `interrupted`，原因码为 `E_INTERRUPTED`（DCLI-062）。软件不支持取消时，`job cancel` 必须返回 `E_UNSUPPORTED`。读操作的长任务什么都不改：`job cancel` 结束它的后台进程，不需要授权范围，返回这个任务；后台进程停下后，状态为 `cancelled`。
 
 为什么：软件还没停就报告「已取消」，旧任务还在跑，Agent 就可能开始新的工作。
 检查：🤖 驱动一致性测试 D11。
@@ -1321,6 +1324,8 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 宿主组件的源码和清单放在 `plugin/`。清单 `plugin/manifest.json` 必须写明 `version`，即工具版本；`protocol_version`（DCLI-280）；`files`，即 `plugin install` 复制的每个文件的 SHA-256，以 `plugin/` 里的路径为键；以及 `methods`，即宿主组件实现的实例端能力（DCLI-260）。前三项由 `check_project` 根据文件写出，`methods` 由作者填写。工具把清单交给运行时，原生程序也随身带着 `plugin/`。
 
+`plugin install` 复制 `plugin/` 里除清单、`README.md` 和 `plugin/source/` 文件夹以外的每个文件；`plugin/source/` 放的是要编译进安装文件的代码，从不安装。只有厂商的授权工具才能编译或解锁的文件，比如编译好的工具包库，可以提交在 `plugin/` 里；这时 `plugin/README.md` 必须写明是用哪个工具、哪个版本编译的，以及怎样重新编译。清单和对其他文件一样记下它的 SHA-256。
+
 为什么：只有一条带检查的安装途径，在软件里运行的代码才可控。清单根据文件写出，就不会和文件对不上。
 检查：🤖 驱动一致性测试 D12；`check_project` 重新生成清单并比对。
 
@@ -1338,7 +1343,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `open_session` | CLI 端 | — | 可选 | — | 启动实例 |
 | `close_session` | 实例端 | — | 可选 | — | 关闭实例 |
 | `documents` | 实例端 | 必需 | 必需 | — | 列出文档及其状态 |
-| `create_doc` | 实例端 | — | 可选 | — | 新建未命名文档 |
+| `create_doc` | 实例端 | 可选 | 可选 | — | 新建文档：未命名，或在给定路径，给了模板时从模板开始 |
 | `open_doc` | 实例端 | — | 可选 | — | 打开文档 |
 | `save_doc` | 实例端 | — | 必需 | — | 把文档保存到原路径 |
 | `save_doc_as` | 实例端 | — | 可选 | — | 把文档另存为新文件 |
@@ -1380,7 +1385,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | CLI 能直接调用的接口：Python API、COM、软件自带的命令行、文件格式 | 适配层，在 CLI 进程里 | 运行时的语言 |
 | 只能在软件进程里调用的接口：插件 SDK（.NET、Java、C++）、软件自带的脚本语言；或者调用必须在软件主线程上执行 | 宿主组件，在软件进程里，经宿主协议与 CLI 通信 | 软件支持的语言 |
 
-- 两种方式可以混用，比如读文件走适配层，改模型走宿主组件。
+- 两种方式可以按能力逐项混用：CLI 进程里的适配层实现了的能力就在那里运行，其余实例端能力交给宿主组件。比如读文件走适配层，改模型走宿主组件。
 - 本规范提供 Python 版的驱动运行时。Python 能直接调用 COM、多数软件的 Python 接口和常见文件格式；其他接口都经宿主协议接入，所以一种运行时就能覆盖各种软件。
 
 为什么：软件提供什么接口，决定了代码能在哪里运行；规则定好，每个作者就不用再做一遍选择。
@@ -1433,7 +1438,7 @@ CLI 与宿主组件之间必须只在本机连接：Windows 用命名管道，ma
 | `hello` | 否 | 握手（DCLI-273） |
 | `close_session` | 是 | 关闭实例 |
 | `documents` | 否 | 列出文档及其状态 |
-| `create_doc` | 是 | 新建未命名文档 |
+| `create_doc` | 是 | 新建文档 |
 | `open_doc` | 是 | 打开文档 |
 | `save_doc` | 是 | 保存文档 |
 | `save_doc_as` | 是 | 把文档另存为新文件 |
@@ -1492,10 +1497,14 @@ CLI 与宿主组件之间必须只在本机连接：Windows 用命名管道，ma
 | `E_NATIVE_FAILURE` | 软件拒绝了这次操作，没有留下持久改动 |
 | `E_HUMAN_REQUIRED` | 有弹窗等需要人处理 |
 | `E_NOT_FOUND` | 对象或文档不存在 |
+| `E_AMBIGUOUS` | 一个名字匹配到多个对象，比如两个器件位号相同；带 `candidates` |
 | `E_VALIDATION` | 软件拒绝了内容 |
+| `E_CONFLICT` | 前置条件不满足，比如文件正被别的程序打开；带 `conflict`，取 DCLI-012 中的值 |
 | `E_UNSUPPORTED` | 软件做不到 |
+| `E_BACKEND_UNAVAILABLE` | 软件没装、没有许可或连不上；什么都没派发 |
+| `E_TIMEOUT` | 读操作超时；什么都没改 |
 
-错误必须以 JSON-RPC 错误发送，错误码为 `-32000`。`data` 里必须有 `code` 和 `dispatch_state`，软件给出了报错原文时还必须有 `native_message`。`E_BUSY` 错误必须带 `retry_after_ms`；`E_HUMAN_REQUIRED` 错误应该带 `action`。有内置知识条目讲解这个错误时，比如一个已知的弹窗，`data` 应该带 `knowledge`，即这些条目的 ID；CLI 会在 `next_action` 里写出对应的 `knowledge get` 命令（DSKL-124）。在 CLI 进程内运行的适配层报告同样的字段。DCLI-012 要求的其他 `details` 字段，如 `next_action` 和 `resume`，由 CLI 补上。`native_message` 是软件自己的报错原文，必须当作不可信内容处理（DSEC-020）。
+错误必须以 JSON-RPC 错误发送，错误码为 `-32000`。`data` 里必须有 `code` 和 `dispatch_state`，软件给出了报错原文时还必须有 `native_message`。`E_BUSY` 错误必须带 `retry_after_ms`；`E_HUMAN_REQUIRED` 错误应该带 `action`。`E_AMBIGUOUS` 错误必须带至少两个 `candidates`，`E_CONFLICT` 错误必须带 `conflict`；这两种错误和 `E_BACKEND_UNAVAILABLE`、`E_TIMEOUT` 一样，`dispatch_state` 为 `not_started`。其他错误码或缺少字段时，运行时必须以 `E_PROTOCOL` 回应。有内置知识条目讲解这个错误时，比如一个已知的弹窗，`data` 应该带 `knowledge`，即这些条目的 ID；CLI 会在 `next_action` 里写出对应的 `knowledge get` 命令（DSKL-124）。在 CLI 进程内运行的适配层报告同样的字段。DCLI-012 要求的其他 `details` 字段，如 `next_action` 和 `resume`，由 CLI 补上。`native_message` 是软件自己的报错原文，必须当作不可信内容处理（DSEC-020）。
 
 为什么：宿主错误少而固定，就能直接对应到 Agent 已经熟悉的错误码。
 检查：🤖 运行时单元测试。
