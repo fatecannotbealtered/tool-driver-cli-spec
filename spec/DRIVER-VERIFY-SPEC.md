@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-VERIFY-SPEC_zh.md)
 
-> Version 1.0.0 · Clauses DVER-001 to DVER-051
+> Version 1.0.1 · Clauses DVER-001 to DVER-051
 
 ## How to Read
 
@@ -14,7 +14,7 @@ The normative words mean:
 - SHOULD and SHOULD NOT: the expected choice. Depart from it only for a reason you can state.
 - MAY: allowed, not required.
 
-The machine contract `contract/driver-contract.json` holds the test IDs, the behavior matrix rows, when each test and each row applies, the maturity levels and the evidence kinds as data. The schemas in `contract/schemas/` define the files that hold evidence. Tables that repeat contract values carry a contract marker. When such a table and the contract disagree, the contract wins.
+The machine contract `contract/driver-contract.json` holds the test IDs, the behavior matrix rows, when each test and each row applies, the maturity levels and the evidence kinds as data. The schemas in `contract/schemas/` define the files that hold evidence. They are the schemas of the release a tool pins: a tool project does not copy them, and `check_project` reads them from that release. Tables that repeat contract values carry a contract marker. When such a table and the contract disagree, the contract wins.
 
 ## Scope
 
@@ -40,7 +40,7 @@ One idea runs through this specification: only what is tested counts. Not run is
 | domain command | A command the tool author registers, as opposed to the built-in and standard commands of the runtime |
 | write command | A command whose declared effect is anything other than `observe` (DCLI-051) |
 | halt command | A command that only stops work in progress: a `stop` command or `job cancel`, registered with `halt: true`. It runs at once, without confirmation (DSEC-018) |
-| conformance test | One test of the two suites in this specification: general (G00 to G10, R01 to R05) and driver (D01 to D25) |
+| conformance test | One test of the two suites in this specification: general (G00 to G10, R01 to R05) and driver (D01 to D26) |
 | write sample | The arguments of one valid call to a write command, kept in the `normal` row of its behavior matrix and used by the general suite (DVER-002) |
 | fake host | A small program from the tool-driver-cli-spec repository that stands in for the application in tests (DVER-020) |
 | behavior matrix | A JSON file per command, with one row per situation: arguments, expected and actual result, and evidence (DVER-030) |
@@ -128,11 +128,12 @@ The driver suite MUST contain the tests below, and every tool MUST pass every te
 - `direct_writes`: the tool has a write command that runs in the direct tier, in at least one mode (DCLI-052);
 - `documents`: the tool acts on documents, in file or session mode;
 - `dangerous`: the tool has a command that runs in the dangerous tier, at least in some cases (DCLI-051);
-- `jobs`: the tool has long jobs;
+- `jobs`: the tool has long jobs that the application runs, with the adapter capability `job_status`;
 - `session` or `device`: the tool supports that mode;
 - `host_component`: the tool has a host component;
 - `physical`: the tool has commands with the `physical` effect;
-- `halt`: the tool has a halt command (DSEC-018) in session or device mode.
+- `halt`: the tool has a halt command (DSEC-018) in session or device mode;
+- `long_jobs`: the tool has a command registered `long: true`, whose job the runtime runs (DCLI-065).
 
 The runtime, not the tool author, decides from the command registration (DCLI-029) which tests apply. It reports a test that does not apply as not applicable, with its condition. The suite runs the CLI with the fake host in place of the application, so its results are simulated results (DVER-021). The last column names the clauses each test checks.
 
@@ -164,9 +165,10 @@ The runtime, not the tool author, decides from the command registration (DCLI-02
 | `D23` | `device` | The device is in `emergency_stop` or `fault` when a command other than a halt command acts on it: before the call, between the dry run and the confirm, or during the confirm | `E_HUMAN_REQUIRED` with action `confirm_on_device`; `dispatch_state` is `not_started`; nothing is dispatched; once the device is ready, the `resume` command runs the write | DCLI-055, DCLI-230, DSEC-061 |
 | `D24` | `writes` | A batch in which one object fails; a dangerous batch with a failure; a batch stopped by a busy instance; a batch in which every object fails | `E_PARTIAL` with `details.batch`: the failed item carries its code and the others succeeded; a dangerous batch skips the rest; a busy instance stops the batch and `resume` covers only the unfinished objects; when every object fails, the code is the first object's | DCLI-064 |
 | `D25` | `halt` | A halt command acts on a device that is `busy`, in `fault` or in `emergency_stop`, or on an instance that is `busy` or `blocked`; the scope sets `confirm: always` and covers the target but not the `lifecycle` effect | The command runs at once, with no `E_BUSY` and no confirmation, and returns a receipt | DCLI-230, DSEC-018 |
+| `D26` | `long_jobs` | Each command registered `long: true` runs its sample; a long write also runs with a read-back that does not match; a long read runs with no scope | The call returns a job at once; `job get` reports the write's receipt with verification `passed`, applied once, or `E_VERIFY_FAILED` for the mismatch; the read job returns its result, with `operation_id` `null` | DCLI-065, DCLI-220 |
 
 Why: These are the failures specific to driving an application: two open projects, an unsaved change taken as done, a dialog that hangs the call, a lost connection after a write, a stop that waits behind the work it should stop.
-Check: 🤖 Driver conformance tests D01 to D25.
+Check: 🤖 Driver conformance tests D01 to D26.
 
 ### DVER-011 Black-box testing
 
@@ -193,7 +195,7 @@ The fake host implements the standard adapter capabilities itself. For a domain 
 The conformance suites run the tool's real CLI and its real command registration with the fake host in place of the application. They prove that the runtime handles each situation correctly for this tool. They never run the tool's own adapter (DVER-021).
 
 Why: The failures that matter most, such as a dialog or a lost connection, are rare and hard to cause on demand in a real application.
-Check: 🤖 Driver conformance tests D01 to D25, which need each of these situations.
+Check: 🤖 Driver conformance tests D01 to D26, which need each of these situations.
 
 ### DVER-021 Simulated results are not evidence
 
@@ -255,7 +257,11 @@ The file lists each row of the table below once; each row is one situation. A ro
 
 A row whose condition does not hold MUST be marked as not applying. A row whose condition holds but that cannot happen for the command MUST also stay in the file, marked as not applying, with the reason.
 
-The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner `run_matrix`, which comes with this specification, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
+The `read_back_mismatch` row checks that the read-back reads the application, not the tool's own expectation. A correct preview predicts what the application stores, so the row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back (the variable `<PREFIX>_TEST_PAUSE_BEFORE_READ_BACK`, up to `matrix.max_pause_seconds`; the tool writes `pause.json` in its state directory while it waits), and during the wait a person, or a command given with `--tamper`, changes what was just written in the application, or deletes the file a write made. The wait ends early only on a real mismatch: a busy or blocked application keeps the tool waiting. `run_matrix` confirms a two-step or dangerous write with its token, as it does for every row, so the pause falls on the call that dispatches. For a long command it falls in the worker, and the row is decided by how the job ends; for a command registered with `verify_after_save` it falls at the `doc save` that follows the write. The row passes when the tool reports `E_VERIFY_FAILED`; the live record marks the run `tampered`. The row applies to every write whose result can be changed from outside in that wait, artifact writes included. It is not applicable only when it cannot be, such as a delivery to an outside system or a physical action, and the reason MUST say so.
+
+A command that registers `doc_kinds` (DCLI-029) MUST pass its `normal` row on a document of every kind it lists; `run_matrix --kind <kind>` records the kind of each run. The other rows need one kind. The `normal` row of a command registered with `verify_after_save` runs `doc save` on the same document after the write, and passes only when that save verified the change (DCLI-057).
+
+The rows run on the real application, on authorized targets (DVER-031, DVER-050). The matrix runner `run_matrix`, which comes with this specification, fills in the placeholders (DVER-002), runs the rows that apply, writes a live record that names each row (DVER-042), and fills in each row's actual result and its `live:` evidence. A row whose write asks for confirmation is confirmed with its token, unless the row expects `E_CONFIRMATION_REQUIRED`; the row of a long command waits for the job to end and takes the job's outcome. A row that applies but has no actual result and evidence has not been run. A row whose actual result differs from its expected result, or whose live run has `result: fail`, has failed. A row that has not been run or has failed MUST NOT count as passed.
 
 A row that applies but cannot be caused on demand on the real application, such as `disconnect`, MAY be marked `unrunnable`, with the reason. It then needs no live run, and the driver suite covers how the runtime handles it (DVER-010). The `normal`, `dialog` and `read_back_mismatch` rows MUST NOT be marked `unrunnable` (DVER-031).
 
@@ -279,7 +285,7 @@ Every command MUST declare a maturity level and the evidence references behind i
 | Level | Meaning | Evidence needed |
 |---|---|---|
 | `draft` | Declared; not yet shown on the real application, and the interface may still change | None; a write command still needs its sample (G00) |
-| `verified` | Run on the real application, with the real adapter and a record | Current `live:` evidence that every row of the behavior matrix that applies passed, except rows marked `unrunnable` (DVER-030, DVER-043) |
+| `verified` | Run on the real application, with the real adapter and a record | Current `live:` evidence that every row of the behavior matrix that applies passed, except rows marked `unrunnable`, and that the `normal` row passed on every kind of document the command lists (DVER-030, DVER-043) |
 | `stable` | Also passed evaluation, with no open severe defect | Plus a current `eval:` report (DSKL-043) |
 
 Only a run that passed counts as evidence (DVER-030). When evidence stops counting, the level MUST drop to the highest level the remaining evidence supports. A severe defect is one that makes a command report success for a wrong result, change something outside its target or scope, or lose the user's data.
@@ -314,7 +320,7 @@ Each live run MUST leave one JSON record in `docs/evidence/` that validates agai
 - `os`: the operating system as it reports itself, and `platform`: `windows`, `macos` or `linux`
 - `recorded_at`: the time of the run, in UTC
 - `targets`: the authorized targets the run used (DVER-050)
-- `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code, `result` and the `mode` it ran in
+- `runs`: one entry per command, with the command path, its arguments as run, with the placeholders filled in (DVER-002), the exit code, `result` and the `mode` it ran in; `doc_kind` when the command lists document kinds, and `tampered: true` for a run whose result was changed from outside during the pause (DVER-030)
 
 `result` is `pass` when the command behaved as expected, and `fail` otherwise. When an entry names a behavior matrix row in `matrix_row`, the expected result is the one in that row. An entry MAY add the printed envelope (`envelope`), its SHA-256 (`envelope_sha256`) and notes. Arguments that carry secrets MUST appear as `***` (DSEC-040). The support matrix of `docs/COMPATIBILITY.md` is generated from these records (DREPO-016).
 

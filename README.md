@@ -3,7 +3,7 @@
 A specification for driver tools: command-line tools that let AI Agents operate professional desktop applications and devices.
 
 [![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
-![Spec](https://img.shields.io/badge/spec-1.0.0-blue)
+![Spec](https://img.shields.io/badge/spec-1.0.1-blue)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
@@ -15,12 +15,13 @@ A person sets the scope, the Agent does the work, and the tool makes every step 
 
 The specification decides everything a new driver tool would otherwise decide on its own: project skeleton, documents, built-in commands, self-update, the driver model, the write flow, the adapter boundary and the conformance tests. A tool author writes only the domain commands, the adapter, the Skills, the knowledge entries and the evaluation questions. Every tool then behaves the same, so an Agent that knows one knows them all.
 
-| Requirement | Meaning |
+Three words sum it up: fast, accurate, steady.
+
+| Goal | Meaning |
 |---|---|
-| See clearly | The Agent always knows which instances and documents are open, what is unsaved, and whether the application is busy or blocked by a dialog. |
-| Change precisely | Every change lands on a named instance, document and object, with explicit units, and is read back afterwards. |
-| Report truthfully | Changed, saved and verified are reported separately; unknown is reported as unknown. |
-| Stay safe and lean | A person grants what may change; confirmation grows with risk; output is small and calls are few. |
+| Fast | The Agent finishes with few calls and little text: output is small and structured, counting and filtering happen in the tool, many objects change in one batch, and long checks are separate commands the Agent calls when it needs them. |
+| Accurate | The Agent always knows which instances and documents are open, what is unsaved, and whether the application is busy or blocked by a dialog. Every change lands on a named instance, document and object, with explicit units, and is read back. The result of a change shows what it made, such as where a track ended and what it connects to, so the Agent checks it as data, never by recognizing a screenshot. |
+| Steady | Changed, saved and verified are reported separately; unknown is reported as unknown. Every error says whether anything was sent and what to do next. A person grants what may change, and confirmation grows with risk. |
 
 ## The Five Specifications
 
@@ -38,7 +39,7 @@ Every value a tool or a test can read as data lives in [`contract/driver-contrac
 
 ## Status
 
-Version 1.0.0 is released: the specifications, the driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide are complete, and tools can adopt it now.
+Version 1.0.1 is released: the specifications, the driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide are complete, and tools can adopt it now.
 
 | Phase | Content | State |
 |---|---|---|

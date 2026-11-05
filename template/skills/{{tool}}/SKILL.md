@@ -63,10 +63,14 @@ In file mode, name the file with `--doc <path>`, using the path the user gave.
 Run `{{tool}} device list`, then name the device with `--device <id>` in every command.
 {{/device}}
 
+### Checking results
+
+Check a change with its `result` and receipt, and with the read commands, which give positions, sizes and connections as data. Never verify a change by recognizing a screenshot or a render; those are for the person or for purely visual questions.
+
 ### Save
 {{#session}}
 
-A change in session mode is not saved until `{{tool}} doc save`; its receipt says `persistence: unchanged`. Before confirming a save, check its preview: it lists every change since the last save, including changes made outside {{tool}} (`origin: external`), and in `blocked_by` the operations whose outcome is still unknown. Settle those first.
+A change in session mode is not saved until `{{tool}} doc save`; its receipt says `persistence: unchanged`. A receipt with verification `deferred` is verified by the next `doc save` of that document; it is not verified before. Before confirming a save, check its preview: it lists every change since the last save, including changes made outside {{tool}} (`origin: external`), and in `blocked_by` the operations whose outcome is still unknown. Settle those first.
 {{/session}}
 {{#file}}
 
@@ -79,7 +83,7 @@ Device mode has nothing to save: the device acts at once.
 
 ### Long jobs and blocking
 
-Work that takes longer than one call returns `result.job` with a `poll` command. Run that exact command until the job ends, then report the job's final receipt as the result. On `E_BUSY`, wait `retry_after_ms` and run the same command again; after 3 retries of the same command, ask the person. On `E_HUMAN_REQUIRED`, pass `action` and the dialog text to the person, and once they are done, run `resume` exactly as given.
+Work that takes longer than one call returns a job with a `poll` command: a write in `result.job`, a read in `job`. Run that exact command until the job ends, then report a write job's final receipt, or a read job's `result`. On `E_BUSY`, wait `retry_after_ms` and run the same command again; after 3 retries of the same command, ask the person. On `E_HUMAN_REQUIRED`, pass `action` and the dialog text to the person, and once they are done, run `resume` exactly as given.
 {{#device}}
 
 ### Physical effects
@@ -111,7 +115,7 @@ End every task with a report that answers each point separately:
 
 - Changed: what changed, object by object.
 - Saved: whether it was saved, and which changes made outside {{tool}} the save wrote.
-- Verified: whether read-back verified it.
+- Verified: whether read-back verified it, or that it waits for a save (`deferred`).
 - Failed and skipped: in a batch, the items that failed and the items that were skipped.
 - Simulated: which results are simulated.
 - Unknown: the operation IDs whose outcome is unknown, and for each resolved outcome whether read-back or you settled it.

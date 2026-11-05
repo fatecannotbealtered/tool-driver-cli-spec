@@ -269,7 +269,7 @@
       "expected": {
         "exit": 1,
         "code": "E_VERIFY_FAILED",
-        "summary": "With grid snapping on, KiCad stores x as 12.0 mm; the tolerance is 0.001 mm."
+        "summary": "While the tool waits before its read-back, the person moves R1 in KiCad; the read-back finds the other position."
       },
       "actual": {
         "exit": 1,

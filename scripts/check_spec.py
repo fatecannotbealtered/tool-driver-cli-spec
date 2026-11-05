@@ -703,7 +703,7 @@ SCHEMA_ENUMS = [
     ("adapter.schema.json", "/$defs/requests/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
     ("adapter.schema.json", "/$defs/results/properties", lambda c: [a["name"] for a in c["adapter_capabilities"]]),
     ("behavior-matrix.schema.json", "/$defs/row/properties/row/enum", lambda c: [r["row"] for r in c["behavior_matrix_rows"]]),
-    ("commands.schema.json", "/$defs/command/properties", lambda c: c["registration_fields"]),
+    ("commands.schema.json", "/$defs/command/properties", lambda c: c["registration_fields"] + c["registration_optional_fields"]),
     ("eval-report.schema.json", "/$defs/question/properties/scenario/enum", lambda c: [x["scenario"] for g in ("general", "driver") for x in c["skill"]["eval_scenarios"][g]]),
     ("reference.schema.json", "/$defs/command/properties/maturity/enum", lambda c: [m["level"] for m in c["maturity_levels"]]),
 ]

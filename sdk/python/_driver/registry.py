@@ -17,7 +17,7 @@ from .contract import Contract
 
 PATH = re.compile(r"^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$")
 FLAG = re.compile(r"^--[a-z][a-z0-9-]*$")
-DOMAIN_TYPES = {"string", "integer", "number", "boolean", "quantity", "path"}
+DOMAIN_TYPES = {"string", "integer", "number", "boolean", "quantity", "path", "json"}
 # Shared flags keep one meaning in every tool (DCLI-026); a command that offers one uses this type.
 SHARED_TYPES = {
     "--limit": "integer", "--offset": "integer", "--query": "string", "--sort": "string",
@@ -45,6 +45,7 @@ class Flag:
     maximum: int | None = None  # runtime commands only
     default: Any = None  # runtime commands only
     runtime: bool = False  # added by the runtime, never an input of the adapter
+    schema: dict[str, Any] | None = None  # the JSON Schema of a json flag's value
 
     @property
     def key(self) -> str:
@@ -61,6 +62,8 @@ class Flag:
             out["quantity"] = self.quantity
         if self.coordinate_system:
             out["coordinate_system"] = self.coordinate_system
+        if self.schema is not None:
+            out["schema"] = self.schema
         return out
 
 
@@ -89,6 +92,9 @@ class Command:
     formats: list[str] = field(default_factory=lambda: ["json", "text"])
     output_coordinate_system: str | None = None
     tier_when: list[dict[str, str]] = field(default_factory=list)
+    doc_kinds: list[str] = field(default_factory=list)
+    verify_after_save: bool = False
+    long: bool = False
     needs_scope: bool = True
     counts_for_risk: bool = True
     handler: Callable[..., Any] | None = None
@@ -113,6 +119,11 @@ class Command:
             "survey_ids": list(self.survey_ids), "irreversible": self.irreversible, "halt": self.halt,
             "tolerances": dict(self.tolerances), "default_fields": list(self.default_fields),
             "related_knowledge": list(self.related_knowledge),
+            **({"tier_when": [dict(t) for t in self.tier_when if "description" in t]}
+               if any("description" in t for t in self.tier_when) else {}),
+            **({"doc_kinds": list(self.doc_kinds)} if self.doc_kinds else {}),
+            **({"verify_after_save": True} if self.verify_after_save else {}),
+            **({"long": True} if self.long else {}),
         }
 
 
@@ -153,7 +164,7 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
     where = f"command {path!r}"
     extra = set(reg) - set(contract["registration_fields"]) - {
         "output_schema", "examples", "maturity", "evidence", "departures", "formats", "output_coordinate_system",
-    }
+    } - set(contract["registration_optional_fields"])
     if extra:
         raise RegistrationError(f"{where}: unknown fields {sorted(extra)}")
     missing = [f for f in contract["registration_fields"] if f not in reg] + [
@@ -210,6 +221,33 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
     for ref in reg["evidence"]:
         if not re.fullmatch(r"(live|eval):[^#\s]+(#\S+)?", ref):
             raise RegistrationError(f"{where}: evidence {ref!r} is not <kind>:<path>[#<anchor>] (DVER-041)")
+    writes = any(e != "observe" for e in effects)
+    tier_when = reg.get("tier_when", [])
+    reserved = set(contract["always_dangerous"]) | {"target_exists", "preview_touches_other_targets"}
+    if not isinstance(tier_when, list) or not all(
+            isinstance(t, dict) and set(t) == {"when", "tier", "description"} and isinstance(t["when"], str)
+            and re.fullmatch(r"[a-z][a-z0-9_]*", t["when"]) and t["when"] not in reserved
+            and t["tier"] in ("two_step", "dangerous") and isinstance(t["description"], str) and t["description"]
+            for t in tier_when):
+        raise RegistrationError(f"{where}: tier_when lists {{when, tier, description}}: a new lowercase condition, "
+                                "two_step or dangerous, and what the condition means (DCLI-031)")
+    if tier_when and not writes:
+        raise RegistrationError(f"{where}: only a write has tier_when")
+    doc_kinds = reg.get("doc_kinds", [])
+    if not isinstance(doc_kinds, list) or len(set(doc_kinds)) != len(doc_kinds) or not all(
+            isinstance(k, str) and re.fullmatch(r"[a-z][a-z0-9-]*", k) for k in doc_kinds):
+        raise RegistrationError(f"{where}: doc_kinds is a list of distinct lowercase document kinds (DCLI-210)")
+    if doc_kinds and not ({"file", "session"} & set(modes)):
+        raise RegistrationError(f"{where}: doc_kinds needs a mode with documents")
+    verify_after_save = reg.get("verify_after_save", False)
+    if not isinstance(verify_after_save, bool) or (verify_after_save and (
+            "session" not in modes or "change" not in effects)):
+        raise RegistrationError(f"{where}: verify_after_save is true only for a change in session mode (DCLI-057)")
+    long = reg.get("long", False)
+    if not isinstance(long, bool) or (long and halt):
+        raise RegistrationError(f"{where}: long is true or false, and a halt command is never long (DCLI-065)")
+    if long and any(f.secret for f in flags):
+        raise RegistrationError(f"{where}: a long command takes no secret flag; its worker never sees a secret (DCLI-065, DSEC-040)")
     return Command(
         path=path, summary=reg["summary"], effects=effects, modes=modes, target_kind=reg["target_kind"],
         flags=flags, kind="domain", untrusted_fields=list(reg["untrusted_fields"]), adapter_capabilities=caps,
@@ -218,12 +256,13 @@ def domain_command(reg: dict[str, Any], contract: Contract, tool_modes: list[str
         related_knowledge=list(reg["related_knowledge"]), output_schema=dict(reg["output_schema"]),
         examples=list(reg["examples"]), maturity=reg["maturity"], evidence=list(reg["evidence"]),
         departures=list(reg.get("departures", [])), formats=list(reg.get("formats", ["json", "text"])),
-        output_coordinate_system=reg.get("output_coordinate_system"),
+        output_coordinate_system=reg.get("output_coordinate_system"), tier_when=[dict(t) for t in tier_when],
+        doc_kinds=list(doc_kinds), verify_after_save=verify_after_save, long=long,
     )
 
 
 def _domain_flag(spec: dict[str, Any], contract: Contract, where: str) -> Flag:
-    allowed = {"name", "summary", "type", "required", "quantity", "secret", "output", "coordinate_system"}
+    allowed = {"name", "summary", "type", "required", "quantity", "secret", "output", "coordinate_system", "schema"}
     if not isinstance(spec, dict) or set(spec) - allowed or "name" not in spec or "type" not in spec:
         raise RegistrationError(f"{where}: a flag has name, type and only the fields {sorted(allowed)}")
     name, kind = spec["name"], spec["type"]
@@ -252,8 +291,13 @@ def _domain_flag(spec: dict[str, Any], contract: Contract, where: str) -> Flag:
         )
     if spec.get("output") and kind != "path":
         raise RegistrationError(f"{where}: flag {name} names a file the command creates only with type path")
+    schema = spec.get("schema")
+    if (kind == "json") != (schema is not None):
+        raise RegistrationError(f"{where}: flag {name} has a schema exactly when its type is json (DCLI-026)")
+    if schema is not None and (not isinstance(schema, dict) or schema.get("type") not in ("object", "array")):
+        raise RegistrationError(f"{where}: the schema of flag {name} is a JSON Schema of type object or array")
     return Flag(
         name=name, type=kind, summary=spec.get("summary", ""), required=bool(spec.get("required")),
         quantity=quantity, secret=bool(spec.get("secret")), output=bool(spec.get("output")),
-        coordinate_system=spec.get("coordinate_system"),
+        coordinate_system=spec.get("coordinate_system"), schema=schema,
     )

@@ -13,12 +13,14 @@ description: >-
   Not for using a driver tool to do work in an application; use that tool's own Skill, such as kicad-cli.
   不负责用驱动工具在软件里干活，那要用该工具自己的 Skill，比如 kicad-cli。
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # build-driver-cli
 
 A driver tool lets an Agent operate a desktop application or a device. A person sets the scope, the Agent does the work, and the tool makes every step correct and honestly reported. The specification decides everything tools share; you write only the domain commands, the adapter, the Skills, the knowledge entries and the evaluation questions. This Skill walks through the eight onboarding steps of DREPO-062, then reviews the tool.
+
+Judge every choice the specification leaves open by its goals. Fast: few calls, small structured output, long checks as separate commands. Accurate: every change on a named object, read back, and its result shows what it made, such as where a track ended and what it connects to, so the Agent checks it as data and never by recognizing a screenshot (DCLI-068). Steady: changed, saved and verified reported separately, and every error says what was sent and what to do next. Where a goal and a clause seem to disagree, the clause wins: stop and tell the person.
 
 `<tool>` is the command name (`kicad-cli`), `<pkg>` its source package (`kicad_cli`), `<PREFIX>` its environment prefix (`KICAD_CLI`) (DREPO-053).
 
@@ -72,15 +74,15 @@ Each step names the clauses to read, what to fill, the check and when it is done
 
 ### 4 Register commands
 
-- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-080 to DCLI-085, DREPO-061, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
-- Fill: one registration per command in `<pkg>/commands/__init__.py`, with `survey_ids`; set those capabilities to `provided` in both survey files. Then run `python scripts/spec.py generate`.
+- Read: DCLI-020 to DCLI-029, DCLI-051, DCLI-052, DCLI-064, DCLI-065, DCLI-068, DCLI-080 to DCLI-085, DCLI-212, DREPO-061, DSEC-018, DSEC-021. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
+- Fill: one registration per command in `<pkg>/commands/__init__.py`, with `survey_ids`; set those capabilities to `provided` in both survey files. Mark work that can take longer than a call `long`, list `doc_kinds` when the application has several kinds of document, set `verify_after_save` when the application shows a change correctly only after a save, use a `json` flag for a structured value such as a pad table, and give each write an output schema that shows what the change made (DCLI-068). New documents come from `doc create`, never a domain command. Then run `python scripts/spec.py generate`.
 - Check: `python -m <pkg> reference` starts and lists each command with its tier; `python scripts/spec.py check` reports nothing but DREPO-019 placeholders. The person reviews the command list: the names, and the effects and `irreversible` marks, which set the confirmation tiers.
 - Done when every `provided` capability has its command, every command traces to the survey, and the person agreed to the list.
 
 ### 5 Implement the adapter
 
 - Read: DCLI-028, DCLI-057, DCLI-063, DCLI-066, DCLI-203, DCLI-204, DCLI-240, DCLI-260 to DCLI-262, DCLI-275; in session mode without a host component, also DCLI-277.
-- Fill: in `<pkg>/adapter/__init__.py`, one method per capability the chosen modes require, plus the optional ones your workflows need: in session mode, `open_doc` and `close_doc`, which live runs and the evaluation use. Each takes the request of `<spec>/contract/schemas/adapter.schema.json` and returns its reply. `read`, `preview`, `apply` and `read_back` receive `{command, inputs, ...}`, with values already in standard units such as `x_mm`, and dispatch on `command`. A failure raises `AdapterError(code, message, dispatch_state=...)`; an error the adapter recognizes names its knowledge entries with `knowledge=[...]` (revisit after step 7 writes them). `self.store` keeps state between calls. Report facts only; the runtime judges success. With a host component, see [references/host-component.md](references/host-component.md).
+- Fill: in `<pkg>/adapter/__init__.py`, one method per capability the chosen modes require, plus the optional ones your workflows need: in session mode, `open_doc` and `close_doc`, which live runs and the evaluation use. Each takes the request of `<spec>/contract/schemas/adapter.schema.json` and returns its reply. `read`, `preview`, `apply` and `read_back` receive `{command, inputs, ...}`, with values already in standard units such as `x_mm`, and dispatch on `command`. A failure raises `AdapterError(code, message, dispatch_state=...)` with a code of DCLI-279, such as `E_AMBIGUOUS` with `candidates` for two parts with one reference; an error the adapter recognizes names its knowledge entries with `knowledge=[...]` (revisit after step 7 writes them). The preview lists the direct effects it can foresee, and names in `tier_raises` the registered conditions that hold. `self.store` keeps state between calls. Report facts only; the runtime judges success. With a host component, see [references/host-component.md](references/host-component.md).
 - Check: on the machine with the application, the `application` check of `python -m <pkg> doctor` passes, so `probe` finds it; `python -m ruff check .` and `python -m unittest discover -s tests` pass, with unit tests for the adapter.
 - Done when every capability the DCLI-260 table requires for the modes is implemented and `probe` finds the application.
 
@@ -88,13 +90,13 @@ Each step names the clauses to read, what to fill, the check and when it is done
 
 - Read: DVER-001, DVER-002, DVER-030, DVER-031, DVER-040 to DVER-043, DVER-050, DSEC-034. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
 - Fill: every file in `tests/matrix/`, one per domain command and per standard command whose adapter capabilities the tool implements (`generate` writes the first version; other standard commands need none); the tool's own tests in `tests/`.
-- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`: the person lists the targets under Authorized Targets and writes the scope file; with a host component, first run `plugin install` with the live-run state directory (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` after the person prepares it; `dialog` and `read_back_mismatch` are never `unrunnable`. Commit the live records.
+- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`: the person lists the targets under Authorized Targets and writes the scope file; with a host component, first run `plugin install` with the live-run state directory (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` after the person prepares it; `dialog` and `read_back_mismatch` are never `unrunnable`. `--row read_back_mismatch` makes the tool wait before its read-back while the person, or a script given with `--tamper`, changes the result. A command with `doc_kinds` runs its `normal` row once per kind, with `--kind`. Commit the live records.
 - Done when both suites pass, every matrix row that applies has passed live or is marked `unrunnable` with a reason, and each command's `maturity` matches its evidence.
 
 ### 7 Write Skills and knowledge
 
-- Read: DSKL-001 to DSKL-010, DSKL-020 to DSKL-028, DSKL-100, DSKL-101, DSKL-120, DSKL-124, DSKL-126, DSKL-040 to DSKL-044.
-- Fill: the `{{fill: ...}}` texts and the routing table of `skills/<tool>/SKILL.md`; playbooks for multi-step domain tasks go in a `## Playbooks` section of the entry Skill while it is the only Skill. Never change the write recipe, the STOP checkpoints, the driver playbooks or the report. Split into domain Skills only past 150 lines: [references/domain-skills.md](references/domain-skills.md). Turn the survey's operating notes, limits and troubleshooting into `knowledge/` entries, then point the matching adapter errors at them: [references/knowledge-entries.md](references/knowledge-entries.md). Before marking a command `stable`, write `tests/eval/` questions: [references/evaluation.md](references/evaluation.md).
+- Read: DSKL-001 to DSKL-011, DSKL-020 to DSKL-028, DSKL-100, DSKL-101, DSKL-120, DSKL-124, DSKL-126, DSKL-040 to DSKL-044.
+- Fill: the `{{fill: ...}}` texts and the routing table of `skills/<tool>/SKILL.md`; playbooks for multi-step domain tasks go in a `## Playbooks` section of the entry Skill while it is the only Skill, and flows that cross domain Skills stay there after a split. Skills check changes with results and read commands, never with screenshots (DSKL-011). Never change the write recipe, the STOP checkpoints, the driver playbooks or the report. Split into domain Skills only past 150 lines: [references/domain-skills.md](references/domain-skills.md). Turn the survey's operating notes, limits and troubleshooting into `knowledge/` entries, then point the matching adapter errors at them: [references/knowledge-entries.md](references/knowledge-entries.md). Before marking a command `stable`, write `tests/eval/` questions: [references/evaluation.md](references/evaluation.md).
 - Check: `python scripts/spec.py generate`, `python scripts/spec.py check`, `python scripts/spec.py eval --check --fake-host`; on the real application, `python scripts/spec.py eval --workspace-root <folder>` in a folder the person authorized. That run needs Claude Code on PATH, whichever Agent builds the tool, and uses model credits. The person reviews the Skills.
 - Done when the check passes, the person agreed to the Skills, and every `stable` command has a current, passing evaluation report.
 

@@ -94,8 +94,9 @@ def own_samples(subject: Subject) -> list[Sample]:
     """The write samples of the tool's own write commands: the normal rows of their behavior
     matrices. Read commands have matrices too, but their normal rows are not write samples."""
     writes = set(subject.writes())
+    # A long command returns a job; D26 runs it to its end (DCLI-065).
     return [Sample(path, args, mode_of(subject, path, args), True) for path, args in subject.samples.items()
-            if path in writes]
+            if path in writes and not subject.registrations.get(path, {}).get("long")]
 
 
 def all_samples(subject: Subject) -> list[Sample]:

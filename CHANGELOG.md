@@ -4,6 +4,35 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-05
+
+Changes from reworking three tools onto 1.0.0. Every change serves the same goals: fast, accurate and steady, and the Agent knows the result of a change from the structured return.
+
+### Added
+
+- DCLI-068: the result of a write shows what the change made, such as a track's end points, net and connections, with only the direct effects and nothing that takes long to compute. DSKL-011: Skills check results as data, never by recognizing a screenshot.
+- Long jobs the runtime runs itself (DCLI-065): a command registered `long: true` returns a job at once and runs its work in a worker of the same tool, which claims the job once and runs the same checks before dispatch. A long read, such as a design rule check of a large board, needs no scope and returns its result through `job get`. A write job the tool runs cannot be cancelled midway (DCLI-221). Driver conformance test D26 checks it.
+- Document kinds (DCLI-029, DCLI-210): a command lists the kinds of document it works on in `doc_kinds`. It refuses a document of another kind, and its normal row must pass on every kind (DVER-030, DVER-040). `run_matrix --kind` records the kind of each run.
+- Verification after the save (DCLI-057): a command registered `verify_after_save` reports verification `deferred` in session mode, and the next `doc save` verifies it; closing without a save settles it as `not_run`.
+- `doc create --path` and `--template`, in file mode too; with `--path` the file exists when the call returns (DCLI-212).
+- The flag type `json` for structured values such as pad tables, and batch items of a `create` command without `id` (DCLI-029, DCLI-064).
+- Conditions a command registers in `tier_when`, which the adapter's preview raises with `tier_raises` (DCLI-052).
+- The adapter may answer `E_AMBIGUOUS`, `E_CONFLICT`, `E_BACKEND_UNAVAILABLE` and `E_TIMEOUT` (DCLI-279). The host protocol is now version 1.1.0.
+
+### Changed
+
+- The `read_back_mismatch` row is caused from outside: `run_matrix --row read_back_mismatch` makes the tool wait before its read-back, and a person or `--tamper` changes the result meanwhile (DVER-030). `run_matrix` now confirms two-step rows with their token and judges a long command by how its job ends.
+- A file-mode write is refused while an instance has the file open only when it changes or saves the file; an export goes ahead, with a notice (DCLI-201).
+- `dirty` may be `null` when the application cannot tell, and then counts as possibly unsaved (DCLI-210).
+- The adapter and the host component mix capability by capability (DCLI-262).
+- A write that makes files and changes a document verifies both (DCLI-057).
+- `plugin/source/` is not installed. A vendor-built binary may be committed, with how it was built (DCLI-240).
+- Clarified: hyphenated nouns (DCLI-023); what is irreversible, in file mode too (DCLI-051); the reference index (DCLI-031); flows that cross Skills belong in the entry Skill (DSKL-021); rename stubs do not apply to a rebuild from scratch (DSKL-028); instances the tool started itself (DSEC-052); `provided` counts standard commands (DREPO-060); where the schemas come from (DVER).
+
+### Fixed
+
+- `instantiate` no longer leaves `__pycache__` in the new project.
+
 ## [1.0.0] - 2026-11-04
 
 ### Added

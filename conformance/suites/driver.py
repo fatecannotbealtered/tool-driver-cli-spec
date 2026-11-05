@@ -1,4 +1,4 @@
-"""The driver conformance suite: D01 to D25 (DVER-010).
+"""The driver conformance suite: D01 to D26 (DVER-010).
 
 A test is not applicable only for a reason taken from the registration; a sample or a
 capability the test needs and does not find is a failure.
@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from .harness import Case, NotApplicable, Outcome, Recorder, Subject, check
-from .samples import Sample, as_batch, batchable, call, confirm, own_samples, standard_samples, through, token_for
+from .samples import Sample, as_batch, batchable, call, confirm, mode_of, own_samples, standard_samples, through, token_for
 
 
 # ------------------------------------------------------------------ choosing samples
@@ -46,7 +46,8 @@ def _device_writes(subject: Subject) -> list[Sample]:
 
 def _field_samples(subject: Subject) -> list[Sample]:
     """The writes whose verification reads fields back rather than files."""
-    found = [s for s in _own(subject) if "artifact" not in subject.registrations[s.path]["effects"]]
+    found = [s for s in _own(subject) if "artifact" not in subject.registrations[s.path]["effects"]
+             and not subject.registrations[s.path].get("verify_after_save")]  # those are verified at the save
     if not found:
         raise NotApplicable("the registration has no write that changes fields")
     return found
@@ -732,8 +733,45 @@ def d25(subject: Subject) -> None:
                 check(len(case.calls("apply")) > sent, f"{sample.path} was not sent while {state}")
 
 
+def d26(subject: Subject) -> list[str]:
+    """A long command returns a job at once; its worker settles it like any write, or returns
+    the read's result; a long read needs no scope (DCLI-065)."""
+    longs = [p for p, r in subject.registrations.items() if r.get("long") and p in subject.samples]
+    check(longs, "a long command has no sample in the normal row of its behavior matrix")
+    for path in longs:
+        reg = subject.registrations[path]
+        sample = Sample(path, subject.samples[path], mode_of(subject, path, subject.samples[path]), True)
+        writes = reg["effects"] != ["observe"]
+        for mismatch in ((False, True) if writes else (False,)):
+            with Case(subject) as case:
+                argv = sample.prepare(case)
+                if not writes:
+                    case.revoke()
+                if mismatch:
+                    fields = _fields_of(case, sample, argv)
+                    case.control("fault", rule={"method": "apply", "command": path, "action": "store",
+                                                "values": {f: "conformance-other-value" for f in fields}})
+                out = through(case, sample, argv)
+                job = (out.data or {}).get("result", {}).get("job") if writes else (out.data or {}).get("job")
+                check(out.ok and job and job.get("poll"), f"{path} did not return a long job at once: {out.describe()}")
+                done = case.run("job", "get", "--job", job["id"], "--wait", "60s")
+                data = done.data or {}
+                check(data.get("state") in ("completed", "failed", "partial", "unknown", "cancelled"),
+                      f"{path}: the job did not end: {done.describe()}")
+                if not writes:
+                    check(data.get("ok") and "result" in data and data.get("operation_id") is None,
+                          f"{path}: the read job gave no result: {done.describe()}")
+                elif mismatch:
+                    check(data.get("code") == "E_VERIFY_FAILED", f"{path}: a mismatch in the worker was not reported: {done.describe()}")
+                else:
+                    check(data.get("ok") and data.get("receipt", {}).get("outcome", {}).get("verification") == "passed",
+                          f"{path}: the worker did not verify the change: {done.describe()}")
+                    check(len(case.applied()) == 1, f"{path}: the worker applied the change {len(case.applied())} times")
+    return longs
+
+
 TESTS: dict[str, Any] = {
     "D01": d01, "D02": d02, "D03": d03, "D04": d04, "D05": d05, "D06": d06, "D07": d07, "D08": d08, "D09": d09,
     "D10": d10, "D11": d11, "D12": d12, "D13": d13, "D14": d14, "D15": d15, "D16": d16, "D17": d17, "D18": d18,
-    "D19": d19, "D20": d20, "D21": d21, "D22": d22, "D23": d23, "D24": d24, "D25": d25,
+    "D19": d19, "D20": d20, "D21": d21, "D22": d22, "D23": d23, "D24": d24, "D25": d25, "D26": d26,
 }

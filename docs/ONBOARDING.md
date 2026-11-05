@@ -27,7 +27,7 @@ This guide is for a team member who wants a driver tool: a command-line tool tha
 Each release of tool-driver-cli-spec on GitHub Releases holds the development Skill `build-driver-cli`. It guides your Agent through the eight steps below and, at the end, reviews the tool against the specification.
 
 1. From <https://github.com/fatecannotbealtered/tool-driver-cli-spec/releases>, download `tool-driver-cli-spec-<version>.zip` and `tool-driver-cli-spec-<version>.sha256`.
-2. Check the download. With bash, `sha256sum -c tool-driver-cli-spec-<version>.sha256` must print `OK` (on macOS, `shasum -a 256 -c` instead). With PowerShell, `Get-FileHash tool-driver-cli-spec-<version>.zip` must print the value in the `.sha256` file; upper or lower case does not matter. If the values differ, delete the files and do not use them.
+2. Check the download: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" tool-driver-cli-spec-<version>.zip` must print the first word of the `.sha256` file. This is the check the build-driver-cli Skill runs. If the values differ, delete the files and do not use them.
 3. Unpack the ZIP with `python -m zipfile -e tool-driver-cli-spec-<version>.zip .`.
 4. Copy `skills/build-driver-cli/` into your Agent's Skill folder, such as `~/.claude/skills/` for Claude Code or `~/.agents/skills/`.
 

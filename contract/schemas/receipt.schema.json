@@ -21,7 +21,7 @@
         "change": {"enum": ["not_applicable", "not_applied", "applied", "partial", "rolled_back", "unknown"]},
         "delivery": {"enum": ["not_applicable", "not_attempted", "delivered", "partial", "rejected", "unknown"]},
         "persistence": {"enum": ["not_applicable", "unchanged", "saved", "partial", "unknown"]},
-        "verification": {"enum": ["not_applicable", "not_run", "passed", "failed", "incomplete"]}
+        "verification": {"enum": ["not_applicable", "not_run", "passed", "failed", "incomplete", "deferred"]}
       },
       "if": {
         "anyOf": [

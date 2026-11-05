@@ -2,7 +2,7 @@
 
 [English](DRIVER-REPO-SPEC.md) | 中文
 
-> 版本 1.0.0 · 条款 DREPO-001 至 DREPO-062
+> 版本 1.0.1 · 条款 DREPO-001 至 DREPO-062
 
 ## 怎么读
 
@@ -102,7 +102,7 @@
 │   ├── _driver/                    驱动运行时，原样复制
 │   ├── commands/                   领域命令（工具作者写）
 │   └── adapter/                    适配层（工具作者写）
-├── plugin/                         宿主组件源码，用软件支持的语言（需要时才建）
+├── plugin/                         宿主组件，用软件支持的语言（需要时才建）；source/ 放要编译、不安装的代码
 ├── skills/
 │   ├── <tool>/                     入口 Skill
 │   └── <product>-<area>/           领域 Skill
@@ -119,7 +119,7 @@
 └── .github/                        工作流 ci.yml 和 release.yml、Issue 与 PR 模板
 ```
 
-领域命令必须放在 `<pkg>/commands/`，适配层代码放在 `<pkg>/adapter/`。宿主组件源码必须放在 `plugin/`；只有工具有宿主组件时才建 `plugin/`（DCLI-262）。
+领域命令必须放在 `<pkg>/commands/`，适配层代码放在 `<pkg>/adapter/`。宿主组件必须放在 `plugin/`，要编译进安装文件的代码放在 `plugin/source/`（DCLI-240）；只有工具有宿主组件时才建 `plugin/`（DCLI-262）。
 
 为什么：每个工具把同样的东西放在同样的地方，熟悉一个工具的人和 Agent，到了下一个工具也能马上找到。
 检查：🤖 `check_project` 检查 DREPO-002 和 DREPO-004 列出的路径；👀 评审时检查代码放的位置。
@@ -421,7 +421,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 | `platform` | 出包平台：Windows、macOS、Linux | `package.json` 里的平台包（DREPO-043） |
 | `risk` | 工具的风险等级，T0 至 T2（DSEC-002） | `reference` |
 | `maturity` | 工具各领域命令中最低的成熟度（DVER-040） | `reference` |
-| `spec` | 固定的规范版本，如 tool-driver-cli-spec 1.0.0 | `.agent/SPEC_VERSION` |
+| `spec` | 固定的规范版本，如 tool-driver-cli-spec 1.0.1 | `.agent/SPEC_VERSION` |
 | `license` | 工具的许可证 | `package.json` |
 
 驱动 KiCad 10.0、支持文件和会话模式的工具，徽章行大致如下；具体样式由模板定义：
@@ -435,7 +435,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 ![platform](https://img.shields.io/badge/platform-Windows_·_macOS_·_Linux-555555)
 ![risk](https://img.shields.io/badge/risk-T1-d29922)
 ![maturity](https://img.shields.io/badge/maturity-verified-8957e5)
-![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.0-0969da)
+![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.1-0969da)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ```
 
@@ -643,7 +643,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 <!-- contract:capability_dispositions -->
 | 处置 | 含义 |
 |---|---|
-| `provided` 提供 | 工具通过一条或多条领域命令提供 |
+| `provided` 提供 | 工具通过一条或多条领域命令提供，或通过 `doc open`、`doc save`、`doc close` 这类标准命令提供 |
 | `deferred` 延后 | 值得提供，但留到以后的版本 |
 | `excluded` 排除 | 工具不会提供，比如因为不安全，或无法可靠地自动化 |
 | `unknown` 未知 | 还不知道软件是否允许 |

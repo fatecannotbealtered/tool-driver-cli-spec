@@ -17,7 +17,7 @@ from .records import utc_now
 from .registry import Command, Flag
 from .runtime import READ_DEADLINE_MS, SESSION_DEADLINE_MS, Run, Where, parallel
 from .targets import file_key
-from .writes import Engine, Verification, WriteSpec, dispatch, read_back, record_state, verify_files
+from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, verify_files
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -93,9 +93,13 @@ def commands(tool: Tool) -> list[Command]:
          ["documents"], ["doc list"], "document", [".items[*].path"], None),
         ("doc get", "The state of one document.", [_doc(required=True), _session()], doc_get, obj + "document", ["documents"],
          ["doc get --doc design.dat"], "document", [".path"], None),
-        ("doc create", "Create an untitled document in an instance.", [_session(), Flag("--kind", "string", "The kind of document, when the application has several.")],
+        ("doc create", "Create a document: untitled in an instance, or at --path, from --template when given.",
+         [_session(), Flag("--kind", "string", "The kind of document, when the application has several."),
+          Flag("--path", "path", "Where the new document lives; needed in file mode and when the application names the file at once.", output=True),
+          Flag("--template", "path", "A template the application starts the document from.")],
          lambda run: Engine(run).execute(DocCreate(run, run.call.command)), "receipt.schema.json", ["create_doc"],
-         ["doc create --session app-1234-5f3a"], "document", [], None),
+         ["doc create --session app-1234-5f3a", "doc create --kind part --template start.prt --path D:/work/bracket.prt"],
+         "document", [], [{"when": "target_exists", "tier": "two_step"}]),
         ("doc open", "Open a file in an instance.", [_session(), Flag("--doc", "path", "The file to open.", required=True)],
          lambda run: Engine(run).execute(DocOpen(run, run.call.command)), "receipt.schema.json", ["open_doc"],
          ["doc open --session app-1234-5f3a --doc design.dat"], "document", [], None),
@@ -121,7 +125,7 @@ def commands(tool: Tool) -> list[Command]:
          [Flag("--job", "string", "The job ID.", required=True), Flag("--wait", "duration", "Wait up to this long, at most 600s, for the job to end.")],
          job_get, obj + "job", ["job_status"], ["job get --job 7 --wait 60s"], "job", [], None),
         ("job cancel", "Ask to cancel a long job this tool started; a halt command.", [Flag("--job", "string", "The job ID.", required=True)],
-         lambda run: Engine(run).execute(JobCancel(run, run.call.command)), "receipt.schema.json", ["cancel", "job_status"],
+         job_cancel, "receipt.schema.json", ["cancel", "job_status"],
          ["job cancel --job 7"], "job", [], None),
         ("device list", "List the devices with their state.", [_limit(), _offset()], device_list, obj + "page", ["devices"],
          ["device list"], "device", [], None),
@@ -158,7 +162,7 @@ def add_target_flags(tool: Tool, command: Command) -> None:
     if command.writes and "--output" not in names:
         command.flags.append(Flag("--output", "path", "Write the full preview, with every change, to this file.", runtime=True))
     if "artifact" in command.effects and any(f.output for f in command.flags):
-        command.tier_when = [{"when": "target_exists", "tier": "two_step"}]
+        command.tier_when = [{"when": "target_exists", "tier": "two_step"}] + command.tier_when
     tiers = tool.tiers
     if command.writes and not command.halt and any(tiers.base(command, m) == "direct" for m in command.modes):
         command.tier_when = command.tier_when + [{"when": "preview_touches_other_targets", "tier": "two_step"}]
@@ -192,8 +196,16 @@ def domain_read(run: Run, command: Command) -> Result:
         request["document"] = where.document["id"]
     if where.device:
         request["device"] = where.device["id"]
-    result = run.capability("read", request).get("result")
     untrusted = [f".{f}" for f in command.untrusted_fields] + [f".items[*].{f}" for f in command.untrusted_fields]
+    if command.long:
+        # A read that can take longer than a call may runs in a worker; no scope and no
+        # confirmation, because it changes nothing (DCLI-065).
+        from .jobs import submit_read
+
+        job = submit_read(run, request, untrusted)
+        out = {"id": job["id"], "state": job["state"], "poll": run.cmd("job get", [("--job", job["id"]), ("--wait", "60s")])}
+        return Result({"job": out}, [])
+    result = run.capability("read", request).get("result")
     offset = None
     if isinstance(result, dict) and isinstance(result.get("items"), list) and "count" not in result:
         # The runtime pages a list the adapter returns whole (DCLI-006).
@@ -304,6 +316,20 @@ def poll_job(run: Run, record: dict[str, Any]) -> dict[str, Any]:
     job = record["_job"]
     if job["state"] in FINAL_JOB_STATES:
         return record
+    if job.get("worker"):
+        # The worker writes the outcome into the record; a worker that ended without one
+        # leaves the outcome unknown (DCLI-063, DCLI-065).
+        from .jobs import worker_alive
+
+        latest = run.records.load(record["operation_id"]) or record
+        if latest["_job"]["state"] in FINAL_JOB_STATES or worker_alive(latest["_job"]):
+            return latest
+        latest = run.records.load(record["operation_id"]) or latest
+        if latest["_job"]["state"] not in FINAL_JOB_STATES:
+            latest["_job"]["state"] = "unknown"
+            _settle_job(run, latest, {"state": "unknown", "native_message": "The worker that ran this job ended without a result."})
+            run.records.save(latest)
+        return latest
     call_info = record.get("_call") or {}
     request: dict[str, Any] = {"job": job["id"]}
     if call_info.get("session"):
@@ -348,17 +374,9 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
         change = "partial"
     verification = Verification("not_applicable")
     if execution == "completed" and (change in ("applied", "partial") or persistence == "saved" or delivery == "delivered"):
-        if status.get("files"):
-            verification = verify_files(status, [])
-        elif record.get("_request"):
-            changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
-            request = {**record["_request"], "operation_id": record["operation_id"],
-                       "targets": sorted({c["target"] for c in changes}) or None,
-                       "fields": sorted({c["field"] for c in changes if "field" in c}) or None}
-            request = {k: v for k, v in request.items() if v is not None}
-            verification = read_back(run, request, changes, record.get("_tolerances", {}))
-        else:
-            verification = Verification("incomplete", notes=["The job's outputs cannot be read back."])
+        verification = _job_verification(run, record, status)
+    if status.get("_note"):
+        verification.notes.insert(0, status["_note"])
     receipt = dict(record.get("receipt") or {})
     receipt["outcome"] = {"execution": execution, "change": change, "delivery": delivery, "persistence": persistence,
                           "verification": verification.status}
@@ -367,7 +385,7 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
     if isinstance(status.get("native_message"), str):
         receipt["notes"].append(f"The application said: {status['native_message']}")
     record["receipt"] = receipt
-    cause = "E_INTERRUPTED" if state == "cancelled" else None
+    cause = "E_INTERRUPTED" if state == "cancelled" else status.get("code")
     ok, code = _Engine(run).derive(receipt, cause)
     job.update(ok=ok, code=code, finished_at=utc_now(), result=status.get("result", {}))
     record["state"] = record_state(receipt, code)
@@ -378,25 +396,140 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
         run.locks.release(record["operation_id"])
 
 
+def _job_verification(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Verification:
+    """A job's outputs: the files it made and the fields it changed, both when it did both (DCLI-057)."""
+    from .writes import combine, is_file_target
+
+    command = run.tool.commands.get(record.get("command", ""))
+    if command is not None and command.verify_after_save and (record.get("_call") or {}).get("mode") == "session":
+        return Verification("deferred", notes=["The application shows this change correctly only after a save; doc save verifies it."])
+    changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
+    files = [c for c in changes if c.get("field") == "exists" and is_file_target(c["target"])]
+    fields = [c for c in changes if c not in files]
+    parts = []
+    if status.get("files") or files:
+        parts.append(verify_files(status, files))
+    if fields and record.get("_request"):
+        request = {**record["_request"], "operation_id": record["operation_id"],
+                   "targets": sorted({c["target"] for c in fields}),
+                   "fields": sorted({c["field"] for c in fields if "field" in c})}
+        parts.append(read_back(run, request, fields, record.get("_tolerances", {})))
+    if not parts:
+        return Verification("incomplete", notes=["The job's outputs cannot be read back."])
+    return combine(parts)
+
+
+def run_write_job(run: Run, record: dict[str, Any]) -> None:
+    """In the worker: apply the write with the long deadline, then settle it like any job (DCLI-065)."""
+    from .adapter import BadProtocol, BadReply, CapabilityError, Lost, Unanswered
+    from .jobs import worker_deadline_ms
+
+    request = {**(record.get("_request") or {}), "operation_id": record["operation_id"]}
+    status: dict[str, Any]
+    try:
+        # The checks that run right before any dispatch run here too (DCLI-057, DSEC-061).
+        if request.get("device"):
+            run.gate_device(run.fresh_device(request["device"]))
+        if request.get("session"):
+            run.gate_session(run.session(request["session"]))
+        if not run.backend.has("apply", request.get("session")):
+            raise DriverError("E_UNSUPPORTED", "This tool's adapter has no apply capability, so it cannot do this.")
+        facts = run.backend.call("apply", request, worker_deadline_ms(run))
+    except DriverError as exc:
+        status = {"state": "failed", "change": "not_applied", "code": exc.code, "native_message": exc.message}
+    except CapabilityError as exc:
+        code, ds = run.host_error(exc, exc.dispatch_state, write=True).code, exc.dispatch_state
+        if ds == "not_started" or (ds == "dispatched" and code in ("E_VALIDATION", "E_NOT_FOUND", "E_UNSUPPORTED")):
+            status = {"state": "failed", "change": "not_applied", "code": code}
+        elif ds == "dispatched" and code == "E_NATIVE_FAILURE":
+            status = {"state": "failed", "change": "rolled_back", "code": code}
+        else:
+            status = {"state": "unknown"}
+        if isinstance(exc.data.get("native_message"), str):
+            status["native_message"] = exc.data["native_message"]
+    except Unanswered as exc:
+        status = {"state": "unknown"} if exc.sent else {"state": "failed", "change": "not_applied", "code": "E_BUSY"}
+    except (Lost, BadProtocol) as exc:
+        status = {"state": "failed", "change": "not_applied", "code": "E_BACKEND_UNAVAILABLE", "native_message": str(exc)}
+    except BadReply as exc:
+        status = {"state": "unknown", "native_message": str(exc)}
+    else:
+        if not isinstance(facts, dict) or facts.get("dispatch_state") not in ("not_started", "dispatched", "unknown"):
+            status = {"state": "unknown"}
+        elif facts["dispatch_state"] == "not_started":
+            status = {"state": "failed", "change": "not_applied"}
+        elif facts["dispatch_state"] == "unknown":
+            status = {"state": "unknown"}
+        else:
+            status = {"state": "completed", **{d: facts[d] for d in ("change", "delivery", "persistence", "files", "result",
+                                                                       "native_message") if d in facts}}
+    if status["state"] == "completed":
+        # The read_back_mismatch row of a long write is caused here, in the worker (DVER-030).
+        from .writes import pause_before_read_back
+
+        changes = record.get("_changes") or []
+        note = pause_before_read_back(run, record["operation_id"], record.get("command", ""), status, changes,
+                                      lambda: _job_verification(run, record, status))
+        if note:
+            status["_note"] = note
+    record["_job"]["state"] = status["state"]
+    _settle_job(run, record, status)
+    run.records.save(record)
+
+
 def job_list(run: Run) -> Result:
     state = run.call.values.get("--state", "all")
     records = [r for r in run.records.all() if "_job" in r]
     for record in records:
-        if record["_job"]["state"] not in FINAL_JOB_STATES and run.backend.has("job_status"):
+        if record["_job"]["state"] not in FINAL_JOB_STATES and (record["_job"].get("worker") or run.backend.has("job_status")):
             try:
                 poll_job(run, record)
             except DriverError:
                 pass  # the job keeps its last known state
     items = [job_view(r) for r in records if state == "all" or r["_job"]["state"] == state]
+    from .jobs import ReadJobs, read_view, settle_dead_read
+
+    for job in ReadJobs(run).all():
+        view = read_view(settle_dead_read(run, job))
+        if state == "all" or view["state"] == state:
+            items.append(view)
     return _page(run, items, [])
 
 
 def job_get(run: Run) -> Result:
+    from .jobs import FINAL, ReadJobs, read_view, run_read, settle_dead_read, worker_of
+
     call = run.call
     wait = call.values.get("--wait", 0.0)
     if wait > run.contract["jobs"]["max_wait_seconds"]:
         raise usage(f"--wait is at most {run.contract['jobs']['max_wait_seconds']}s.", "--wait")
-    record = _job_record(run, call.values["--job"])
+    job_id = call.values["--job"]
+    read_job = ReadJobs(run).load(job_id)
+    if read_job is not None:
+        if run.worker and worker_of(run, job_id, read_job.get("worker", {}).get("nonce")):
+            run_read(run, read_job)  # this process is the job's worker (DCLI-065)
+            return Result({"id": job_id, "state": "completed"}, [])
+        end = time.monotonic() + wait
+        while True:
+            read_job = settle_dead_read(run, ReadJobs(run).load(job_id) or read_job)
+            if read_job["state"] in FINAL or time.monotonic() >= end:
+                break
+            time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+        view = read_view(read_job)
+        if view["state"] not in FINAL:
+            view["poll_after_ms"] = POLL_AFTER_MS
+        return Result(view, [".message"] + [".result" + p for p in read_job.get("_untrusted", [])])
+    record = _job_record(run, job_id)
+    if run.worker and worker_of(run, job_id, (record["_job"].get("worker") or {}).get("nonce")):
+        with run.mutex.hold():
+            latest = run.records.load(record["operation_id"]) or record
+            claimed = latest["_job"]["worker"].get("claimed") or latest["_job"]["state"] in FINAL_JOB_STATES
+            if not claimed:
+                latest["_job"]["worker"]["claimed"] = True
+                run.records.save(latest)
+        if not claimed:
+            run_write_job(run, latest)  # this process is the job's worker; a job runs once (DCLI-065)
+        return Result({"id": job_id, "state": "completed"}, [])
     end = time.monotonic() + wait
     while True:
         try:
@@ -474,11 +607,12 @@ class SessionClose(_Lifecycle):
         self.echo = dict(self.bound["inputs"])
         if not session.get("owned"):
             self.conditions.append("close_unowned_session")
-        dirty = [d for d in session.get("documents", []) if d.get("dirty")]
+        # dirty null means the application cannot tell; such a document may hold unsaved work (DCLI-210).
+        dirty = [d for d in session.get("documents", []) if d.get("dirty") is not False]
         if self.call.values.get("--discard"):
             self.conditions.append("discard_unsaved_changes")
         elif dirty:
-            raise DriverError("E_CONFLICT", f"Session {session['id']} has unsaved changes in {len(dirty)} documents; nothing was closed.",
+            raise DriverError("E_CONFLICT", f"Session {session['id']} has or may have unsaved changes in {len(dirty)} documents; nothing was closed.",
                               conflict="unsaved_changes",
                               next_action=f"Save them with `{run.tool.name} doc save`, or close with --discard if the user asked to lose them.")
         run.gate_session(session)
@@ -497,6 +631,7 @@ class SessionClose(_Lifecycle):
             return Verification("incomplete", notes=[f"The session list could not be read: {exc.message}"])
         if alive:
             return Verification("failed", {"session": {"id": sid, "state": alive[0]["state"]}}, ["closed@session"])
+        drop_deferred(self.run, sid, None, "The session was closed without a save; the change was not verified.")
         return Verification("passed", {"session": {"id": sid, "state": "closed"}})
 
     def facts_result(self, facts: dict[str, Any]) -> Any:
@@ -536,31 +671,85 @@ class _OnDocument(_Lifecycle):
 
 
 class DocCreate(_Lifecycle):
+    """A new document: untitled in an instance, or at --path, from --template when given (DCLI-212)."""
+
     def prepare(self) -> None:
+        import os
+
         run = self.run
-        session = run.session(self.call.values.get("--session"))
-        self.where = Where("session", session=session)
-        kind = self.call.values.get("--kind")
-        self.bound = {"inputs": {"kind": kind}}
-        self.echo = {"kind": kind} if kind else {}
-        run.gate_session(session)
-        self.action = f"Create an untitled document in session {session['id']}."
+        values = self.call.values
+        self.path, self.template, kind = values.get("--path"), values.get("--template"), values.get("--kind")
+        file_mode = "file" in run.tool.modes and (values.get("--session") is None or "session" not in run.tool.modes)
+        if file_mode:
+            if self.path is None:
+                raise usage("doc create in file mode needs --path: the file to create.", "--path")
+            self.where = Where("file")
+        else:
+            session = run.session(values.get("--session"))
+            self.where = Where("session", session=session)
+        self.exists = bool(self.path) and os.path.exists(self.path)
+        if self.exists and file_mode and "session" in run.tool.modes:
+            holders = run.holders(self.path)
+            if holders:
+                raise DriverError("E_CONFLICT", f"Session {holders[0]['id']} has {self.path} open; creating it again would undo its changes.",
+                                  conflict="file_open_in_session",
+                                  next_action="Choose another path, or close the document there first.")
+        if self.exists:
+            self.conditions.append("target_exists")
+        inputs: dict[str, Any] = {"kind": kind, "path": self.path}
+        self.echo = {k: v for k, v in (("kind", kind), ("path", self.path)) if v}
+        if self.template:
+            from .runtime import _file_digest
+
+            digest = _file_digest(self.template, "--template")
+            inputs["template"] = {"path": self.template, **digest}
+            self.echo["template"] = digest
+        self.bound = {"inputs": inputs}
+        if self.where.session is not None:
+            run.gate_session(self.where.session)
+        where = f"in session {self.where.session['id']}" if self.where.session else "as a file"
+        self.action = (f"Create the document {self.path} {where}." if self.path else f"Create an untitled document {where}.") + (
+            f" Start from the template {self.template}." if self.template else "")
+
+    def targets(self) -> list[dict[str, Any]]:
+        return [{"key": file_key(self.path), "kind": "document", "label": self.path}] if self.path else []
+
+    def changes(self) -> list[dict[str, Any]]:
+        return [{"target": file_key(self.path), "field": "exists", "before": self.exists, "after": True}] if self.path else []
 
     def apply(self, operation_id: str, child: int | None = None) -> dict[str, Any]:
-        request = {"operation_id": operation_id, "session": self.where.session["id"]}
-        if self.call.values.get("--kind"):
-            request["kind"] = self.call.values["--kind"]
+        request: dict[str, Any] = {"operation_id": operation_id}
+        if self.where.session is not None:
+            request["session"] = self.where.session["id"]
+        for flag, key in (("--kind", "kind"), ("--path", "path"), ("--template", "template")):
+            if self.call.values.get(flag):
+                request[key] = self.call.values[flag]
+        if self.path:
+            request["overwrite"] = self.exists
         return dispatch(self.run, "create_doc", request)
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
-        doc_id = (facts.get("document") or {}).get("id")
-        docs = self.run.documents(self.where.session["id"])
-        if any(d["id"] == doc_id for d in docs):
-            return Verification("passed", {"document": {"id": doc_id, "exists": True}})
-        return Verification("failed", {"document": {"id": doc_id, "exists": False}}, ["exists@document"])
+        parts = []
+        if self.where.session is not None:
+            doc_id = (facts.get("document") or {}).get("id")
+            docs = self.run.documents(self.where.session["id"])
+            if any(d["id"] == doc_id for d in docs):
+                parts.append(Verification("passed", {"document": {"id": doc_id, "exists": True}}))
+            else:
+                parts.append(Verification("failed", {"document": {"id": doc_id, "exists": False}}, ["exists@document"]))
+        if self.path:
+            # With --path the file exists once the call returns, written by the tool or the application (DCLI-212).
+            parts.append(verify_files(facts, changes))
+        return combine(parts) if parts else Verification("incomplete", notes=["Nothing could be checked."])
 
     def facts_result(self, facts: dict[str, Any]) -> Any:
-        return facts.get("document", {})
+        out = dict(facts.get("document", {}))
+        if facts.get("files"):
+            out["files"] = facts["files"]
+        return out
+
+    def untrusted_result(self) -> list[str]:
+        return [".result.path", ".result.files[*].path"]
 
 
 class DocOpen(_Lifecycle):
@@ -631,8 +820,58 @@ class DocSave(_OnDocument):
         return {"command": "doc save", "inputs": {}, "session": self.where.session["id"], "document": self.where.document["id"]}
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
-        """The saved file is read again and the changed fields are found in it (DCLI-057)."""
+        """The saved file is read again and the changed fields are found in it, with the
+        changes earlier writes left for the save to verify (DCLI-057)."""
+        deferred = self._deferred()
         fields = [c for c in changes if c.get("field")]
+        expected: dict[tuple[str, str], dict[str, Any]] = {}
+        for record in deferred:
+            for change in record.get("_changes", []):
+                if change.get("field"):
+                    expected[(change["target"], change["field"])] = change  # a later write wins
+        known = {(c["target"], c["field"]) for c in fields}
+        fields += [c for k, c in expected.items() if k not in known]
+        verification = self._verify_fields(operation_id, fields)
+        self._settle_deferred(deferred, expected, verification, operation_id)
+        return verification
+
+    def probe(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
+        """The same read-back as verify, without settling the deferred records."""
+        fields = [c for c in changes if c.get("field")]
+        known = {(c["target"], c["field"]) for c in fields}
+        for record in self._deferred():
+            for change in record.get("_changes", []):
+                if change.get("field") and (change["target"], change["field"]) not in known:
+                    fields.append(change)
+                    known.add((change["target"], change["field"]))
+        return self._verify_fields(operation_id, fields)
+
+    def _deferred(self) -> list[dict[str, Any]]:
+        """The writes on this document whose verification waits for a save, oldest first."""
+        return deferred_records(self.run, self.where.session["id"], self.where.document["id"])
+
+    def _settle_deferred(self, deferred: list[dict[str, Any]], expected: dict[tuple[str, str], dict[str, Any]],
+                         verification: Verification, save_id: str) -> None:
+        bad = set(verification.mismatched)
+        for record in deferred:
+            receipt = record["receipt"]
+            own = [c for c in record.get("_changes", []) if c.get("field")]
+            keys = {f"{c['field']}@{c['target']}" for c in own}
+            superseded = [c for c in own if expected.get((c["target"], c["field"])) is not c]
+            if keys & bad:
+                status = "failed"
+            elif verification.status in ("passed", "failed") and not superseded:
+                status = "passed"
+            else:
+                status = "incomplete"
+            receipt["outcome"]["verification"] = status
+            receipt["mismatched"] = sorted(keys & bad)
+            receipt.setdefault("notes", []).append(
+                f"doc save {save_id} verified this change: {status}." if not superseded else
+                f"doc save {save_id} could not verify every field: a later write changed it again.")
+            self.run.records.save(record)
+
+    def _verify_fields(self, operation_id: str, fields: list[dict[str, Any]]) -> Verification:
         if not fields:
             # Nothing to find in the file: check instead that the document is saved and clean.
             docs = self.run.documents(self.where.session["id"])
@@ -646,6 +885,23 @@ class DocSave(_OnDocument):
                    "operation_id": operation_id, "targets": sorted({c["target"] for c in fields}),
                    "fields": sorted({c["field"] for c in fields})}
         return read_back(self.run, request, fields, {})
+
+
+def deferred_records(run: Run, session: str, doc_id: str | None) -> list[dict[str, Any]]:
+    """The writes in a session, on one document or on all, whose verification waits for a save."""
+    out = [r for r in run.records.all()
+           if (r.get("receipt") or {}).get("outcome", {}).get("verification") == "deferred"
+           and (r.get("receipt") or {}).get("session", {}).get("id") == session
+           and (doc_id is None or (r.get("receipt") or {}).get("document", {}).get("id") == doc_id)]
+    return sorted(out, key=lambda r: r.get("planned_at", ""))
+
+
+def drop_deferred(run: Run, session: str, doc_id: str | None, why: str) -> None:
+    """Changes discarded before a save can never be verified: their records say so (DCLI-057)."""
+    for record in deferred_records(run, session, doc_id):
+        record["receipt"]["outcome"]["verification"] = "not_run"
+        record["receipt"].setdefault("notes", []).append(why)
+        run.records.save(record)
 
 
 class DocSaveAs(_OnDocument):
@@ -687,8 +943,9 @@ class DocClose(_OnDocument):
         self.bound["inputs"] = self.echo = {"discard": discard}
         if discard:
             self.conditions.append("discard_unsaved_changes")
-        elif doc.get("dirty"):
-            raise DriverError("E_CONFLICT", f"Document {doc['id']} has unsaved changes; nothing was closed.", conflict="unsaved_changes",
+        elif doc.get("dirty") is not False:
+            state = "has" if doc.get("dirty") else "may have"
+            raise DriverError("E_CONFLICT", f"Document {doc['id']} {state} unsaved changes; nothing was closed.", conflict="unsaved_changes",
                               next_action=f"Save it with `{self.run.tool.name} doc save --doc {doc['id']}`, or close with --discard if the user asked to lose the changes.")
         self.action = f"Close document {doc['id']}" + (" and discard its unsaved changes." if discard else ".")
 
@@ -706,6 +963,7 @@ class DocClose(_OnDocument):
         doc_id = self.where.document["id"]
         if any(d["id"] == doc_id for d in self.run.documents(self.where.session["id"])):
             return Verification("failed", {"document": {"id": doc_id, "open": True}}, ["closed@document"])
+        drop_deferred(self.run, self.where.session["id"], doc_id, "The document was closed without a save; the change was not verified.")
         return Verification("passed", {"document": {"id": doc_id, "open": False}})
 
     def facts_result(self, facts: dict[str, Any]) -> Any:
@@ -769,6 +1027,19 @@ class DocUndo(_OnDocument):
         return read_back(self.run, request, changes, self.last.get("_tolerances", {}))
 
 
+def job_cancel(run: Run) -> Result:
+    """A read job is stopped by ending its worker, which changes nothing; any other job is
+    asked to cancel through the application, as a halt command (DCLI-221)."""
+    from .jobs import FINAL, ReadJobs, read_view, stop_read
+
+    job = ReadJobs(run).load(run.call.values["--job"])
+    if job is None:
+        return Engine(run).execute(JobCancel(run, run.call.command))
+    if job["state"] in FINAL:
+        raise DriverError("E_VALIDATION", f"Job {job['id']} has already ended ({job['state']}); there is nothing to cancel.")
+    return Result(read_view(stop_read(run, job)), [".message"])
+
+
 class JobCancel(_Lifecycle):
     """``job cancel``: a halt command; its target is the job's target (DCLI-221, DSEC-018)."""
 
@@ -778,6 +1049,11 @@ class JobCancel(_Lifecycle):
         job = self.job_record["_job"]
         if job["state"] in FINAL_JOB_STATES:
             raise DriverError("E_VALIDATION", f"Job {job['id']} has already ended ({job['state']}); there is nothing to cancel.")
+        if job.get("worker"):
+            # The runtime's worker is applying the change; stopping it midway would leave the
+            # outcome unknown, so the job runs to its end (DCLI-221).
+            raise DriverError("E_UNSUPPORTED", f"Job {job['id']} is a write the tool runs itself; it cannot be stopped midway. "
+                                               "Wait for it to end.", next_action=f"Run `{run.tool.name} job get --job {job['id']} --wait 60s`.")
         info = self.job_record.get("_call") or {}
         session = run.session(info["session"]) if info.get("session") else None
         device = run.device(info["device"]) if info.get("device") else None
@@ -802,8 +1078,10 @@ class JobCancel(_Lifecycle):
         if info.get("session"):
             request["session"] = info["session"]
         facts = dispatch(self.run, "cancel", request)
-        self.job_record["_job"]["cancel_requested"] = True
-        self.run.records.save(self.job_record)
+        with self.run.mutex.hold():
+            latest = self.run.records.load(self.job_record["operation_id"]) or self.job_record
+            latest["_job"]["cancel_requested"] = True
+            self.run.records.save(latest)
         return facts
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:

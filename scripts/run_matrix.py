@@ -3,13 +3,21 @@
 
     python scripts/run_matrix.py <project> --command "<path>" --set doc=<file> [--set session=<id>]
         [--set device=<id>] [--set dir=<folder>] [--row normal,busy] [--mode session]
-        [--application-version 10.0.1]
+        [--kind part] [--pause 120] [--tamper "<command>"] [--application-version 10.0.1]
 
 It fills the sample placeholders of each row with the ``--set`` values, runs the rows that
 apply (all, or those named with ``--row``; rows marked ``unrunnable`` never run), and writes
 one live record to ``docs/evidence/``. Each row then gets its actual result and its ``live:``
 evidence reference. A row whose situation needs preparing, such as an open dialog, is run on
 its own with ``--row`` after the person has prepared it.
+
+``--kind`` names the kind of the document a run uses; a command that lists ``doc_kinds`` needs
+it, and its ``normal`` row must pass on every kind (DVER-030). The ``read_back_mismatch`` row
+makes the tool wait before its read-back for up to ``--pause`` seconds: during the wait a
+person changes what was just written in the application, or ``--tamper`` runs a command that
+does, with ``TOOL_DRIVER_PAUSE_FILE`` naming the tool's ``pause.json``. The run is marked
+``tampered``. The ``normal`` row of a command registered with ``verify_after_save`` is followed
+by ``doc save`` on the same document, and passes only when that save verified the change.
 
 Every file, folder and device a run uses, through ``--set`` or written in a row, must be listed
 under Authorized Targets in ``docs/E2E.md`` (DVER-050); otherwise nothing runs. The fake host is
@@ -26,6 +34,8 @@ import platform
 import re
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +46,7 @@ import check_project  # noqa: E402
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 PLATFORMS = {"win32": "windows", "darwin": "macos", "linux": "linux"}
 TIMEOUT_S = 300
+JOB_WAIT_S = 3600  # how long the runner follows a long job (DCLI-065)
 
 
 def target_of(name: str, value: str) -> str:
@@ -95,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--set", action="append", default=[], metavar="NAME=VALUE")
     parser.add_argument("--row", default="")
     parser.add_argument("--mode", choices=["file", "session", "device"])
+    parser.add_argument("--kind", help="the kind of the document, for a command that lists doc_kinds")
+    parser.add_argument("--pause", type=int, default=120, help="seconds the tool waits before the read-back in read_back_mismatch")
+    parser.add_argument("--tamper", help="a command that changes the written result while the tool waits")
     parser.add_argument("--application-version", help="default: the version context reports")
     args = parser.parse_args(argv)
     root = args.project.resolve()
@@ -109,6 +123,11 @@ def main(argv: list[str] | None = None) -> int:
     command = next((c for c in facts.commands if c["path"] == args.command), None)
     if command is None:
         raise SystemExit(f"{args.command!r} is not a command of {facts.tool}")
+    kinds = command.get("doc_kinds") or []
+    if kinds and args.kind not in kinds:
+        raise SystemExit(f"`{args.command}` works on {', '.join(kinds)}; name the kind of the document with --kind")
+    if args.kind and not kinds:
+        raise SystemExit(f"`{args.command}` lists no document kinds; leave out --kind")
     matrix_path = root / "tests" / "matrix" / (args.command.replace(" ", "-") + ".json")
     matrix = json.loads(check_project.read(matrix_path))
     problems = check_project.Checker(facts).validate(matrix, "behavior-matrix.schema.json")
@@ -160,25 +179,36 @@ def main(argv: list[str] | None = None) -> int:
     tool = [sys.executable, "-m", facts.pkg]
     app_version = args.application_version or _context_version(tool, root, env)
     runs = []
+    state_dir = Path(env.get(f"{facts.prefix}_STATE_DIR") or Path.home() / f".{facts.tool}")
     for row, arguments, mode in filled:
         notes = []
-        try:
-            proc = subprocess.run(tool + args.command.split(" ") + arguments, cwd=root, env=env, capture_output=True,
-                                  timeout=TIMEOUT_S, creationflags=NO_WINDOW)
-            exit_code, stdout = proc.returncode, proc.stdout
-        except subprocess.TimeoutExpired as exc:
-            exit_code, stdout = -1, exc.stdout or b""
-            notes.append(f"no answer within {TIMEOUT_S} s")
-        try:
-            envelope = json.loads(stdout.decode("utf-8", "replace").strip().splitlines()[-1])
-        except (ValueError, IndexError):
-            envelope = None
-        envelope = envelope if isinstance(envelope, dict) else {}
+        tampered = row["row"] == "read_back_mismatch"
+        row_env = env
+        watcher = None
+        if tampered:
+            row_env = {**env, facts.contract["matrix"]["pause_env"].replace("<PREFIX>", facts.prefix):
+                       str(min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"])))}
+            watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, row_env, args, notes)
+            watcher.start()
+        expected_code = row["expected"].get("code")
+        exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes)
+        envelope = _envelope(stdout)
+        if command.get("long") and envelope.get("ok") is True:
+            exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)
+        if tampered and command.get("verify_after_save") and mode == "session" and envelope.get("ok") is True:
+            # The change is verified at the save, so the mismatch is caused there (DVER-030).
+            exit_code, stdout = _confirmed(tool + ["doc", "save", "--session", values.get("session", ""), "--doc", values.get("doc", "")],
+                                           root, row_env, expected_code, notes)
+            envelope = _envelope(stdout)
+        if watcher is not None:
+            watcher.join(timeout=5)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
         code = error.get("code") if isinstance(error.get("code"), str) else None
         shown_exit = exit_code if exit_code in (*range(10), 130) else 1  # the exit codes of DCLI-014
         actual = {"exit": shown_exit, **({"code": code} if shown_exit and code else {})}
         passed = exit_code >= 0 and check_project.same_result(actual, row["expected"])
+        if passed and row["row"] == "normal" and command.get("verify_after_save") and mode == "session":
+            passed = _save_verifies(tool, root, env, values, notes)
         if simulated(envelope):
             passed = False
             notes.append("the result is simulated, so it is not evidence (DVER-021)")
@@ -192,7 +222,12 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 shown.append(argument)
         entry = {"command": args.command, "arguments": shown, "exit": exit_code, "result": "pass" if passed else "fail",
-                 "matrix_row": row["row"], "mode": mode, "envelope_sha256": hashlib.sha256(stdout.strip()).hexdigest()}
+                 "matrix_row": row["row"], "mode": mode,
+                 "envelope_sha256": hashlib.sha256(stdout.strip()).hexdigest()}
+        if args.kind:
+            entry["doc_kind"] = args.kind
+        if tampered:
+            entry["tampered"] = True
         if notes:
             entry["notes"] = "; ".join(notes)
         runs.append(entry)
@@ -213,6 +248,115 @@ def main(argv: list[str] | None = None) -> int:
     matrix_path.write_text(json.dumps(matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")
     return 0 if all(r["result"] == "pass" for r in runs) else 1
+
+
+def _run(argv: list[str], root: Path, env: dict[str, str], notes: list[str]) -> tuple[int, bytes]:
+    try:
+        proc = subprocess.run(argv, cwd=root, env=env, capture_output=True, timeout=TIMEOUT_S, creationflags=NO_WINDOW)
+        return proc.returncode, proc.stdout
+    except subprocess.TimeoutExpired as exc:
+        notes.append(f"no answer within {TIMEOUT_S} s")
+        return -1, exc.stdout or b""
+
+
+class _Watcher(threading.Thread):
+    """The read_back_mismatch row: once the tool pauses before its read-back, the result is
+    changed from outside, by --tamper or by the person (DVER-030)."""
+
+    def __init__(self, pause: Path, root: Path, env: dict[str, str], args: Any, notes: list[str]) -> None:
+        super().__init__(daemon=True)
+        self.pause, self.root, self.env, self.args, self.notes = pause, root, env, args, notes
+        self.stopped = threading.Event()
+
+    def run(self) -> None:
+        end = time.monotonic() + TIMEOUT_S + JOB_WAIT_S
+        while not self.pause.exists():
+            if time.monotonic() > end or self.stopped.is_set():
+                self.notes.append("the tool never paused before its read-back")
+                return
+            time.sleep(0.2)
+        try:
+            info = json.loads(self.pause.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            info = {}
+        if self.args.tamper:
+            done = subprocess.run(self.args.tamper, shell=True, cwd=self.root,
+                                  env={**self.env, "TOOL_DRIVER_PAUSE_FILE": str(self.pause)}, creationflags=NO_WINDOW)
+            self.notes.append(f"--tamper exited {done.returncode}")
+        else:
+            print(f"Now change {', '.join(info.get('fields') or ['the result'])} of {', '.join(info.get('targets', []))} "
+                  f"in the application, or delete the file it made; the tool waits up to {info.get('seconds')} s.",
+                  file=sys.stderr, flush=True)
+
+    def join(self, timeout: float | None = None) -> None:
+        self.stopped.set()
+        super().join(timeout)
+
+
+def _confirmed(argv: list[str], root: Path, env: dict[str, str], expected_code: str | None,
+               notes: list[str]) -> tuple[int, bytes]:
+    """Run a row; a two-step or dangerous write is confirmed with its token, unless the row
+    expects the confirmation itself (DCLI-053)."""
+    exit_code, stdout = _run(argv, root, env, notes)
+    out = _envelope(stdout)
+    details = (out.get("error") or {}).get("details") or {}
+    if (out.get("error") or {}).get("code") == "E_CONFIRMATION_REQUIRED" and expected_code != "E_CONFIRMATION_REQUIRED" \
+            and details.get("confirm_token"):
+        extra = ["--confirm", details["confirm_token"]]
+        if (details.get("preview") or {}).get("tier") == "dangerous":
+            extra.append("--dangerous")
+        exit_code, stdout = _run(argv + extra, root, env, notes)
+    return exit_code, stdout
+
+
+def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[str, Any], contract: dict[str, Any],
+             notes: list[str]) -> tuple[int, dict[str, Any]]:
+    """A long command's row is decided by how its job ends (DCLI-065)."""
+    data = envelope.get("data") or {}
+    job = (data.get("result") or {}).get("job") or data.get("job") or {}
+    if not job.get("id"):
+        notes.append("the long command returned no job")
+        return 1, envelope
+    end = time.monotonic() + JOB_WAIT_S
+    view: dict[str, Any] = {}
+    while time.monotonic() < end:
+        out = _envelope(_run(tool + ["job", "get", "--job", job["id"], "--wait", "600s"], root, env, notes)[1])
+        view = out.get("data") or {}
+        if view.get("state") in ("completed", "failed", "partial", "unknown", "cancelled"):
+            break
+    else:
+        notes.append(f"job {job['id']} did not end within {JOB_WAIT_S} s")
+        return 1, {"ok": False, "error": {"code": "E_TIMEOUT"}}
+    notes.append(f"job {job['id']} ended {view.get('state')}")
+    if view.get("ok"):
+        return 0, {"ok": True, "data": view}
+    exits = {e["code"]: e["exit"] for e in contract["error_codes"]}
+    code = view.get("code") or "E_UNKNOWN"
+    return exits.get(code, 1), {"ok": False, "error": {"code": code}, "data": view}
+
+
+def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dict[str, str], notes: list[str]) -> bool:
+    """A verify_after_save command: doc save on the same document must verify the change (DVER-030)."""
+    if "session" not in values or "doc" not in values:
+        notes.append("verify_after_save needs --set session= and --set doc= to save the document")
+        return False
+    base = tool + ["doc", "save", "--session", values["session"], "--doc", values["doc"]]
+    out = _envelope(_run(base, root, env, notes)[1])
+    token = ((out.get("error") or {}).get("details") or {}).get("confirm_token")
+    if token:
+        out = _envelope(_run(base + ["--confirm", token], root, env, notes)[1])
+    receipt = (out.get("data") or {}).get("receipt") or ((out.get("error") or {}).get("details") or {}).get("receipt") or {}
+    verified = out.get("ok") is True and receipt.get("outcome", {}).get("verification") == "passed"
+    notes.append("doc save verified the change" if verified else "doc save did not verify the change")
+    return verified
+
+
+def _envelope(stdout: bytes) -> dict[str, Any]:
+    try:
+        value = json.loads(stdout.decode("utf-8", "replace").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _fill(argument: str, values: dict[str, str]) -> str:

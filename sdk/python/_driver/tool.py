@@ -64,6 +64,8 @@ class Tool:
         self.modes = list(modes)
         self.host_component = host_component
         self.plugin_manifest = Path(plugin_manifest) if plugin_manifest else None
+        # How a long job's worker starts this tool again; None finds it from the running program (DCLI-065).
+        self.worker_command: list[str] | None = None
         self.tiers = Tiers(self.contract)
         self.commands: dict[str, Command] = {}
         for command in builtin.commands(self) + standard.commands(self) + knowledge.commands(self):
