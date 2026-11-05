@@ -360,7 +360,7 @@
 <!-- contract:shared_flags -->
 | 参数 | 取值 | 含义 |
 |---|---|---|
-| `--limit` | `<n>` | 每页条数：默认 20，最多 100，所有列表都一样，领域命令的列表也是；这两个值由运行时掌握。超过最大值时返回 `E_USAGE`，不悄悄调低 |
+| `--limit` | `<n>` | 每页条数：默认 20，最多 100，所有列表都一样，领域命令的列表也是；运行时给每个 `list` 命令加上 `--limit` 和 `--offset`，并掌握这两个值。超过最大值时返回 `E_USAGE`，不悄悄调低 |
 | `--offset` | `<n>` | 本页的起始位置 |
 | `--query` | `<text>` | `search` 要找的内容 |
 | `--sort` | `<field>` | 列表按哪个字段排序 |
@@ -440,7 +440,7 @@
 | `doc_kinds` | 软件有几种文档时，命令适用的文档种类，如 `part`、`assembly`、`drawing`（DCLI-210） |
 | `verify_after_save` | 会话模式下，软件要等文档保存之后才能正确显示这项修改时为 `true`，由 `doc save` 核实（DCLI-057） |
 | `long` | 工作可能超出单次调用允许的时长时为 `true`，运行时把它作为长任务运行（DCLI-065） |
-| `jobs` | 软件可能把这个写操作作为长任务运行时为 `true`：`apply` 报告任务，运行时用 `job_status` 跟进（DCLI-065） |
+| `jobs` | 软件可能把这个写操作作为长任务运行时为 `true`：`apply` 报告任务，运行时用 `job_status` 跟进（DCLI-065）。一条命令要么是 `jobs`，要么是 `long`，不能两者都是 |
 
 领域命令要调用哪些适配能力，由登记推出：读命令是 `read`；写命令是 `preview`、`apply` 和 `read_back`，带 `jobs` 的再加 `job_status` 和 `cancel`（DCLI-260）。
 
@@ -477,7 +477,7 @@
 `reference` 必须根据登记（DCLI-029）说明每条命令：路径、摘要、参数、输出 Schema、示例、效果、确认级别、成熟度、适用模式，以及相关的知识条目（DSKL-124）。它还必须返回 `driver` 块：支持的模式、所驱动的软件及其支持的版本范围。命令所需的适配能力和成熟度背后的证据，只写在 `reference --all` 生成的文件里，供项目脚本检查（DVER-041）。
 
 - `tier` 必须按命令支持的每种模式分别给出确认级别。取决于具体调用的级别，必须在 `tier_when` 里说明，比如 `doc close --discard`、关闭不是本工具启动的实例、另存为或导出时覆盖已有文件，以及命令自己登记的条件及其 `description`（DCLI-029）。
-- 命令登记了 `doc_kinds`、`long` 或 `verify_after_save` 时，`reference` 必须显示出来，让 Agent 在调用之前就知道它接受哪些文档、会返回长任务、核实要等到保存。
+- 命令登记了 `doc_kinds`、`long` 或 `verify_after_save` 时（登记了 `jobs` 的命令也显示 `long`，因为它同样返回任务），`reference` 必须显示出来，让 Agent 在调用之前就知道它接受哪些文档、会返回长任务、核实要等到保存。
 - 表示坐标的每个参数和输出字段，都必须写明它的 `coordinate_system`（DCLI-084）。
 - 不带参数的 `reference` 必须只返回索引，不超过 8000 个字符：每条命令只有路径和一句话摘要。限制和条件写在这条命令自己的说明里。
 - `reference --command <path>` 必须只返回一条命令，不超过 6000 个字符。
@@ -721,7 +721,7 @@
 | `delete` | 对象已不存在 |
 | `import` | 导入的对象都在，按数量核对 |
 | `artifact` 类写操作，如 `export`、`render`、`doc save-as` | 生成的每个文件都存在，并记下路径、大小和 SHA-256；可以有多个文件。回执不对软件自己写出的字节内容作任何声明 |
-| 会话模式下的 `doc save` | 重新读取保存后的文件，在其中找到被改的字段。软件要把文档关掉再打开才能读这个文件时，适配层改为从实例读这些字段，并确认磁盘上的文件确实变了。两样都做不到时，验证为 `incomplete` |
+| 会话模式下的 `doc save` | 重新读取保存后的文件，在其中找到被改的字段，且文档的 `saved` 字段为 `true`。软件要把文档关掉再打开才能读这个文件时，适配层改为从实例读这些字段，只有看到磁盘上的文件确实变了才报 `saved: true`。适配层判断不了时，验证为 `incomplete` |
 | 长任务 | 任务结束时核实它的产出（DCLI-065） |
 
 - 既新建文件、又修改文档的写操作，必须两边都核实：文件存在，被改的字段也读回一致。两边都通过，验证才是 `passed`。
@@ -779,7 +779,7 @@
 - `session` `{id, generation}` 和 `document` `{id, revision, dirty}`；
 - `notes`：补充说明；
 - `simulated: true`：结果来自模拟设备时带上（DSEC-062）；
-- `more_files` `{count, command}`：写入生成的文件多于契约的 `receipt.listed_files`（10 个）时带上。`observed` 只保留这么多个，缺失的文件排在前面；`command` 是把整条记录写进文件的 `operation get --output` 命令（DCLI-008）。
+- `more_files` `{count, command}`：写入生成的文件多于契约的 `receipt.listed_files`（10 个）时带上。`observed` 只保留这么多个，缺失的文件排在前面，`count` 是略去的个数；`command` 是把整条记录写进文件的 `operation get --output` 命令（DCLI-008）。
 
 <!-- contract:receipt_dimensions -->
 | 维度 | 取值 |
@@ -1160,7 +1160,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 有多个运行中的实例、而作用于单个实例的命令没有指定 `--session` 时，命令必须返回 `E_AMBIGUOUS` 并列出候选，禁止按窗口焦点或最近使用顺序选择。只有一个实例时可以自动选中，并必须在输出中写明所选的会话。`--doc` 指定的文档恰好只在一个实例里打开时，选中这个实例（DCLI-201）。
 
-列表读取命令 `session list`、`doc list` 和 `job list` 覆盖所有会话，禁止返回 `E_AMBIGUOUS`。`session list` 里的每个会话，以及 `E_AMBIGUOUS` 候选中的每个实例，都必须带一份摘要：`documents` = `[{id, path, dirty}]`；会话被挡住时，还有 `blocker` = `{action, title}`，其中 `title` 是不可信内容（DSEC-021）。适配层看不到全部实例时，`session list` 必须返回 `complete: false`。
+列表读取命令 `session list`、`doc list` 和 `job list` 覆盖所有会话，禁止返回 `E_AMBIGUOUS`。`session list` 里的每个会话，以及 `E_AMBIGUOUS` 候选中的每个实例，都必须带一份摘要：`documents` = `[{id, path, dirty}]`；会话被挡住时，还有 `blocker` = `{action, title}`（适配层知道对应的知识条目时另带 `knowledge`，DSKL-124），其中 `title` 是不可信内容（DSEC-021）。适配层看不到全部实例时，`session list` 必须返回 `complete: false`。
 
 为什么：同时开着两个工程时，按焦点选择会改错工程；看得到每个实例里的文档，Agent 才能点名正确的那个。
 检查：🤖 驱动一致性测试 D01。
@@ -1351,14 +1351,14 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `preview` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 生成预览，带软件将会存下的值 |
 | `apply` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 执行修改，并报告发生了什么 |
 | `read_back` | 实例端 | 有写命令时 | 有写命令时 | 有写命令时 | 按目标键读回被改的字段 |
-| `job_status` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 查询长任务的状态 |
-| `cancel` | 实例端 | 有长任务时 | 有长任务时 | 有长任务时 | 取消长任务 |
+| `job_status` | 实例端 | 有 `jobs` 命令时 | 有 `jobs` 命令时 | 有 `jobs` 命令时 | 查询长任务的状态 |
+| `cancel` | 实例端 | 有 `jobs` 命令时 | 有 `jobs` 命令时 | 有 `jobs` 命令时 | 取消长任务 |
 | `devices` | CLI 端 | — | — | 必需 | 列出设备及其状态 |
 | `plugin_status` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 报告宿主组件的版本 |
 | `plugin_install` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 安装宿主组件 |
 | `plugin_remove` | CLI 端 | 有宿主组件时 | 有宿主组件时 | 有宿主组件时 | 卸载宿主组件 |
 
-- 标为「必需」的能力，支持该模式的每个工具都必须实现。「有写命令时」表示工具有写命令时必需；「有长任务时」「有宿主组件时」同理。「可选」的能力可以不实现。「—」表示该模式用不到这项能力。
+- 标为「必需」的能力，支持该模式的每个工具都必须实现。「有写命令时」表示工具有写命令时必需；「有 `jobs` 命令时」「有宿主组件时」同理。「可选」的能力可以不实现。「—」表示该模式用不到这项能力。
 - CLI 端的能力在 CLI 进程里运行。实例端的能力在适配层里运行，或作为宿主方法在宿主组件里运行（DCLI-262、DCLI-274）。
 - `contract/schemas/adapter.schema.json` 定义每项能力的请求和结果。进程内的适配接口和宿主方法必须使用同一套定义。
 - 能力只报告事实：派发状态、变化、送达、保存情况和观察到的值。由运行时把读回与预览比较，并推导回执（DCLI-057、DCLI-062）。

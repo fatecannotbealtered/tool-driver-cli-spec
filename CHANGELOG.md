@@ -14,15 +14,15 @@ Changes from rebuilding the Xpedition and Creo tools on the real applications, a
 - The session state `unreachable`: the process runs but the tool cannot drive it, such as a second instance when the application lets a tool reach only one. Writes are refused with `E_BACKEND_UNAVAILABLE` and nothing is sent (DCLI-204, D04).
 - `session open --kind` starts the program that handles that kind of document (DCLI-206).
 - The adapter names knowledge entries in a blocked preview and in a dialog's `blocker`; the runtime puts them in the error (DSKL-124).
-- A receipt lists at most 10 produced files, missing ones first, and `more_files` gives the count and the `operation get --output` command that writes the whole record (DCLI-061).
+- A receipt and a result list at most 10 produced files, missing ones first, and `more_files` gives the number left out and the `operation get --output` command that writes the whole record to a new file (DCLI-061).
 - The sample placeholders `{job}` and `{inputs}` (DVER-002): `run_matrix` fills `{job}` from `--set job=` or a job it starts with `--job-from`; `{inputs}` is the project's `tests/inputs/`, whose files a command only reads need no authorization (DVER-050).
 
 ### Changed
 
-- `doc save` may read the changed fields from the instance when the application can read the saved file only after closing and opening the document again; the adapter then checks that the file on disk changed (DCLI-057).
-- Every list, domain lists included, pages with `--limit` default 20 and at most 100, kept by the runtime (DCLI-026).
+- `doc save` checks that the save reached the file on disk: its read-back includes the document's field `saved`. When the application can read the saved file only after closing and opening the document again, the adapter reads the fields from the instance and reports `saved: true` only when it saw the file change (DCLI-057).
+- Every list, domain lists included, pages with `--limit` default 20 and at most 100; the runtime adds `--limit` and `--offset` to every `list` command (DCLI-026).
 - The installed host component lives where the application loads it, one copy per state directory where the application allows (DSEC-050).
-- A coding Agent preparing live runs may draft the scope file and the Authorized Targets; the person saves them (DSEC-011).
+- A coding Agent preparing live runs may propose the scope file and the Authorized Targets in chat; the person writes them (DSEC-011).
 - The host protocol is version 1.2.0: `open_session` takes `kind`, a preview and a blocker may carry `knowledge`.
 - Conformance R04 checks every read with untrusted fields, and a read of a whole document on a document-level field.
 - Clauses that only repeated another now point to it: DCLI-085, DCLI-213, DCLI-261, DCLI-263, DSEC-033, DSEC-042, DSEC-054 and DSEC-060. The rule on `knowledge create` and `knowledge delete` lives only in DSKL-123.

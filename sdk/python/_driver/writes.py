@@ -248,7 +248,7 @@ def dispatch(run: Run, cap: str, request: dict[str, Any]) -> dict[str, Any]:
 def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]], tolerances: dict[str, float]) -> Verification:
     """Read the changed fields back and compare them with the preview's ``after`` (DCLI-057)."""
     try:
-        result = run.backend.call("read_back", request, READ_DEADLINE_MS)
+        result = run.backend.call("read_back", request, run.read_deadline_ms)
     except (CapabilityError, Unanswered, Lost, BadProtocol) as exc:
         failed = Verification("incomplete", notes=[f"The read-back failed: {exc}"])
         failed.call_failed = True
@@ -353,6 +353,14 @@ def slim_receipt(run: Run, receipt: dict[str, Any]) -> dict[str, Any]:
     return {**receipt, "observed": kept, "more_files": {"count": len(files) - limit, "command": command}}
 
 
+def slim_result(run: Run, result: Any) -> Any:
+    """A result's file list keeps as many files as the receipt; the receipt's ``more_files`` leads to the rest."""
+    limit = int(run.contract["receipt"]["listed_files"])
+    if isinstance(result, dict) and isinstance(result.get("files"), list) and len(result["files"]) > limit:
+        return {**result, "files": result["files"][:limit]}
+    return result
+
+
 def worker_argv(run: Run) -> list[str]:
     """The current call as arguments, with the targets the runtime chose, for a worker to run again."""
     call = run.call
@@ -361,6 +369,8 @@ def worker_argv(run: Run) -> list[str]:
     for flag in ("--session", "--doc", "--device"):
         value = call.raw.get(flag) or run.resolved.get(flag)
         if value and call.command.flag(flag):
+            if flag == "--doc" and call.command.flag(flag).type == "path" or (flag == "--doc" and os.path.exists(str(value))):
+                value = os.path.abspath(str(value))
             argv += [flag, str(value)]
     for name in call.given:
         flag = call.command.flag(name)
@@ -369,6 +379,8 @@ def worker_argv(run: Run) -> list[str]:
         if flag is not None and flag.type == "boolean":
             if call.values.get(name):
                 argv.append(name)
+        elif flag is not None and flag.type == "path":
+            argv += [name, os.path.abspath(str(call.values[name]))]  # the worker may start elsewhere
         else:
             argv += [name, call.raw[name]]
     return argv
@@ -1016,7 +1028,7 @@ class Engine:
         if ok:
             if isinstance(result, dict) and (spec.where.device or {}).get("simulated"):
                 result = {**result, "simulated": True}  # results from a simulated device say so (DSEC-062)
-            return Result({"operation_id": operation_id, "receipt": slim_receipt(run, receipt), "result": result},
+            return Result({"operation_id": operation_id, "receipt": slim_receipt(run, receipt), "result": slim_result(run, result)},
                           self._receipt_untrusted(".receipt") + spec.untrusted_result())
         raise self.write_error(spec, record, receipt, code or "E_NATIVE_FAILURE", error, out.get("human"))
 

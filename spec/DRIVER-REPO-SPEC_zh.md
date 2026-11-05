@@ -274,9 +274,9 @@ README 必须以标题区开头，依次是：写着工具名称的 `#` 标题�
 | `Risk Tier` 风险等级 | 工具的风险等级，以及决定它的命令（DSEC-002） |
 | `Authorization` 授权 | 授权范围文件：放在哪里、谁来写、授予什么（DSEC-010 至 DSEC-018） |
 | `Write Confirmation` 写入确认 | 固定原文：确认级别、确认令牌和确认时的复查（DCLI-052 至 DCLI-056） |
-| `Host Component` 宿主组件 | 什么代码在软件里运行、怎样安装、怎样连接（DSEC-050 至 DSEC-054） |
-| `Physical Effects` 物理动作 | 怎样防护物理动作（DSEC-060 至 DSEC-062） |
-| `State Directory` 状态目录 | 固定原文：状态目录的位置、内容和访问保护（DSEC-030 至 DSEC-033） |
+| `Host Component` 宿主组件 | 什么代码在软件里运行、怎样安装、怎样连接（DSEC-050 至 DSEC-053） |
+| `Physical Effects` 物理动作 | 怎样防护物理动作（DSEC-061 和 DSEC-062） |
+| `State Directory` 状态目录 | 固定原文：状态目录的位置、内容和访问保护（DSEC-030 至 DSEC-032） |
 | `Credentials` 凭据 | 工具经手哪些机密、怎样遮盖，以及工具连接哪些地址（DSEC-040 至 DSEC-043） |
 | `Untrusted Content` 不可信内容 | 固定原文：哪些内容不可信、怎样标记（DSEC-020 至 DSEC-022） |
 | `Supply Chain` 供应链 | 固定原文：锁定的依赖、带来源证明的发布、没有安装脚本、Skill 来自已安装的包（DSEC-070 至 DSEC-073） |
@@ -306,7 +306,7 @@ README 必须以标题区开头，依次是：写着工具名称的 `#` 标题�
 | `Branch and Commit Convention` 分支与提交约定 | 分支怎样命名、提交信息怎样写 |
 | `CI Checks` CI 检查 | 合并门槛（DREPO-041），以及怎样在本地运行 |
 | `Tests and Evidence` 测试与证据 | 一致性测试、行为矩阵、真实软件记录、评测报告，以及证据怎样决定成熟度（DVER-001、DVER-030、DVER-040） |
-| `Adding or Changing a Command` 新增或修改命令 | 登记时写明效果、单位、目标类型和能力编号（DCLI-029、DREPO-061）；行为矩阵，矩阵的 `normal` 行就是写命令样例（DVER-002、DVER-030）；以及 Skill 和 CHANGELOG 条目 |
+| `Adding or Changing a Command` 新增或修改命令 | 登记时写明效果、单位和目标类型（DCLI-029）；调查表里对应能力的处置（DREPO-060）；行为矩阵，矩阵的 `normal` 行就是写命令样例（DVER-002、DVER-030）；以及 Skill 和 CHANGELOG 条目 |
 | `Pull Requests` 合并请求 | 合并请求包含什么、怎样评审 |
 | `Security` 安全 | 漏洞按 `SECURITY.md` 报告，不开公开的 Issue |
 
@@ -654,10 +654,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 
 ### DREPO-061 命令对应到能力
 
-调查表里的每项能力都必须有处置，按 DREPO-060 的规定；这条规则由那一条承载。命令登记不写能力编号。
-
-为什么：调查表连同处置，在一处写清工具覆盖了什么、有意不做什么。
-检查：🤖 `check_project` 检查处置（DREPO-060）。
+已移除：这条规则已并入 DREPO-060。
 
 ### DREPO-062 接入步骤
 
@@ -668,7 +665,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 | 1 调查 | 填写 `docs/APPLICATION.md`；给每项能力编号并写明处置（DREPO-060） |
 | 2 选模式 | 根据调查结果选择文件、会话或设备模式，可以组合（DCLI-201） |
 | 3 生成项目 | 用模板脚本 `instantiate` 生成项目；之后 `check_project` 只列出后续步骤要补的内容：占位符（DREPO-019）和还没登记的领域命令 |
-| 4 登记命令 | 按命名规则（DCLI-020 至 DCLI-024）和登记字段（DCLI-029）登记领域命令，每条写明效果、单位、目标类型和能力编号（DREPO-061） |
+| 4 登记命令 | 按命名规则（DCLI-020 至 DCLI-024）和登记字段（DCLI-029）登记领域命令，每条写明效果、单位和目标类型，并把它们提供的能力标为 `provided`（DREPO-060） |
 | 5 实现适配层 | 只实现所选模式需要的适配能力（DCLI-260）；每项能力决定放在适配层还是宿主组件里（DCLI-262） |
 | 6 测试 | 在模拟宿主上运行两组一致性测试（DVER-001）；为每个领域命令写行为矩阵（DVER-030），并在授权目标上用真实软件运行（DVER-031、DVER-050） |
 | 7 写 Skill 和知识库 | 决定是否拆分 Skill（DSKL-020、DSKL-021）；在模板提供的固定段落上补充剧本（DSKL-009）；把调查里的操作要点、限制和故障处理写成知识条目（DSKL-126）；把命令标为 stable 之前先跑评测（DSKL-043） |

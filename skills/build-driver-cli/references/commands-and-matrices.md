@@ -38,7 +38,7 @@ COMMANDS = [
 
 - `path` is `noun verb`. The verb comes from the fixed list of DCLI-022; the noun is the application's own term, written in full, and never a reserved name (DCLI-023, DCLI-024).
 - Do not declare `--session`, `--doc`, `--device` or `--job`; the runtime adds the target flags for each mode (DCLI-027). Other objects are selected with `--id` or `--ids`. A shared function uses the shared flag of DCLI-026. Never add a global flag (DCLI-025).
-- Every physical value is a `quantity` flag with its quantity from the units table; the user writes the unit in the value, such as `12.5mm`, and output fields carry the unit in their name, such as `x_mm` (DCLI-080 to DCLI-085).
+- Every physical value is a `quantity` flag with its quantity from the units table; the user writes the unit in the value, such as `12.5mm`, and output fields carry the unit in their name, such as `x_mm` (DCLI-080 to DCLI-084).
 - Declare every effect (DCLI-051). The runtime derives the confirmation tier; you never set it (DCLI-052). Mark a change the application cannot take back `irreversible`, and a `stop` command `halt` (DSEC-018).
 - List in `untrusted_fields` every output field that holds text from the application or its files (DSEC-021). Mark a flag that carries a secret with `secret: true` (DSEC-040).
 - Set the disposition of the capabilities the command provides to `provided` in both survey files (DREPO-060).

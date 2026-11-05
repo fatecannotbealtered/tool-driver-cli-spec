@@ -211,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             exit_code, stdout = _confirmed(tool + ["doc", "save", "--session", values.get("session", ""), "--doc", values.get("doc", "")],
                                            root, row_env, expected_code, notes)
             envelope = _envelope(stdout)
+            if envelope.get("ok") is True and ((envelope.get("data") or {}).get("result") or {}).get("job"):
+                exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)  # a long doc save
         if watcher is not None:
             watcher.join(timeout=5)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
@@ -219,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         actual = {"exit": shown_exit, **({"code": code} if shown_exit and code else {})}
         passed = exit_code >= 0 and check_project.same_result(actual, row["expected"])
         if passed and row["row"] == "normal" and command.get("verify_after_save") and mode == "session":
-            passed = _save_verifies(tool, root, env, values, notes)
+            passed = _save_verifies(tool, root, env, values, notes, facts.contract)
         if simulated(envelope):
             passed = False
             notes.append("the result is simulated, so it is not evidence (DVER-021)")
@@ -443,7 +445,8 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
     return exits.get(code, 1), {"ok": False, "error": {"code": code}, "data": view}
 
 
-def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dict[str, str], notes: list[str]) -> bool:
+def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dict[str, str], notes: list[str],
+                   contract: dict[str, Any]) -> bool:
     """A verify_after_save command: doc save on the same document must verify the change (DVER-030)."""
     if "session" not in values or "doc" not in values:
         notes.append("verify_after_save needs --set session= and --set doc= to save the document")
@@ -453,6 +456,8 @@ def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dic
     token = ((out.get("error") or {}).get("details") or {}).get("confirm_token")
     if token:
         out = _envelope(_run(base + ["--confirm", token], root, env, notes)[1])
+    if out.get("ok") is True and ((out.get("data") or {}).get("result") or {}).get("job"):
+        _, out = _job_end(tool, root, env, out, contract, notes)  # the tool runs doc save as a long job
     receipt = (out.get("data") or {}).get("receipt") or ((out.get("error") or {}).get("details") or {}).get("receipt") or {}
     verified = out.get("ok") is True and receipt.get("outcome", {}).get("verification") == "passed"
     notes.append("doc save verified the change" if verified else "doc save did not verify the change")

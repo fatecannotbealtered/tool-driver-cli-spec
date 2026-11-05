@@ -223,11 +223,11 @@ def _after_dispatch(run: Run, cause: DriverError) -> DriverError:
 
 
 def _required(call: Any) -> None:
-    """A required flag left out is a usage error (DCLI-013). A domain write checks its own,
-    because a batch item in --input may carry the value instead."""
+    """A required flag left out is a usage error (DCLI-013). A domain command checks its own,
+    because --ids or an --input item may carry the value instead."""
     command = call.command
     for flag in command.flags:
-        own = command.kind == "domain" and command.writes and flag.name not in ("--session", "--doc", "--device")
+        own = command.kind == "domain" and flag.name not in ("--session", "--doc", "--device")
         if flag.required and flag.name not in call.given and not own:
             raise usage(f"{command.path} needs {flag.name}.", flag.name)
 

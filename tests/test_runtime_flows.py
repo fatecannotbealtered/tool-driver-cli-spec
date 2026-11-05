@@ -481,6 +481,41 @@ class StatesAndKnowledge(unittest.TestCase):
             self.assertEqual(out.code, "E_USAGE", out.stdout[:400])
 
 
+class ReviewFixes102(unittest.TestCase):
+    """Edges the 1.0.2 review found."""
+
+    def test_a_save_the_adapter_cannot_confirm_on_disk_is_incomplete(self):
+        with Case(subject()) as case:
+            moved = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            self.assertTrue(moved.ok, moved.stdout[:400])
+            case.control("fault", rule={"method": "read_back", "action": "unreadable", "command": "doc save", "fields": ["saved"]})
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            saved = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertEqual(saved.code, "E_VERIFY_INCOMPLETE", saved.stdout[:600])
+
+    def test_operation_get_writes_the_whole_record_to_a_new_file_only(self):
+        with Case(subject()) as case:
+            moved = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            target = os.path.join(case.tmp, "record.json")
+            out = case.run("operation", "get", "--id", moved.data["operation_id"], "--output", target)
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(json.loads(Path(target).read_text(encoding="utf-8"))["operation_id"], moved.data["operation_id"])
+            again = case.run("operation", "get", "--id", moved.data["operation_id"], "--output", target)
+            self.assertEqual(again.code, "E_USAGE", again.stdout[:400])
+
+    def test_a_long_doc_save_keeps_the_document_state_it_left(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed", done.stdout[:600])
+            self.assertIs(done.data["receipt"]["document"]["dirty"], False, done.stdout[:600])
+
+
 class ManyFiles(unittest.TestCase):
     """A receipt past receipt.listed_files files gives their count and the full record command (DCLI-061)."""
 

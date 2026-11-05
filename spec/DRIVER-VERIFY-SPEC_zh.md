@@ -145,7 +145,7 @@
 | `D01` | `session` | 有多个实例，命令没有指定 `--session` | `E_AMBIGUOUS`，列出候选，每个候选带会话摘要 | DCLI-202 |
 | `D02` | `session` | 预演之后，实例重连或重启；另外，实例加载了另一个版本的宿主组件 | 确认被拒绝，`E_CONFLICT` `session_changed` 或 `plugin_changed` | DCLI-056, DCLI-203 |
 | `D03` | `documents` | 预演之后，文档（实例中打开的文档，或文件模式下的文件）被修改；另外，磁盘上的文件被改动，以及文件模式的写操作指向某个实例已打开的文件 | `E_CONFLICT`，`document_changed`、`file_changed_on_disk` 或 `file_open_in_session`；什么都没发出 | DCLI-056, DCLI-201, DCLI-210, DCLI-211 |
-| `D04` | `session`, `device` | 软件或设备忙：在调用之前，或在预演和确认之间 | `E_BUSY`，可重试，带 `retry_after_ms`；`dispatch_state` 为 `not_started`；恢复后，同一令牌可以执行写入 | DCLI-055, DCLI-057, DCLI-204, DCLI-276 |
+| `D04` | `session`, `device` | 软件或设备忙：在调用之前，或在预演和确认之间；或者实例处于 `unreachable` | `E_BUSY`，可重试，带 `retry_after_ms`；实例驱动不了时为 `E_BACKEND_UNAVAILABLE`；`dispatch_state` 为 `not_started`；恢复后，同一令牌可以执行写入 | DCLI-055, DCLI-057, DCLI-204, DCLI-276 |
 | `D05` | `session` | 派发之前弹窗挡住了软件；另外，修改本身在派发之后弹出了弹窗 | 派发之前：`E_HUMAN_REQUIRED`，带 `action` 和重新运行这次调用的 `resume` 命令。派发之后：操作的结果未知，目标保持锁定，`resume` 是查询命令，绝不是再写一次 | DCLI-066, DCLI-204 |
 | `D06` | `session`, `device` | 派发之后连接断开：单次写入，以及批量中的一个对象 | `E_OUTCOME_UNKNOWN`，`lookup` 指向 `operation resolve`；目标保持锁定，直到查明结果。批量时，`lookup` 为 `operation list --state unknown --batch <id>`，该对象保持锁定 | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-064, DCLI-275 |
 | `D07` | `writes` | 修改已生效，但没能读回 | `E_VERIFY_INCOMPLETE`，附回执 | DCLI-057, DCLI-062 |
@@ -373,7 +373,7 @@ tool-driver-cli-spec 仓库必须在每次合并和每次发布时，在 Windows
 
 ### DVER-050 只用授权目标
 
-真实运行必须只使用经人授权、并列在 `docs/E2E.md` 的 Authorized Targets 一节（DREPO-017）中的软件实例、文件、文件夹和设备。命令只读取、来自项目 `tests/inputs/` 文件夹（`{inputs}`，DVER-002）的文件不算目标，不需要授权；命令写入的一切仍然必须是授权目标。这一节是授权目标唯一的清单；其他文档，如 `AGENTS.md`，只指向它。目标只能由人加入这份清单。真实运行禁止触碰任何其他工程、实例或设备。真实运行使用的授权范围文件必须只授予这些目标（DSEC-012），这样运行时会拒绝目标之外的任何写操作。
+真实运行必须只使用经人授权、并列在 `docs/E2E.md` 的 Authorized Targets 一节（DREPO-017）中的软件实例、文件、文件夹和设备。命令只读取、来自项目 `tests/inputs/` 文件夹（`{inputs}`，DVER-002）的文件不算目标，不需要授权；命令写入的一切仍然必须是授权目标。这个文件夹会提交进仓库，所以只放作者自己做的或可以公开的文件，像代码一样评审。这一节是授权目标唯一的清单；其他文档，如 `AGENTS.md`，只指向它。目标只能由人加入这份清单。真实运行禁止触碰任何其他工程、实例或设备。真实运行使用的授权范围文件必须只授予这些目标（DSEC-012），这样运行时会拒绝目标之外的任何写操作。
 
 为什么：真实运行会做出真实的修改。在未经授权的工程或生产机器上，一次测试就可能造成真实的损失。清单只有一份，就不会两份对不上。
 检查：🤖 `check_project`：`docs/evidence/` 中每份记录的 `targets` 里的每一项都列在 Authorized Targets 里；👀 评审真实运行使用的授权范围文件。

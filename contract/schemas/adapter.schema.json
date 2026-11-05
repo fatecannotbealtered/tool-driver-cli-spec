@@ -135,7 +135,7 @@
           "unevaluatedProperties": false
         },
         "read_back": {
-          "description": "Reads back the fields of the targets a write changed. For `doc save`, it reads them from the saved file (DCLI-057).",
+          "description": "Reads back the fields of the targets a write changed. For `doc save`, it reads them from the saved file, or from the instance when the file can be read only after closing and opening the document; the document's field `saved` is true when the fields came from the file, or when the adapter saw the file on disk change (DCLI-057).",
           "$ref": "#/$defs/command_call",
           "required": ["operation_id"],
           "properties": {

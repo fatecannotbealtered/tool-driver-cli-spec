@@ -116,7 +116,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DSEC-011 Written only by a person
 
-Only a person writes the scope file. The runtime MUST only read it; no command creates, changes or deletes it. An Agent MUST NOT create, change or delete a scope file, and MUST NOT point `<PREFIX>_SCOPE_FILE` at a file it wrote. This holds even when the user asks for it in chat: the person edits the file themselves. A coding Agent that prepares live runs follows the same rule for the scope file and the Authorized Targets (DVER-050): it may draft them for the person, and the person saves them. When a write is refused for lack of scope, the Agent passes on to the person what is missing (DSEC-015).
+Only a person writes the scope file. The runtime MUST only read it; no command creates, changes or deletes it. An Agent MUST NOT create, change or delete a scope file, and MUST NOT point `<PREFIX>_SCOPE_FILE` at a file it wrote. This holds even when the user asks for it in chat: the person edits the file themselves. A coding Agent that prepares live runs follows the same rule for the scope file and the Authorized Targets (DVER-050): it may propose their content in chat, and the person writes the files; it never writes them itself. When a write is refused for lack of scope, the Agent passes on to the person what is missing (DSEC-015).
 
 The scope guards against two things: mistakes by the Agent, such as the wrong file or more objects than were asked for, and instructions injected through untrusted content (DSEC-022). It does not stop an Agent that ignores its Skills: the scope file is an ordinary file in the user's account, and the runtime cannot tell who wrote it. Keeping such an Agent away from the file is a matter for the permissions the person gives the Agent itself.
 
@@ -225,7 +225,7 @@ Halt commands only stop work that is running: the commands with the verb `stop` 
 
 - they are always direct, and `confirm: always` does not make them two-step (DSEC-013);
 - a scope covers them when its `targets` cover the command's target; `effects` and `dangerous` do not apply (DSEC-014);
-- they run while the target is `busy`, `blocked` or `unresponsive`, and while a device is in `fault` or `emergency_stop`; only a target that is `offline` or `lost` refuses them.
+- they run while the target is `busy`, `blocked` or `unresponsive`, and while a device is in `fault` or `emergency_stop`; only a target that is `offline`, `lost`, `unreachable` or `closed` refuses them.
 
 A halt command still checks the scope's targets, keeps an operation record and returns a receipt (DCLI-050).
 
@@ -315,7 +315,7 @@ Check: 👀 Review of the test setup.
 
 ### DSEC-040 Secrets
 
-Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is shown, as in a generated command (DCLI-011) or the request kept in an operation record, a secret MUST be shown as `***` or `<secret>`. The tool declares which parameters are secrets with `secret: true` when it registers its commands (DCLI-029); the runtime masks them.
+Secrets MUST NOT appear in output, logs, operation records, error messages or live records (DVER-042). Wherever an input is shown, a secret MUST be masked: as `***` in an operation record, and as `<secret>` in a generated command (DCLI-011), where the Agent puts the value in. The tool declares which parameters are secrets with `secret: true` when it registers its commands (DCLI-029); the runtime masks them.
 
 Why: Output, records and logs are read by Agents and kept on disk; a secret there leaks to every later reader.
 Check: 🤖 Runtime unit tests; 👀 review of the parameters declared as secrets.
@@ -347,7 +347,7 @@ Check: 👀 Review of the network code in the runtime and the adapter.
 
 ### DSEC-050 Installing host components
 
-A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). The installed files live outside the state directory, where the application loads them; when the application can load from more than one place, each state directory gets its own copy, so that a run with a test state directory leaves the person's host component alone. `plugin remove` removes every installed version that no running instance has loaded; a loaded version stays on disk until no instance has it loaded (DSEC-051). An instance keeps the version it loaded, and while no version is on disk, DSEC-053 does not refuse its writes. `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
+A host component MUST be installed, upgraded or removed only through `plugin install` and `plugin remove` (DCLI-240). Both are two-step writes with the `configure` effect, so they need a scope that allows `configure` (DSEC-017). `plugin install` MUST also write the path of the state directory into the host component's configuration, so that a host started from the desktop writes its discovery file into the same `hosts/` (DCLI-271). The installed files live outside the state directory, where the application loads them; when the application can load from more than one place, each state directory gets its own copy, so that a run with a test state directory leaves the person's host component alone. A copy belongs to the state directory written in its configuration; `plugin get`, `plugin remove` and the version check of DSEC-053 look at the copy of the current state directory. `plugin remove` removes every installed version that no running instance has loaded; a loaded version stays on disk until no instance has it loaded (DSEC-051). An instance keeps the version it loaded, and while no version is on disk, DSEC-053 does not refuse its writes. `update`, domain commands and the npm installation MUST NOT install or change a host component; when one needs installing again, `update` and `doctor` give the `plugin install` command instead (DCLI-079).
 
 Why: A host component runs inside the person's application with the application's full rights; putting it there changes the environment, which the person must allow and see. A host that wrote its discovery file elsewhere would be invisible to the CLI.
 Check: 🤖 Runtime unit tests; 👀 review that `update` and the npm packages install no host component.

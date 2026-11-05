@@ -17,7 +17,7 @@ from .records import utc_now
 from .registry import Command, Flag
 from .runtime import READ_DEADLINE_MS, SESSION_DEADLINE_MS, Run, Where, parallel
 from .targets import file_key
-from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, slim_receipt, verify_files
+from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, slim_receipt, slim_result, verify_files
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -152,6 +152,12 @@ def add_target_flags(tool: Tool, command: Command) -> None:
     """The runtime adds --session, --doc and --device by mode (DCLI-027), and --output for the
     full preview of a write that has no --output of its own (DCLI-054)."""
     names = [f.name for f in command.flags]
+    if command.verb == "list":
+        # Every list pages the same way (DCLI-006, DCLI-026).
+        if "--limit" not in names:
+            command.flags.append(_limit())
+        if "--offset" not in names:
+            command.flags.append(_offset())
     extra = []
     if "session" in command.modes:
         extra.append(_session())
@@ -303,7 +309,7 @@ def job_view(record: dict[str, Any], run: Run | None = None) -> dict[str, Any]:
     if job["state"] in FINAL_JOB_STATES:
         out["finished_at"] = job.get("finished_at", record.get("finished_at", utc_now()))
         out["receipt"] = slim_receipt(run, record["receipt"]) if run is not None and record.get("receipt") else record.get("receipt")
-        out["result"] = job.get("result", {})
+        out["result"] = slim_result(run, job.get("result", {})) if run is not None else job.get("result", {})
         out["ok"] = job.get("ok", False)
         if job.get("code"):
             out["code"] = job["code"]
@@ -463,12 +469,19 @@ def run_standard_job(run: Run, record: dict[str, Any]) -> None:
     operation_id = record["operation_id"]
     call = run.tool.parser.parse(record["_argv"])
     sub = _Run(run.tool, call, run.env)
+    sub.on_hang = run.on_hang  # an in-process call that hangs still ends the worker (DCLI-278)
     made: Verification | None = None
     try:
         spec = LONG_SPECS[record["command"]](sub, call.command)
 
         def apply() -> Any:
             spec.prepare()  # the state checks that refuse a write, right before dispatch (DCLI-057)
+            confirmed = record.get("_call") or {}
+            now = {"session": (spec.where.session or {}).get("id"), "document": (spec.where.document or {}).get("id")}
+            for key, value in now.items():
+                if confirmed.get(key) and value != confirmed[key]:
+                    raise DriverError("E_CONFLICT", f"The {key} is now {value}, not the confirmed {confirmed[key]}; nothing was sent.",
+                                      conflict="token_mismatch")
             return spec.apply(operation_id)
 
         status, facts = _job_dispatch(sub, apply, strict=False)
@@ -486,11 +499,27 @@ def run_standard_job(run: Run, record: dict[str, Any]) -> None:
                 status["result"] = spec.result(facts, made)
             except Exception as exc:  # noqa: BLE001
                 made.notes.append(f"The result could not be read after the write: {exc}")
+            _fresh_document(sub, spec, record)
         record["_job"]["state"] = status["state"]
         _settle_job(run, record, status, made)
         run.records.save(record)
     finally:
         sub.close()
+
+
+def _fresh_document(run: Run, spec: WriteSpec, record: dict[str, Any]) -> None:
+    """The receipt names the document as the job left it, so the next save sees no change from outside."""
+    doc, session = spec.where.document, spec.where.session
+    receipt = record.get("receipt") or {}
+    if not doc or not session or "document" not in receipt:
+        return
+    try:
+        run._sessions = None
+        now = next((d for d in run.documents(session["id"]) if d.get("id") == doc["id"]), None)
+    except DriverError:
+        return
+    if now is not None:
+        receipt["document"] = {"id": now["id"], "revision": now.get("revision"), "dirty": now.get("dirty")}
 
 
 def _job_dispatch(run: Run, apply: Any, strict: bool) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -936,6 +965,10 @@ class DocSave(_OnDocument):
             if doc is not None and doc.get("dirty") is False and doc.get("disk", "in_sync") == "in_sync":
                 return Verification("passed", observed, notes=["The save held no field change; the document is clean."])
             return Verification("incomplete", observed, notes=["The document is not reported clean after the save."])
+        # The document's `saved` says the save reached the file on disk: true when the fields
+        # were read from that file, or when the adapter read them from the instance and saw
+        # the file change (DCLI-057).
+        fields = fields + [{"target": self.run.doc_key(self.where.document), "field": "saved", "after": True}]
         request = {"command": "doc save", "inputs": {}, "session": self.where.session["id"], "document": self.where.document["id"],
                    "operation_id": operation_id, "targets": sorted({c["target"] for c in fields}),
                    "fields": sorted({c["field"] for c in fields})}

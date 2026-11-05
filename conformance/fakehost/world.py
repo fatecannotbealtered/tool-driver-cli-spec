@@ -656,6 +656,8 @@ class World:
             values = objects.get(obj, {}) if obj is not None else {}
             names = params.get("fields") or list(values)
             observed[key] = {n: values[n] for n in names if n in values and n not in unreadable}
+            if key == doc.key() and "saved" in names and "saved" not in unreadable:
+                observed[key]["saved"] = True  # read from the saved file itself
         result: dict[str, Any] = {"observed": observed}
         if unreadable:
             result["unreadable"] = sorted(unreadable)

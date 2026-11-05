@@ -4,6 +4,7 @@ operation get, list and resolve, --help and --version. All are declared ``observ
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from datetime import datetime, timedelta, timezone
@@ -138,8 +139,8 @@ def describe(tool: Tool, command: Command, full: bool = False) -> dict[str, Any]
         out["output_coordinate_system"] = command.output_coordinate_system
     if command.doc_kinds:
         out["doc_kinds"] = command.doc_kinds
-    if command.long:
-        out["long"] = True
+    if command.long or command.jobs:
+        out["long"] = True  # it returns a job, whoever runs it (DCLI-065)
     if command.verify_after_save:
         out["verify_after_save"] = True
     return out
@@ -479,14 +480,15 @@ def operation_get(run: Run) -> Result:
     record = _record(run, run.call.values["--id"])
     data = public(record)
     if run.call.has("--output"):
-        # The whole record, however many files the write produced, goes to the file (DCLI-008).
+        # The whole record, however many files the write produced, goes to a new file (DCLI-008).
         path = run.call.values["--output"]
-        text = json.dumps(data, ensure_ascii=False, indent=1)
+        if os.path.exists(path):
+            raise usage(f"{path} exists; --output writes a new file and never replaces one.", "--output")
         try:
-            Path(path).write_text(text, encoding="utf-8", newline="\n")
+            with open(path, "x", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(data, ensure_ascii=False, indent=1))
         except OSError as exc:
             raise DriverError("E_IO", f"Cannot write {path}: {exc.strerror}.") from None
-        return Result({"operation_id": record["operation_id"], "path": path, "bytes": len(text.encode("utf-8"))})
     if isinstance(data.get("receipt"), dict):
         data["receipt"] = slim_receipt(run, data["receipt"])
     return Result(data, _record_untrusted())

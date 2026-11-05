@@ -2,7 +2,7 @@
 
 Use this file in steps 5 and 6 when the project was generated with `--host-component`: the survey found an interface that works only inside the application's process or on its main thread (DCLI-262).
 
-Read: DCLI-240, DCLI-262, DCLI-270 to DCLI-281, DSEC-050 to DSEC-054.
+Read: DCLI-240, DCLI-262, DCLI-270 to DCLI-281, DSEC-050 to DSEC-053.
 
 ## What to build
 

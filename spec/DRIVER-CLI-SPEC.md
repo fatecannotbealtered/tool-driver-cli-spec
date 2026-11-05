@@ -360,7 +360,7 @@ When a command offers one of these functions, it MUST use this flag name and mea
 <!-- contract:shared_flags -->
 | Flag | Value | Meaning |
 |---|---|---|
-| `--limit` | `<n>` | Items per page: by default 20, at most 100, for every list, domain lists included; the runtime keeps both values. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
+| `--limit` | `<n>` | Items per page: by default 20, at most 100, for every list, domain lists included; the runtime adds `--limit` and `--offset` to every `list` command and keeps both values. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
 | `--offset` | `<n>` | Start position of the page |
 | `--query` | `<text>` | What `search` looks for |
 | `--sort` | `<field>` | Field that orders a list |
@@ -440,7 +440,7 @@ A registration MAY also hold these fields:
 | `doc_kinds` | The kinds of document the command works on, when the application has several, such as `part`, `assembly` and `drawing` (DCLI-210) |
 | `verify_after_save` | `true` when, in session mode, the application shows the change correctly only after the document is saved; `doc save` then verifies it (DCLI-057) |
 | `long` | `true` when the work can take longer than one call may; the runtime then runs it as a long job (DCLI-065) |
-| `jobs` | `true` for a write the application may run as a long job: `apply` reports the job and the runtime follows it with `job_status` (DCLI-065) |
+| `jobs` | `true` for a write the application may run as a long job: `apply` reports the job and the runtime follows it with `job_status` (DCLI-065). A command is `jobs` or `long`, never both |
 
 The adapter capabilities a domain command calls follow from its registration: `read` for a read; `preview`, `apply` and `read_back` for a write, and also `job_status` and `cancel` with `jobs` (DCLI-260).
 
@@ -477,7 +477,7 @@ Check: 🤖 General conformance tests R01 and R05.
 `reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity, modes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. The adapter capabilities a command needs and the evidence behind its maturity appear only in the file of `reference --all`, which the project scripts check (DVER-041).
 
 - `tier` MUST give the confirmation tier for each mode the command supports. A tier that depends on the call MUST be described in `tier_when`, such as `doc close --discard`, closing an instance the tool did not start, a save-as or export over an existing file, or a condition the command registers itself, with its `description` (DCLI-029).
-- A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
+- A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, and a command registered `jobs` shows `long` too, because it also returns a job, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
 - Every parameter and output field that holds a coordinate MUST name its `coordinate_system` (DCLI-084).
 - `reference` without flags MUST return only the index, within 8000 characters: each command with its path and its one-sentence summary. Limits and conditions belong in the command's own description.
 - `reference --command <path>` MUST return one command, within 6000 characters.
@@ -721,7 +721,7 @@ What the read-back checks depends on the write:
 | `delete` | The object is absent |
 | `import` | The imported objects are present, by count |
 | An `artifact` write, such as `export`, `render` or `doc save-as` | Every produced file exists, and its path, size and SHA-256 are recorded; several files are allowed. The receipt makes no claim about bytes the application wrote itself |
-| `doc save` in session mode | The saved file is read again and the changed fields are found in it. When the application can read the file only after the document is closed and opened again, the adapter reads the fields from the instance instead and checks that the file on disk changed. When neither can be done, verification is `incomplete` |
+| `doc save` in session mode | The saved file is read again and the changed fields are found in it, and the document's field `saved` is `true`. When the application can read the file only after the document is closed and opened again, the adapter reads the fields from the instance instead and reports `saved: true` only when it saw the file on disk change. When the adapter cannot tell, verification is `incomplete` |
 | A long job | The job's outputs, when it ends (DCLI-065) |
 
 - A write that creates files and also changes a document MUST be verified both ways: the files exist, and the changed fields read back. Verification is `passed` only when both pass.
@@ -779,7 +779,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 - `session` `{id, generation}` and `document` `{id, revision, dirty}`;
 - `notes`: extra remarks;
 - `simulated: true` when the result comes from a simulated device (DSEC-062);
-- `more_files` `{count, command}` when the write produced more files than the contract's `receipt.listed_files` (10): `observed` keeps that many, missing files first, and `command` is the `operation get --output` call that writes the whole record to a file (DCLI-008).
+- `more_files` `{count, command}` when the write produced more files than the contract's `receipt.listed_files` (10): `observed` keeps that many, missing files first, `count` is the number left out, and `command` is the `operation get --output` call that writes the whole record to a file (DCLI-008).
 
 <!-- contract:receipt_dimensions -->
 | Dimension | Values |
@@ -1160,7 +1160,7 @@ Check: 🤖 General conformance test R01 checks the mode declarations in `refere
 
 When several instances are running and a command that acts on one instance has no `--session`, the command MUST return `E_AMBIGUOUS` with the candidates. It MUST NOT pick an instance by window focus or by recent use. With exactly one instance it MAY pick it and MUST name it in the output. A `--doc` that exactly one instance has open selects that instance (DCLI-201).
 
-The list reads `session list`, `doc list` and `job list` cover every session and MUST NOT return `E_AMBIGUOUS`. Each session in `session list`, and each instance among the candidates of `E_AMBIGUOUS`, MUST carry a summary: `documents` = `[{id, path, dirty}]` and, when the session is blocked, `blocker` = `{action, title}`, where `title` is untrusted (DSEC-021). When the adapter cannot see every instance, `session list` MUST return `complete: false`.
+The list reads `session list`, `doc list` and `job list` cover every session and MUST NOT return `E_AMBIGUOUS`. Each session in `session list`, and each instance among the candidates of `E_AMBIGUOUS`, MUST carry a summary: `documents` = `[{id, path, dirty}]` and, when the session is blocked, `blocker` = `{action, title}`, where `title` is untrusted (DSEC-021), with `knowledge` when the adapter knows an entry for the dialog (DSKL-124). When the adapter cannot see every instance, `session list` MUST return `complete: false`.
 
 Why: With two projects open, picking by focus changes the wrong project; with each instance's documents in view, the Agent can name the right one.
 Check: 🤖 Driver conformance test D01.
@@ -1351,14 +1351,14 @@ Besides the domain commands, the tool author writes only the adapter capabilitie
 | `preview` | instance | with writes | with writes | with writes | Builds the preview, with the values the application will store |
 | `apply` | instance | with writes | with writes | with writes | Applies the change and reports what happened |
 | `read_back` | instance | with writes | with writes | with writes | Reads back the changed fields, per target key |
-| `job_status` | instance | with long jobs | with long jobs | with long jobs | Reports the state of a long job |
-| `cancel` | instance | with long jobs | with long jobs | with long jobs | Cancels a long job |
+| `job_status` | instance | with `jobs` commands | with `jobs` commands | with `jobs` commands | Reports the state of a long job |
+| `cancel` | instance | with `jobs` commands | with `jobs` commands | with `jobs` commands | Cancels a long job |
 | `devices` | CLI | — | — | required | Lists devices and their states |
 | `plugin_status` | CLI | with a host component | with a host component | with a host component | Reports the host component versions |
 | `plugin_install` | CLI | with a host component | with a host component | with a host component | Installs the host component |
 | `plugin_remove` | CLI | with a host component | with a host component | with a host component | Removes the host component |
 
-- A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with long jobs" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
+- A capability marked required for a mode MUST be implemented by every tool that supports that mode. "With writes" means required when the tool has write commands; "with `jobs` commands" and "with a host component" work the same way. An optional capability MAY be left out. A dash means the mode does not use the capability.
 - CLI-side capabilities run in the CLI process. Instance-side capabilities run in the adapter or, as host methods, in a host component (DCLI-262, DCLI-274).
 - `contract/schemas/adapter.schema.json` defines the request and the result of every capability. The in-process adapter interface and the host methods MUST use the same definitions.
 - A capability reports facts: the dispatch state, the change, the delivery, the persistence and the observed values. The runtime compares the read-back with the preview and derives the receipt (DCLI-057, DCLI-062).

@@ -274,9 +274,9 @@ Check: 🤖 `check_project` checks the sections and compares Bare minimum to obe
 | `Risk Tier` | The tool's risk tier and the commands that set it (DSEC-002) |
 | `Authorization` | The scope file: where it is, who writes it and what it grants (DSEC-010 to DSEC-018) |
 | `Write Confirmation` | Fixed text: confirmation tiers, confirm tokens and the confirm-time review (DCLI-052 to DCLI-056) |
-| `Host Component` | What runs inside the application, how it is installed and how it connects (DSEC-050 to DSEC-054) |
-| `Physical Effects` | How physical effects are guarded (DSEC-060 to DSEC-062) |
-| `State Directory` | Fixed text: location, contents and access protection of the state directory (DSEC-030 to DSEC-033) |
+| `Host Component` | What runs inside the application, how it is installed and how it connects (DSEC-050 to DSEC-053) |
+| `Physical Effects` | How physical effects are guarded (DSEC-061 and DSEC-062) |
+| `State Directory` | Fixed text: location, contents and access protection of the state directory (DSEC-030 to DSEC-032) |
 | `Credentials` | The secrets the tool handles, how they are masked, and the addresses the tool connects to (DSEC-040 to DSEC-043) |
 | `Untrusted Content` | Fixed text: what content is untrusted and how it is marked (DSEC-020 to DSEC-022) |
 | `Supply Chain` | Fixed text: locked dependencies, releases with provenance, no install scripts, Skills from the installed package (DSEC-070 to DSEC-073) |
@@ -306,7 +306,7 @@ Check: 🤖 `check_project` checks the sections, compares the five fixed section
 | `Branch and Commit Convention` | How branches are named and commit messages are written |
 | `CI Checks` | The merge gate (DREPO-041) and how to run it locally |
 | `Tests and Evidence` | Conformance tests, behavior matrices, live records, eval reports, and how evidence sets maturity (DVER-001, DVER-030, DVER-040) |
-| `Adding or Changing a Command` | Registration with effects, units, target type and capability IDs (DCLI-029, DREPO-061), the behavior matrix, whose `normal` row is the write sample (DVER-002, DVER-030), the Skill and the CHANGELOG entry |
+| `Adding or Changing a Command` | Registration with effects, units and target type (DCLI-029), the capability's disposition in the survey (DREPO-060), the behavior matrix, whose `normal` row is the write sample (DVER-002, DVER-030), the Skill and the CHANGELOG entry |
 | `Pull Requests` | What a pull request contains and how it is reviewed |
 | `Security` | Where to report vulnerabilities instead of opening a public issue (`SECURITY.md`) |
 
@@ -654,10 +654,7 @@ Check: 🤖 `check_project` checks the IDs and the dispositions.
 
 ### DREPO-061 Commands trace to capabilities
 
-Every capability in the survey MUST have a disposition, as DREPO-060 sets; that clause holds the rule. A command's registration names no capability IDs.
-
-Why: The survey with its dispositions shows what the tool covers and what it leaves out on purpose, in one place.
-Check: 🤖 `check_project` checks the dispositions (DREPO-060).
+Removed: its rule is part of DREPO-060.
 
 ### DREPO-062 Onboarding steps
 
@@ -668,7 +665,7 @@ A new tool is usually built by an AI Agent. It SHOULD follow these eight steps, 
 | 1 Survey | Fill in `docs/APPLICATION.md`; give every capability an ID and a disposition (DREPO-060) |
 | 2 Choose modes | Choose file, session or device mode from the survey; modes MAY be combined (DCLI-201) |
 | 3 Generate the project | Generate the project from the template with `instantiate`; `check_project` then lists only what the next steps fill in: the placeholders (DREPO-019) and the domain commands still to register |
-| 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024) and the registration fields (DCLI-029), each with effects, units, target type and capability IDs (DREPO-061) |
+| 4 Register commands | Register domain commands by the naming rules (DCLI-020 to DCLI-024) and the registration fields (DCLI-029), each with effects, units and target type, and mark the capabilities they offer `provided` (DREPO-060) |
 | 5 Implement the adapter | Implement only the adapter capabilities the chosen modes need (DCLI-260); put each in the adapter layer or the host component (DCLI-262) |
 | 6 Test | Run both conformance suites on the fake host (DVER-001); write a behavior matrix for each domain command (DVER-030) and run it on the real application, on authorized targets (DVER-031, DVER-050) |
 | 7 Write Skills and knowledge | Decide whether to split the Skills (DSKL-020, DSKL-021); add playbooks to the template's fixed sections (DSKL-009); turn the survey's operating notes, limits and troubleshooting into knowledge entries (DSKL-126); run the evaluation before marking a command stable (DSKL-043) |
