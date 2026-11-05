@@ -677,7 +677,7 @@ Close the editor first, then run doc save.
 
 ### DSKL-124 命令和错误指向知识
 
-`reference` 必须为每条命令列出相关的内置条目，字段为 `related_knowledge`，取自命令登记（DCLI-029、DCLI-031）。错误在知识库里有对应的处理办法时，`error.details.knowledge` 必须列出条目 ID，`next_action` 必须写明要运行的确切 `knowledge get` 命令。比如适配层识别出已知的弹窗、命令返回 `E_HUMAN_REQUIRED` 时，错误指向对应的 `troubleshooting` 条目。
+`reference` 必须为每条命令列出相关的内置条目，字段为 `related_knowledge`，取自命令登记（DCLI-029、DCLI-031）。错误在知识库里有对应的处理办法时，`error.details.knowledge` 必须列出条目 ID，`next_action` 必须写明要运行的确切 `knowledge get` 命令。比如适配层识别出已知的弹窗、命令返回 `E_HUMAN_REQUIRED` 时，错误指向对应的 `troubleshooting` 条目。适配层在它的错误里、被挡住的会话的 `blocker` 里、以及不能执行的预览里给出条目，运行时把它们放进返回的错误。
 
 为什么：Agent 在需要的那一刻就能找到正确的条目，不用自己搜索。
 检查：🤖 `check_project` 检查 `related_knowledge` 里的每个 ID 都存在；👀 评审时确认已知错误都指向了条目。

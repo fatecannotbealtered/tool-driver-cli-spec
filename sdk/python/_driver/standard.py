@@ -17,7 +17,7 @@ from .records import utc_now
 from .registry import Command, Flag
 from .runtime import READ_DEADLINE_MS, SESSION_DEADLINE_MS, Run, Where, parallel
 from .targets import file_key
-from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, verify_files
+from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, slim_receipt, verify_files
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -80,7 +80,8 @@ def commands(tool: Tool) -> list[Command]:
          obj + "page", ["sessions"], ["session list"], "session", [".items[*].blocker.title", ".items[*].documents[*].path"], None),
         ("session get", "The full state of one instance.", [_session()], session_get, obj + "session", ["sessions"],
          ["session get --session app-1234-5f3a"], "session", [".blocker.title", ".documents[*].path"], None),
-        ("session open", "Start a new instance, optionally opening a document.", [Flag("--doc", "path", "A document to open in the new instance.")],
+        ("session open", "Start a new instance, optionally opening a document.", [Flag("--doc", "path", "A document to open in the new instance."),
+         Flag("--kind", "string", "The kind of document the instance is for, when the application runs a separate program for it.")],
          lambda run: Engine(run).execute(SessionOpen(run, run.call.command)), "receipt.schema.json", ["open_session"],
          ["session open"], "session", [], None),
         ("session close", "Close an instance; refused while it has unsaved changes.", [_session(),
@@ -292,7 +293,7 @@ def _job_record(run: Run, job_id: str) -> dict[str, Any]:
                       next_action=f"Run `{run.tool.name} job list` to see the jobs.")
 
 
-def job_view(record: dict[str, Any]) -> dict[str, Any]:
+def job_view(record: dict[str, Any], run: Run | None = None) -> dict[str, Any]:
     job = record["_job"]
     out: dict[str, Any] = {"id": job["id"], "operation_id": record["operation_id"], "state": job["state"],
                            "cancel_requested": job.get("cancel_requested", False)}
@@ -301,7 +302,7 @@ def job_view(record: dict[str, Any]) -> dict[str, Any]:
     out["started_at"] = job["started_at"]
     if job["state"] in FINAL_JOB_STATES:
         out["finished_at"] = job.get("finished_at", record.get("finished_at", utc_now()))
-        out["receipt"] = record.get("receipt")
+        out["receipt"] = slim_receipt(run, record["receipt"]) if run is not None and record.get("receipt") else record.get("receipt")
         out["result"] = job.get("result", {})
         out["ok"] = job.get("ok", False)
         if job.get("code"):
@@ -355,8 +356,9 @@ def poll_job(run: Run, record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> None:
-    """Complete the job's operation record with a full receipt (DCLI-065)."""
+def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any], made: Verification | None = None) -> None:
+    """Complete the job's operation record with a full receipt (DCLI-065). ``made`` is the
+    verification a standard command's worker already did with that command's own read-back."""
     from .writes import Engine as _Engine
 
     job, state = record["_job"], status["state"]
@@ -373,7 +375,9 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Non
     if state == "partial" and change == "applied":
         change = "partial"
     verification = Verification("not_applicable")
-    if execution == "completed" and (change in ("applied", "partial") or persistence == "saved" or delivery == "delivered"):
+    if made is not None and execution == "completed":
+        verification = made
+    elif execution == "completed" and (change in ("applied", "partial") or persistence == "saved" or delivery == "delivered"):
         verification = _job_verification(run, record, status)
     if status.get("_note"):
         verification.notes.insert(0, status["_note"])
@@ -421,12 +425,11 @@ def _job_verification(run: Run, record: dict[str, Any], status: dict[str, Any]) 
 
 def run_write_job(run: Run, record: dict[str, Any]) -> None:
     """In the worker: apply the write with the long deadline, then settle it like any job (DCLI-065)."""
-    from .adapter import BadProtocol, BadReply, CapabilityError, Lost, Unanswered
-    from .jobs import worker_deadline_ms
-
+    if record.get("_argv"):
+        return run_standard_job(run, record)
     request = {**(record.get("_request") or {}), "operation_id": record["operation_id"]}
-    status: dict[str, Any]
-    try:
+
+    def apply() -> Any:
         # The checks that run right before any dispatch run here too (DCLI-057, DSEC-061).
         if request.get("device"):
             run.gate_device(run.fresh_device(request["device"]))
@@ -434,7 +437,71 @@ def run_write_job(run: Run, record: dict[str, Any]) -> None:
             run.gate_session(run.session(request["session"]))
         if not run.backend.has("apply", request.get("session")):
             raise DriverError("E_UNSUPPORTED", "This tool's adapter has no apply capability, so it cannot do this.")
-        facts = run.backend.call("apply", request, worker_deadline_ms(run))
+        return run.backend.call("apply", request, run.write_deadline_ms)
+
+    status, _facts = _job_dispatch(run, apply, strict=True)
+    if status["state"] == "completed":
+        # The read_back_mismatch row of a long write is caused here, in the worker (DVER-030).
+        from .writes import pause_before_read_back
+
+        changes = record.get("_changes") or []
+        note = pause_before_read_back(run, record["operation_id"], record.get("command", ""), status, changes,
+                                      lambda: _job_verification(run, record, status))
+        if note:
+            status["_note"] = note
+    record["_job"]["state"] = status["state"]
+    _settle_job(run, record, status)
+    run.records.save(record)
+
+
+def run_standard_job(run: Run, record: dict[str, Any]) -> None:
+    """In the worker: run a standard write the tool registered as long, such as opening a large
+    project, with the long deadline and that command's own checks and read-back (DCLI-065)."""
+    from .runtime import Run as _Run
+    from .writes import pause_before_read_back
+
+    operation_id = record["operation_id"]
+    call = run.tool.parser.parse(record["_argv"])
+    sub = _Run(run.tool, call, run.env)
+    made: Verification | None = None
+    try:
+        spec = LONG_SPECS[record["command"]](sub, call.command)
+
+        def apply() -> Any:
+            spec.prepare()  # the state checks that refuse a write, right before dispatch (DCLI-057)
+            return spec.apply(operation_id)
+
+        status, facts = _job_dispatch(sub, apply, strict=False)
+        if status["state"] == "completed":
+            changes = record.get("_changes") or []
+            note = pause_before_read_back(sub, operation_id, record["command"], facts, changes,
+                                          lambda: spec.probe(operation_id, facts, changes))
+            try:
+                made = spec.verify(operation_id, facts, changes)
+            except Exception as exc:  # noqa: BLE001 - after dispatch, a failure to verify is not a known outcome
+                made = Verification("incomplete", notes=[f"The read-back could not be done: {type(exc).__name__}: {exc}"])
+            if note:
+                made.notes.insert(0, note)
+            try:
+                status["result"] = spec.result(facts, made)
+            except Exception as exc:  # noqa: BLE001
+                made.notes.append(f"The result could not be read after the write: {exc}")
+        record["_job"]["state"] = status["state"]
+        _settle_job(run, record, status, made)
+        run.records.save(record)
+    finally:
+        sub.close()
+
+
+def _job_dispatch(run: Run, apply: Any, strict: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Make the dispatch in a job's worker and turn what came back into the job's end state.
+    ``strict``: apply reports all three dimensions; other write capabilities report what applies."""
+    from .adapter import BadProtocol, BadReply, CapabilityError, Lost, Unanswered
+
+    status: dict[str, Any]
+    facts: Any = {}
+    try:
+        facts = apply()
     except DriverError as exc:
         status = {"state": "failed", "change": "not_applied", "code": exc.code, "native_message": exc.message}
     except CapabilityError as exc:
@@ -463,18 +530,10 @@ def run_write_job(run: Run, record: dict[str, Any]) -> None:
         else:
             status = {"state": "completed", **{d: facts[d] for d in ("change", "delivery", "persistence", "files", "result",
                                                                        "native_message") if d in facts}}
-    if status["state"] == "completed":
-        # The read_back_mismatch row of a long write is caused here, in the worker (DVER-030).
-        from .writes import pause_before_read_back
-
-        changes = record.get("_changes") or []
-        note = pause_before_read_back(run, record["operation_id"], record.get("command", ""), status, changes,
-                                      lambda: _job_verification(run, record, status))
-        if note:
-            status["_note"] = note
-    record["_job"]["state"] = status["state"]
-    _settle_job(run, record, status)
-    run.records.save(record)
+            if not strict:
+                for dim in ("change", "delivery", "persistence"):
+                    status.setdefault(dim, "not_applicable")
+    return status, facts if isinstance(facts, dict) else {}
 
 
 def job_list(run: Run) -> Result:
@@ -486,7 +545,7 @@ def job_list(run: Run) -> Result:
                 poll_job(run, record)
             except DriverError:
                 pass  # the job keeps its last known state
-    items = [job_view(r) for r in records if state == "all" or r["_job"]["state"] == state]
+    items = [job_view(r, run) for r in records if state == "all" or r["_job"]["state"] == state]
     from .jobs import ReadJobs, read_view, settle_dead_read
 
     for job in ReadJobs(run).all():
@@ -542,7 +601,7 @@ def job_get(run: Run) -> Result:
         if record["_job"]["state"] in FINAL_JOB_STATES or time.monotonic() >= end:
             break
         time.sleep(min(0.5, max(0.0, end - time.monotonic())))
-    view = job_view(record)
+    view = job_view(record, run)
     if view["state"] not in FINAL_JOB_STATES:
         view["poll_after_ms"] = POLL_AFTER_MS
     return Result(view, [".receipt.notes", ".receipt.target.label", ".receipt.observed", ".result"])
@@ -575,15 +634,17 @@ class _Lifecycle(WriteSpec):
 class SessionOpen(_Lifecycle):
     def prepare(self) -> None:
         self.where = Where("session")
-        path = self.call.values.get("--doc")
-        self.bound = {"inputs": {"path": path}}
-        self.echo = {"path": path} if path else {}
-        self.action = f"Start a new instance of {self.run.tool.application}" + (f" and open {path}." if path else ".")
+        path, kind = self.call.values.get("--doc"), self.call.values.get("--kind")
+        self.bound = {"inputs": {"path": path, "kind": kind}}
+        self.echo = {k: v for k, v in (("path", path), ("kind", kind)) if v}
+        self.action = f"Start a new instance of {self.run.tool.application}" + (f" for {kind} documents" if kind else "") + (
+            f" and open {path}." if path else ".")
 
     def apply(self, operation_id: str, child: int | None = None) -> dict[str, Any]:
         request: dict[str, Any] = {"operation_id": operation_id}
-        if self.call.values.get("--doc"):
-            request["path"] = self.call.values["--doc"]
+        for flag, key in (("--doc", "path"), ("--kind", "kind")):
+            if self.call.values.get(flag):
+                request[key] = self.call.values[flag]
         return dispatch(self.run, "open_session", request)
 
     def verify(self, operation_id: str, facts: dict[str, Any], changes: list[dict[str, Any]], child: int | None = None) -> Verification:
@@ -1161,3 +1222,10 @@ class PluginRemove(PluginInstall):
         return Verification("passed", observed)
 
 
+
+
+# The standard writes a tool may register as long jobs (contract ``jobs.standard_long``, DCLI-065).
+LONG_SPECS: dict[str, type[WriteSpec]] = {
+    "session open": SessionOpen, "session close": SessionClose, "doc create": DocCreate, "doc open": DocOpen,
+    "doc save": DocSave, "doc save-as": DocSaveAs, "doc close": DocClose,
+}

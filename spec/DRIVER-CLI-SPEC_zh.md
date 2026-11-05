@@ -361,7 +361,7 @@
 <!-- contract:shared_flags -->
 | 参数 | 取值 | 含义 |
 |---|---|---|
-| `--limit` | `<n>` | 每页条数。帮助里写明默认值和最大值；超过最大值时返回 `E_USAGE`，不悄悄调低 |
+| `--limit` | `<n>` | 每页条数：默认 20，最多 100，所有列表都一样，领域命令的列表也是；这两个值由运行时掌握。超过最大值时返回 `E_USAGE`，不悄悄调低 |
 | `--offset` | `<n>` | 本页的起始位置 |
 | `--query` | `<text>` | `search` 要找的内容 |
 | `--sort` | `<field>` | 列表按哪个字段排序 |
@@ -415,7 +415,7 @@
 
 ### DCLI-029 命令登记
 
-每个命令都必须先登记才能运行。内置命令和标准命令由运行时登记；每个领域命令由工具作者登记。登记包括以下字段：
+每个命令都必须先登记才能运行。内置命令和标准命令由运行时登记；每个领域命令由工具作者登记，软件要花一分钟以上的标准写命令由工具作者列进 `long_commands`（DCLI-065）。登记包括以下字段：
 
 <!-- contract:registration_fields -->
 | 字段 | 内容 |
@@ -464,7 +464,7 @@
 | `context` | — | 本地状态，不联网（DCLI-032） |
 | `doctor` | — | 健康检查（DCLI-033） |
 | `changelog` | `--since <version>` | 来自内置 CHANGELOG 的发布说明（DCLI-034） |
-| `operation get` | `--id` | 一条操作记录（DCLI-035） |
+| `operation get` | `--id`、`--output` | 一条操作记录（DCLI-035） |
 | `operation list` | `--state`、`--batch`、`--limit`、`--offset` | 操作记录，按时间倒序（DCLI-035） |
 | `operation resolve` | `--id`、`--outcome`、`--evidence` | 读回目标，查清结果未知的写操作；或登记 Agent 查到的结果（DCLI-035） |
 | `update` | `--check`、`--target-version <v>`、`--allow-downgrade` | 自更新（DCLI-070） |
@@ -535,7 +535,7 @@
 
 ### DCLI-035 操作记录命令
 
-- `operation get --id <id>` 必须返回一条操作记录。
+- `operation get --id <id> [--output <path>]` 必须返回一条操作记录。带 `--output` 时，把整条记录连同写操作生成的每个文件写进那个文件（DCLI-061）。
 - `operation list [--state <state>] [--batch <id>] [--limit <n>] [--offset <n>]` 必须按时间倒序列出操作记录。`--batch` 取一个批量操作的操作 ID，只列出它的各项（DCLI-064）。
 - `operation resolve --id <id>` 查清结果未知的写操作（DCLI-063）。不带 `--outcome` 时，运行时必须经适配层读回目标，与预览比较，把查到的结果连同 `resolved_by: read_back` 和读回的值一起登记并返回。
 - `operation resolve --id <id> --outcome applied|not_applied|partial --evidence <text>` 登记 Agent 用其他办法查到的结果，记为 `resolved_by: agent`。只有目标无法读回时才允许这样做；否则必须以 `E_VALIDATION` 拒绝。
@@ -722,7 +722,7 @@
 | `delete` | 对象已不存在 |
 | `import` | 导入的对象都在，按数量核对 |
 | `artifact` 类写操作，如 `export`、`render`、`doc save-as` | 生成的每个文件都存在，并记下路径、大小和 SHA-256；可以有多个文件。回执不对软件自己写出的字节内容作任何声明 |
-| 会话模式下的 `doc save` | 重新读取保存后的文件，在其中找到被改的字段；无法这样读取时，验证为 `incomplete` |
+| 会话模式下的 `doc save` | 重新读取保存后的文件，在其中找到被改的字段。软件要把文档关掉再打开才能读这个文件时，适配层改为从实例读这些字段，并确认磁盘上的文件确实变了。两样都做不到时，验证为 `incomplete` |
 | 长任务 | 任务结束时核实它的产出（DCLI-065） |
 
 - 既新建文件、又修改文档的写操作，必须两边都核实：文件存在，被改的字段也读回一致。两边都通过，验证才是 `passed`。
@@ -778,9 +778,9 @@
 - `observed`：读回的值，每个键一项：适配层 `read_back` 报告的每个目标键（DCLI-260）；生成的每个文件，键为 `file:///<path>`，带 `path`、`bytes` 和 `sha256`；没有目标对象的命令，键为对象名，如 `session`、`document` 或 `plugin`；
 - `mismatched`：每个不一致的字段，写成 `<field>@<key>`，`<key>` 是它在 `observed` 里的键；
 - `session` `{id, generation}` 和 `document` `{id, revision, dirty}`；
-- `failed_stage`：失败或中断时所在的阶段：`apply`、`deliver`、`persist` 或 `verify`；
 - `notes`：补充说明；
-- `simulated: true`：结果来自模拟设备时带上（DSEC-062）。
+- `simulated: true`：结果来自模拟设备时带上（DSEC-062）；
+- `more_files` `{count, command}`：写入生成的文件多于契约的 `receipt.listed_files`（10 个）时带上。`observed` 只保留这么多个，缺失的文件排在前面；`command` 是把整条记录写进文件的 `operation get --output` 命令（DCLI-008）。
 
 <!-- contract:receipt_dimensions -->
 | 维度 | 取值 |
@@ -857,6 +857,8 @@
 
 - 由软件运行：适配层的 `apply` 在软件里启动工作并报告任务，`job_status` 报告它的状态（DCLI-260）。
 - 由运行时运行：命令登记了 `long: true`（DCLI-029）。调用做完全部检查，记下任务，启动一个后台进程，然后立即返回。后台进程就是工具自己的程序，以 `job get --job <id>` 和环境变量 `<PREFIX>_JOB_WORKER=<id>` 再启动一次，脱离这次调用，不弹窗口。它调用适配层时不受 60 秒限制，最长为契约里的 `jobs.worker_max_seconds`，并把结果记在状态目录里。工具作者不用写任何长任务代码。
+
+可能超过一分钟的标准写命令，比如打开大工程的 `doc open`、关闭退出很慢的软件的 `session close`，工具把它列进 `long_commands`（DCLI-029）后，也按同样的方式运行；能列的标准写命令见契约的 `jobs.standard_long`。命令自己的检查在后台进程里、派发前再做一遍，工作结束后做命令自己的读回；它的结果，比如 `session open` 新开的会话，随 `job get` 返回。
 
 写操作与读操作：
 
@@ -1197,9 +1199,10 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 | `unresponsive` | 连接还在，但实例 2 秒内没有回复；`since_at` 说明从何时起 | `E_BUSY`，可重试；保证没有派发 |
 | `blocked` | 有弹窗、许可窗口等需要人处理 | `E_HUMAN_REQUIRED`，附弹窗标题（不可信内容）和恢复命令 |
 | `lost` | 发现文件和存活的进程都在，但连不上（DCLI-278） | `E_BACKEND_UNAVAILABLE`；已派发的写操作记为结果未知 |
+| `unreachable` | 进程在运行，但工具驱动不了它，比如软件只让工具连上一个实例时的第二个实例 | `E_BACKEND_UNAVAILABLE`；什么都没有派发 |
 | `closed` | 进程已结束 | 会话 ID 失效，`E_NOT_FOUND` |
 
-标准的只读命令 `session list`、`session get`、`doc list`、`doc get`、`device list`、`device get`、`job list` 和 `job get` 必须把状态作为数据返回，禁止因为状态而失败。停止命令在 `lost` 和 `closed` 之外的所有状态下都执行（DSEC-018）。
+标准的只读命令 `session list`、`session get`、`doc list`、`doc get`、`device list`、`device get`、`job list` 和 `job get` 必须把状态作为数据返回，禁止因为状态而失败。停止命令在 `lost`、`unreachable` 和 `closed` 之外的所有状态下都执行（DSEC-018）。
 
 为什么：每种状态的反应都固定，软件忙或被弹窗挡住时，调用不会一直挂着；Agent 也总能看到状态。
 检查：🤖 驱动一致性测试 D04、D05、D21 和 D22。
@@ -1213,7 +1216,7 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-206 打开和关闭会话
 
-`session open` 必须启动新实例并返回它的会话 ID。`session close` 必须拒绝关闭有未保存修改的实例，返回 `E_CONFLICT`，`conflict` 为 `unsaved_changes`。关闭不是本工具启动的实例（`owned: false`）属于危险级（DCLI-051）。适配层没有 `open_session` 或 `close_session` 能力时，对应的命令返回 `E_UNSUPPORTED`（DCLI-260）。
+`session open` 必须启动新实例并返回它的会话 ID。软件对某些种类的文档用单独的程序时，`--kind` 指明种类，由适配层启动那个程序。`session close` 必须拒绝关闭有未保存修改的实例，返回 `E_CONFLICT`，`conflict` 为 `unsaved_changes`。关闭不是本工具启动的实例（`owned: false`）属于危险级（DCLI-051）。适配层没有 `open_session` 或 `close_session` 能力时，对应的命令返回 `E_UNSUPPORTED`（DCLI-260）。
 
 为什么：关闭会丢掉未保存的工作，而不是本工具启动的实例里可能有人正在做的工作。
 检查：👀 评审行为矩阵（DVER-030）。

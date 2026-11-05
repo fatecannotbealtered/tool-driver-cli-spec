@@ -21,7 +21,7 @@ from .world import Close, Hang, HostError, World, utc_now
 
 _HANG = object()
 _CLOSE = object()
-_LIVE = ("starting", "ready", "busy", "blocked", "unresponsive")
+_LIVE = ("starting", "ready", "busy", "blocked", "unresponsive", "unreachable")
 
 
 class FakeHost:
@@ -256,7 +256,7 @@ class FakeHost:
             "reset": lambda: w.reset(p.get("config"), p.get("commands")),
             "fault": lambda: w.add_fault(p["rule"]),
             "clear_faults": lambda: w.faults.clear(),
-            "set_session": lambda: w.set_session(p["session"], p["state"], p.get("title"), p.get("action", "dismiss_dialog")),
+            "set_session": lambda: w.set_session(p["session"], p["state"], p.get("title"), p.get("action", "dismiss_dialog"), p.get("knowledge")),
             "restart_session": lambda: w.restart_session(p["session"]),
             "add_session": lambda: {"session": w.add_session(p.get("session"))},
             "set_device": lambda: w.set_device(p["device"], p["state"]),

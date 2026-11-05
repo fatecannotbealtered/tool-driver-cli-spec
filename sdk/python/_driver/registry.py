@@ -42,8 +42,8 @@ class Flag:
     output: bool = False
     coordinate_system: str | None = None
     choices: tuple[str, ...] | None = None  # runtime commands only
-    maximum: int | None = None  # runtime commands only
-    default: Any = None  # runtime commands only
+    maximum: int | None = None  # set by the runtime, never registered
+    default: Any = None  # set by the runtime, never registered
     runtime: bool = False  # added by the runtime, never an input of the adapter
     schema: dict[str, Any] | None = None  # the JSON Schema of a json flag's value
 
@@ -296,6 +296,12 @@ def _domain_flag(spec: dict[str, Any], contract: Contract, where: str) -> Flag:
         raise RegistrationError(f"{where}: flag {name} has a schema exactly when its type is json (DCLI-026)")
     if schema is not None and (not isinstance(schema, dict) or schema.get("type") not in ("object", "array")):
         raise RegistrationError(f"{where}: the schema of flag {name} is a JSON Schema of type object or array")
+    if name == "--limit":
+        # Every list pages the same way, domain lists included: the runtime keeps the default
+        # and the maximum, so a page always fits the response (DCLI-006, DCLI-026).
+        shared = next(f for f in contract["shared_flags"] if f["flag"] == "--limit")
+        return Flag(name=name, type=kind, summary=f"Items per page; default {shared['default']}, at most {shared['maximum']}.",
+                    maximum=shared["maximum"], default=shared["default"])
     return Flag(
         name=name, type=kind, summary=spec.get("summary", ""), required=bool(spec.get("required")),
         quantity=quantity, secret=bool(spec.get("secret")), output=bool(spec.get("output")),

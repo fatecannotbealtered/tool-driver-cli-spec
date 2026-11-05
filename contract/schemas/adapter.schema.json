@@ -27,6 +27,7 @@
           "properties": {
             "operation_id": {"$ref": "#/$defs/operation_id"},
             "path": {"description": "A document to open in the new instance.", "type": "string", "minLength": 1},
+            "kind": {"description": "The kind of document the instance is for; the adapter starts the program that handles it.", "type": "string", "minLength": 1},
             "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
           }
         },
@@ -267,6 +268,7 @@
             },
             "can_apply": {"type": "boolean"},
             "blocked_by": {"type": "array", "items": {"type": "string"}},
+            "knowledge": {"description": "Knowledge entries that tell how to clear what blocks the change (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
             "tier_raises": {
               "description": "Conditions the command registers in tier_when that hold for this call; each makes the call as strict as its tier (DCLI-052).",
               "type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}

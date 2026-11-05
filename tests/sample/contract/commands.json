@@ -70,7 +70,8 @@
         },
         {
           "name": "--limit",
-          "type": "integer"
+          "type": "integer",
+          "summary": "Items per page; default 20, at most 100."
         },
         {
           "name": "--offset",

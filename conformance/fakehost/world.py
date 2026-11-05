@@ -431,6 +431,8 @@ class World:
                 raise Close()
             if inst.state == "closed":
                 raise HostError("E_NOT_FOUND", f"instance {inst.id} is closed")
+            if inst.state == "unreachable":
+                raise HostError("E_BACKEND_UNAVAILABLE", f"instance {inst.id} runs, but cannot be driven")
             if not halt and inst.state in ("busy", "starting"):
                 raise HostError("E_BUSY", "the main thread is busy", retry_after_ms=500)
             if not halt and inst.state == "blocked":
@@ -860,12 +862,15 @@ class World:
 
     # ------------------------------------------------------------------ control (tests only)
 
-    def set_session(self, session: str, state: str, title: str | None = None, action: str = "dismiss_dialog") -> None:
+    def set_session(self, session: str, state: str, title: str | None = None, action: str = "dismiss_dialog",
+                    knowledge: list[str] | None = None) -> None:
         with self.lock:
             inst = self._instance(session)
             inst.state = state
             inst.since_at = utc_now()
             inst.blocker = {"action": action, "title": title or "Fake dialog"} if state == "blocked" else None
+            if inst.blocker is not None and knowledge:
+                inst.blocker["knowledge"] = list(knowledge)  # the entries that tell how to handle it (DSKL-124)
 
     def restart_session(self, session: str) -> None:
         with self.lock:

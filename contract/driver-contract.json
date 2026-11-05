@@ -157,7 +157,7 @@
     {"flag": "--dangerous", "value": null}
   ],
   "shared_flags": [
-    {"flag": "--limit", "value": "<n>"},
+    {"flag": "--limit", "value": "<n>", "default": 20, "maximum": 100},
     {"flag": "--offset", "value": "<n>"},
     {"flag": "--query", "value": "<text>"},
     {"flag": "--sort", "value": "<field>"},
@@ -328,7 +328,6 @@
       "mismatched",
       "session",
       "document",
-      "failed_stage",
       "notes"
     ],
     "dimensions": {
@@ -338,8 +337,8 @@
       "persistence": ["not_applicable", "unchanged", "saved", "partial", "unknown"],
       "verification": ["not_applicable", "not_run", "passed", "failed", "incomplete", "deferred"]
     },
-    "failed_stages": ["apply", "deliver", "persist", "verify"],
-    "optional_keys": ["simulated"]
+    "optional_keys": ["simulated", "more_files"],
+    "listed_files": 10
   },
   "derivation": [
     {
@@ -407,6 +406,7 @@
     "max_wait_seconds": 600,
     "worker_max_seconds": 21600,
     "worker_env": "<PREFIX>_JOB_WORKER",
+    "standard_long": ["session open", "session close", "doc create", "doc open", "doc save", "doc save-as", "doc close"],
     "states": ["planned", "running", "blocked", "completed", "failed", "partial", "unknown", "cancelled"],
     "result_job_keys": ["id", "state", "poll"]
   },
@@ -433,6 +433,7 @@
     {"state": "unresponsive", "error": "E_BUSY"},
     {"state": "blocked", "error": "E_HUMAN_REQUIRED"},
     {"state": "lost", "error": "E_BACKEND_UNAVAILABLE"},
+    {"state": "unreachable", "error": "E_BACKEND_UNAVAILABLE"},
     {"state": "closed", "error": "E_NOT_FOUND"}
   ],
   "session_read_deadline": {
@@ -453,7 +454,7 @@
     {"path": "context", "flags": []},
     {"path": "doctor", "flags": []},
     {"path": "changelog", "flags": ["--since"]},
-    {"path": "operation get", "flags": ["--id"]},
+    {"path": "operation get", "flags": ["--id", "--output"]},
     {"path": "operation list", "flags": ["--state", "--batch", "--limit", "--offset"]},
     {"path": "operation resolve", "flags": ["--id", "--outcome", "--evidence"]},
     {"path": "update", "flags": ["--check", "--target-version", "--allow-downgrade"]}

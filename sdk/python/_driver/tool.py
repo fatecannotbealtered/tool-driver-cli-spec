@@ -23,7 +23,7 @@ from typing import Any, Mapping, TextIO
 from . import builtin, knowledge, standard
 from .args import Call, Meta, Parser
 from .contract import Contract
-from .errors import DriverError
+from .errors import DriverError, usage
 from .output import Envelopes, Result, dumps, render_text
 from .registry import Command, RegistrationError, Tiers, domain_command
 from .runtime import Run
@@ -44,6 +44,7 @@ class Tool:
         contract: str | os.PathLike[str] | None = None,
         maturity: dict[str, dict[str, Any]] | None = None,
         plugin_manifest: str | os.PathLike[str] | None = None,
+        long_commands: list[str] | None = None,
     ) -> None:
         self.root = Path(root)
         package = json.loads((self.root / "package.json").read_text(encoding="utf-8"))
@@ -77,6 +78,12 @@ class Tool:
             command.handler = _domain_handler(command)
             self._add(command)
             self.domain.append(command)
+        for path in long_commands or []:
+            # A standard write that takes the application over a minute, such as opening a large
+            # project, runs as a long job in the tool's own worker (DCLI-065).
+            if path not in self.contract["jobs"]["standard_long"] or path not in self.commands:
+                raise RegistrationError(f"long_commands names {path!r}; it takes the offered commands of jobs.standard_long")
+            self.commands[path].long = True
         for path, level in (maturity or {}).items():
             if path not in self.commands or self.commands[path].kind != "standard":
                 raise RegistrationError(f"maturity is declared only for standard commands, not {path!r}")
@@ -143,6 +150,7 @@ class Tool:
                 fmt, pretty = call.format, call.pretty
                 run = Run(self, call, env)
                 run.on_hang = lambda cap, ms, r=run: self._hang(r, cap, ms, out, fmt, pretty, started)
+                _required(call)
                 result = call.command.handler(run)
                 if not call.command.writes:
                     result = _fields(result, call)
@@ -213,6 +221,16 @@ def _after_dispatch(run: Run, cause: DriverError) -> DriverError:
     return DriverError("E_OUTCOME_UNKNOWN", f"The call stopped after the change was sent ({cause.message}); whether it took effect is not known.",
                        dispatch_state="unknown", lookup=lookup,
                        next_action=f"Run `{lookup}` before anything else; never send the write again.")
+
+
+def _required(call: Any) -> None:
+    """A required flag left out is a usage error (DCLI-013). A domain write checks its own,
+    because a batch item in --input may carry the value instead."""
+    command = call.command
+    for flag in command.flags:
+        own = command.kind == "domain" and command.writes and flag.name not in ("--session", "--doc", "--device")
+        if flag.required and flag.name not in call.given and not own:
+            raise usage(f"{command.path} needs {flag.name}.", flag.name)
 
 
 def _domain_handler(command: Command) -> Any:

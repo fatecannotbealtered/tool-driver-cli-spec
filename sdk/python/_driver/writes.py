@@ -25,7 +25,7 @@ from .errors import DriverError, usage
 from .output import Result
 from .records import conflict_locked, expired, expiry, utc_now
 from .registry import Command, Tiers
-from .runtime import READ_DEADLINE_MS, WRITE_DEADLINE_MS, Inputs, Run, Where
+from .runtime import READ_DEADLINE_MS, Inputs, Run, Where
 from .targets import covers, file_key, kind_of, path_of
 
 STATE_STOPS_BATCH = {"E_BUSY", "E_HUMAN_REQUIRED", "E_BACKEND_UNAVAILABLE"}
@@ -244,7 +244,7 @@ def dispatch(run: Run, cap: str, request: dict[str, Any]) -> dict[str, Any]:
     """Call a write capability; errors keep their dispatch state for the receipt."""
     if not run.backend.has(cap, request.get("session")):
         raise DriverError("E_UNSUPPORTED", f"This tool's adapter has no {cap} capability, so it cannot do this.")
-    return run.backend.call(cap, request, WRITE_DEADLINE_MS)
+    return run.backend.call(cap, request, run.write_deadline_ms)
 
 
 def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]], tolerances: dict[str, float]) -> Verification:
@@ -342,6 +342,40 @@ def combine(parts: list[Verification]) -> Verification:
     return out
 
 
+def slim_receipt(run: Run, receipt: dict[str, Any]) -> dict[str, Any]:
+    """A receipt that fits the response: past ``receipt.listed_files`` files, the rest give way
+    to their count and the command that writes them all to a file (DCLI-008, DCLI-057)."""
+    limit = int(run.contract["receipt"]["listed_files"])
+    observed = receipt.get("observed") or {}
+    files = sorted((k for k in observed if is_file_target(k)), key=lambda k: observed[k].get("exists") is not False)
+    if len(files) <= limit:
+        return receipt
+    kept = {k: v for k, v in observed.items() if k not in files[limit:]}
+    command = run.cmd("operation get", [("--id", receipt["operation_id"]), ("--output", "<file>")])
+    return {**receipt, "observed": kept, "more_files": {"count": len(files) - limit, "command": command}}
+
+
+def worker_argv(run: Run) -> list[str]:
+    """The current call as arguments, with the targets the runtime chose, for a worker to run again."""
+    call = run.call
+    assert call is not None
+    argv = call.command.path.split(" ")
+    for flag in ("--session", "--doc", "--device"):
+        value = call.raw.get(flag) or run.resolved.get(flag)
+        if value and call.command.flag(flag):
+            argv += [flag, str(value)]
+    for name in call.given:
+        flag = call.command.flag(name)
+        if name in ("--session", "--doc", "--device") or (name == "--output" and not (flag and flag.output)):
+            continue  # the targets come first; an --output for the full preview is no input
+        if flag is not None and flag.type == "boolean":
+            if call.values.get(name):
+                argv.append(name)
+        else:
+            argv += [name, call.raw[name]]
+    return argv
+
+
 def verify_files(facts: dict[str, Any], changes: list[dict[str, Any]]) -> Verification:
     """Every produced file exists; its size and SHA-256 are recorded (DCLI-057)."""
     paths = [f["path"] for f in facts.get("files", [])]
@@ -406,8 +440,7 @@ class Engine:
                       "blocked_by": list(pv.get("blocked_by", [])) + [f"The target is locked by operation {busy[0]['operation_id']}."]}
         if not pv.get("can_apply", True) and not call.dry_run and not call.confirm:
             raise DriverError("E_CONFLICT", f"The change cannot be applied: {'; '.join(pv.get('blocked_by', []))}.",
-                              conflict="blocked", untrusted=["message"],
-                              next_action="Resolve what blocks it, then run the command again.")
+                              conflict="blocked", untrusted=["message"], **self.blocked_help(pv, "Resolve what blocks it, then run the command again."))
         spec.pending_changes = changes
         binds = self.binds(spec, keys)
         if token_record is not None:
@@ -628,6 +661,8 @@ class Engine:
         if request is not None:
             record["_request"] = request
             record["_tolerances"] = dict(spec.command.tolerances)
+        if spec.command.long and spec.command.kind == "standard":
+            record["_argv"] = worker_argv(self.run)  # its worker runs the same call (DCLI-065)
         record["_changes"] = self.mask(spec, [copy.deepcopy(c) for c in self._all_changes
                                               if c.get("origin", "tool") == "tool"])
         return record
@@ -728,8 +763,16 @@ class Engine:
             raise conflict("token_mismatch", "The call now reaches other targets than the previewed one; nothing was sent.",
                            "Run the command again without --confirm to preview it again.")
         if not pv.get("can_apply", True):
+            help_ = self.blocked_help(pv, "Resolve what blocks it, then run the command again without --confirm.")
             raise conflict("blocked", f"The change can no longer be applied: {'; '.join(pv.get('blocked_by', []))}.",
-                           "Resolve what blocks it, then run the command again without --confirm.", untrusted=["message"])
+                           help_.pop("next_action"), untrusted=["message"], **help_)
+
+    def blocked_help(self, pv: dict[str, Any], then: str) -> dict[str, Any]:
+        """The next action for a blocked preview, through the knowledge entries the adapter named (DSKL-124)."""
+        ids = self.run.knowledge_ids(pv)
+        if ids:
+            return {"knowledge": ids, "next_action": self.run.knowledge_first(ids, then)}
+        return {"next_action": then}
 
     # ------------------------------------------------------------------ dispatch
 
@@ -871,11 +914,9 @@ class Engine:
             out.update(error=error, unspend=code in ("E_BUSY", "E_HUMAN_REQUIRED"), stop=code in STATE_STOPS_BATCH)
         elif ds == "dispatched" and code == "E_NATIVE_FAILURE":
             receipt["outcome"] = _outcome("failed", "rolled_back")
-            receipt["failed_stage"] = "apply"
             out["error"] = error
         elif ds == "dispatched" and code in ("E_VALIDATION", "E_NOT_FOUND", "E_UNSUPPORTED"):
             receipt["outcome"] = _outcome("failed", "not_applied")
-            receipt["failed_stage"] = "apply"
             out["error"] = error
         else:
             # A dialog the change itself opened, or any other error after dispatch: the
@@ -956,11 +997,12 @@ class Engine:
                     latest = run.records.load(operation_id) or record
                     latest["_job"]["worker"] = {**latest["_job"].get("worker", {}), **started}
                     run.records.save(latest)
-            result = self.safe_result(spec, out["facts"], Verification("not_applicable"), receipt)
+            # A job the runtime runs has no result yet; it comes with `job get` (DCLI-065).
+            result = {} if job.get("worker") else self.safe_result(spec, out["facts"], Verification("not_applicable"), receipt)
             result = dict(result) if isinstance(result, dict) else {"value": result}
             result["job"] = {"id": job["id"], "state": job.get("state", "running"),
                              "poll": run.cmd("job get", [("--job", job["id"]), ("--wait", "60s")])}
-            return Result({"operation_id": operation_id, "receipt": receipt, "result": result},
+            return Result({"operation_id": operation_id, "receipt": slim_receipt(run, receipt), "result": result},
                           self._receipt_untrusted(".receipt") + spec.untrusted_result())
         cause = error.code if error is not None else None
         ok, code = self.derive(receipt, cause)
@@ -977,7 +1019,7 @@ class Engine:
         if ok:
             if isinstance(result, dict) and (spec.where.device or {}).get("simulated"):
                 result = {**result, "simulated": True}  # results from a simulated device say so (DSEC-062)
-            return Result({"operation_id": operation_id, "receipt": receipt, "result": result},
+            return Result({"operation_id": operation_id, "receipt": slim_receipt(run, receipt), "result": result},
                           self._receipt_untrusted(".receipt") + spec.untrusted_result())
         raise self.write_error(spec, record, receipt, code or "E_NATIVE_FAILURE", error, out.get("human"))
 

@@ -361,7 +361,7 @@ When a command offers one of these functions, it MUST use this flag name and mea
 <!-- contract:shared_flags -->
 | Flag | Value | Meaning |
 |---|---|---|
-| `--limit` | `<n>` | Items per page. Help states the default and the maximum. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
+| `--limit` | `<n>` | Items per page: by default 20, at most 100, for every list, domain lists included; the runtime keeps both values. Above the maximum the command returns `E_USAGE`; it never lowers the value silently |
 | `--offset` | `<n>` | Start position of the page |
 | `--query` | `<text>` | What `search` looks for |
 | `--sort` | `<field>` | Field that orders a list |
@@ -415,7 +415,7 @@ Check: 🤖 Runtime unit tests (normalization and prefix matching).
 
 ### DCLI-029 Command registration
 
-Every command MUST be registered before it can run. The runtime registers the built-in and standard commands; the tool author registers each domain command. A registration holds these fields:
+Every command MUST be registered before it can run. The runtime registers the built-in and standard commands; the tool author registers each domain command, and lists in `long_commands` the standard writes that take the application more than a minute (DCLI-065). A registration holds these fields:
 
 <!-- contract:registration_fields -->
 | Field | Content |
@@ -464,7 +464,7 @@ The driver runtime implements these commands for every tool. A tool author MUST 
 | `context` | — | Local state, without going online (DCLI-032) |
 | `doctor` | — | Health checks (DCLI-033) |
 | `changelog` | `--since <version>` | Release notes from the bundled CHANGELOG (DCLI-034) |
-| `operation get` | `--id` | One operation record (DCLI-035) |
+| `operation get` | `--id`, `--output` | One operation record (DCLI-035) |
 | `operation list` | `--state`, `--batch`, `--limit`, `--offset` | Operation records, newest first (DCLI-035) |
 | `operation resolve` | `--id`, `--outcome`, `--evidence` | Settles an outcome-unknown write by reading the target back, or records the outcome the Agent found (DCLI-035) |
 | `update` | `--check`, `--target-version <v>`, `--allow-downgrade` | Self-update (DCLI-070) |
@@ -535,7 +535,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-035 Operation commands
 
-- `operation get --id <id>` MUST return one operation record.
+- `operation get --id <id> [--output <path>]` MUST return one operation record. With `--output` it writes the whole record, with every file the write produced, to that file (DCLI-061).
 - `operation list [--state <state>] [--batch <id>] [--limit <n>] [--offset <n>]` MUST list operation records, newest first. `--batch` takes the operation ID of a batch and lists only its items (DCLI-064).
 - `operation resolve --id <id>` settles an outcome-unknown write (DCLI-063). Without `--outcome`, the runtime MUST read the target back through the adapter, compare it with the preview, record the outcome it finds with `resolved_by: read_back` and the observed values, and return them.
 - `operation resolve --id <id> --outcome applied|not_applied|partial --evidence <text>` records an outcome the Agent found by other means, with `resolved_by: agent`. It is allowed only when the target cannot be read back; otherwise it MUST be refused with `E_VALIDATION`.
@@ -722,7 +722,7 @@ What the read-back checks depends on the write:
 | `delete` | The object is absent |
 | `import` | The imported objects are present, by count |
 | An `artifact` write, such as `export`, `render` or `doc save-as` | Every produced file exists, and its path, size and SHA-256 are recorded; several files are allowed. The receipt makes no claim about bytes the application wrote itself |
-| `doc save` in session mode | The saved file is read again and the changed fields are found in it; when the file cannot be read that way, verification is `incomplete` |
+| `doc save` in session mode | The saved file is read again and the changed fields are found in it. When the application can read the file only after the document is closed and opened again, the adapter reads the fields from the instance instead and checks that the file on disk changed. When neither can be done, verification is `incomplete` |
 | A long job | The job's outputs, when it ends (DCLI-065) |
 
 - A write that creates files and also changes a document MUST be verified both ways: the files exist, and the changed fields read back. Verification is `passed` only when both pass.
@@ -778,9 +778,9 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 - `observed`: the values read back, one entry per key: each target key the adapter's `read_back` reports (DCLI-260); each produced file under `file:///<path>`, with `path`, `bytes` and `sha256`; or, for a command with no target object, the object's name, such as `session`, `document` or `plugin`;
 - `mismatched`: each field that does not match, written `<field>@<key>`, where `<key>` is its key in `observed`;
 - `session` `{id, generation}` and `document` `{id, revision, dirty}`;
-- `failed_stage`: where the write failed or was interrupted: `apply`, `deliver`, `persist` or `verify`;
 - `notes`: extra remarks;
-- `simulated: true` when the result comes from a simulated device (DSEC-062).
+- `simulated: true` when the result comes from a simulated device (DSEC-062);
+- `more_files` `{count, command}` when the write produced more files than the contract's `receipt.listed_files` (10): `observed` keeps that many, missing files first, and `command` is the `operation get --output` call that writes the whole record to a file (DCLI-008).
 
 <!-- contract:receipt_dimensions -->
 | Dimension | Values |
@@ -857,6 +857,8 @@ A long job runs in one of two places:
 
 - The application runs it: the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
 - The runtime runs it: the command is registered with `long: true` (DCLI-029). The call does every check, records the job and starts a worker, then returns at once. The worker is the tool's own program, started again with `job get --job <id>` and the variable `<PREFIX>_JOB_WORKER=<id>`, detached from the call and with no window. It makes the adapter call without the 60-second limit, up to `jobs.worker_max_seconds` in the contract, and records the outcome in the state directory. The tool author writes no job code.
+
+A standard write that can take more than a minute, such as `doc open` of a large project or `session close` of an application that takes long to quit, runs the same way when the tool lists it in `long_commands` (DCLI-029); the contract's `jobs.standard_long` names the standard writes that may be listed. The command's own checks run again in the worker right before dispatch, its own read-back runs when the work ends, and its result, such as the new session of `session open`, comes with `job get`.
 
 Writes and reads:
 
@@ -1197,9 +1199,10 @@ Writes, and reads that need the application's main thread, MUST react to each se
 | `unresponsive` | Connected, but the instance gave no reply within 2 seconds; `since_at` says since when | `E_BUSY`, retryable; nothing was dispatched |
 | `blocked` | A dialog, license window or similar needs a person | `E_HUMAN_REQUIRED` with the dialog title (untrusted) and the resume command |
 | `lost` | A discovery file and a live process exist, but the connection fails (DCLI-278) | `E_BACKEND_UNAVAILABLE`; writes already dispatched are recorded as outcome unknown |
+| `unreachable` | The process runs, but the tool cannot drive it, such as a second instance when the application lets a tool reach only one | `E_BACKEND_UNAVAILABLE`; nothing was dispatched |
 | `closed` | The process has ended | The session ID is no longer valid; `E_NOT_FOUND` |
 
-The standard observe commands `session list`, `session get`, `doc list`, `doc get`, `device list`, `device get`, `job list` and `job get` MUST return the state as data and MUST NOT fail because of it. Halt commands run in every state but `lost` and `closed` (DSEC-018).
+The standard observe commands `session list`, `session get`, `doc list`, `doc get`, `device list`, `device get`, `job list` and `job get` MUST return the state as data and MUST NOT fail because of it. Halt commands run in every state but `lost`, `unreachable` and `closed` (DSEC-018).
 
 Why: Each state has one fixed reaction, so a busy or blocked application never leaves a call hanging, and the Agent can always see the state.
 Check: 🤖 Driver conformance tests D04, D05, D21 and D22.
@@ -1213,7 +1216,7 @@ Check: 🤖 Driver conformance test D22.
 
 ### DCLI-206 Opening and closing sessions
 
-`session open` MUST start a new instance and return its session ID. `session close` MUST refuse to close an instance that has unsaved changes, with `E_CONFLICT` and `conflict` `unsaved_changes`. Closing an instance the tool did not start (`owned: false`) is dangerous (DCLI-051). When the adapter lacks `open_session` or `close_session`, the matching command returns `E_UNSUPPORTED` (DCLI-260).
+`session open` MUST start a new instance and return its session ID. When the application runs a separate program for some kinds of document, `--kind` names the kind and the adapter starts that program. `session close` MUST refuse to close an instance that has unsaved changes, with `E_CONFLICT` and `conflict` `unsaved_changes`. Closing an instance the tool did not start (`owned: false`) is dangerous (DCLI-051). When the adapter lacks `open_session` or `close_session`, the matching command returns `E_UNSUPPORTED` (DCLI-260).
 
 Why: Closing loses unsaved work, and an instance the tool did not start may hold a person's work.
 Check: 👀 Review of the behavior matrix (DVER-030).

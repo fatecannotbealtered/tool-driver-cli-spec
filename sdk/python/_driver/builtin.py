@@ -44,7 +44,8 @@ def commands(tool: Tool) -> list[Command]:
              capabilities=[], examples=["doctor"]),
         make(tool, "changelog", "Release notes from the bundled CHANGELOG.", [Flag("--since", "string", "Only versions newer than this one.")],
              changelog, kind="builtin", schema="changelog.schema.json", capabilities=[], examples=["changelog --since 1.0.0"]),
-        make(tool, "operation get", "One operation record.", [Flag("--id", "string", "The operation ID.", required=True)],
+        make(tool, "operation get", "One operation record.", [Flag("--id", "string", "The operation ID.", required=True),
+             Flag("--output", "path", "Write the whole record, with every produced file, to this file.")],
              operation_get, kind="builtin", schema="operation.schema.json", capabilities=[], examples=["operation get --id op_7mq2xk4v"]),
         make(tool, "operation list", "Operation records, newest first.",
              [Flag("--state", "string", "Only records in this state; all for every state.", choices=states),
@@ -478,8 +479,22 @@ def _record(run: Run, operation_id: str) -> dict[str, Any]:
 
 
 def operation_get(run: Run) -> Result:
+    from .writes import slim_receipt
+
     record = _record(run, run.call.values["--id"])
-    return Result(public(record), _record_untrusted())
+    data = public(record)
+    if run.call.has("--output"):
+        # The whole record, however many files the write produced, goes to the file (DCLI-008).
+        path = run.call.values["--output"]
+        text = json.dumps(data, ensure_ascii=False, indent=1)
+        try:
+            Path(path).write_text(text, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            raise DriverError("E_IO", f"Cannot write {path}: {exc.strerror}.") from None
+        return Result({"operation_id": record["operation_id"], "path": path, "bytes": len(text.encode("utf-8"))})
+    if isinstance(data.get("receipt"), dict):
+        data["receipt"] = slim_receipt(run, data["receipt"])
+    return Result(data, _record_untrusted())
 
 
 def _record_untrusted() -> list[str]:

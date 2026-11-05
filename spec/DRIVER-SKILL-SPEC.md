@@ -677,7 +677,7 @@ Check: 🤖 Driver conformance test D19 covers `knowledge create`, its tier and 
 
 ### DSKL-124 Links from commands and errors
 
-`reference` MUST list the related builtin entries of each command as `related_knowledge`, taken from the command registration (DCLI-029, DCLI-031). When an error has a known remedy in the knowledge base, `error.details.knowledge` MUST list the entry IDs, and `next_action` MUST give the exact `knowledge get` command. For example, when the adapter recognizes a known dialog and the command returns `E_HUMAN_REQUIRED`, the error points to the matching `troubleshooting` entry.
+`reference` MUST list the related builtin entries of each command as `related_knowledge`, taken from the command registration (DCLI-029, DCLI-031). When an error has a known remedy in the knowledge base, `error.details.knowledge` MUST list the entry IDs, and `next_action` MUST give the exact `knowledge get` command. For example, when the adapter recognizes a known dialog and the command returns `E_HUMAN_REQUIRED`, the error points to the matching `troubleshooting` entry. The adapter names the entries in its error, in the `blocker` of a blocked session and in a preview that cannot be applied; the runtime puts them in the error it returns.
 
 Why: The Agent finds the right entry at the moment it needs it, without searching.
 Check: 🤖 `check_project` checks that every `related_knowledge` ID exists; 👀 review checks that known errors point to entries.

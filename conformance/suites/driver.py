@@ -150,6 +150,11 @@ def _busy(out: Outcome, what: str) -> None:
     check(out.details.get("dispatch_state") == "not_started", f"{what}: dispatch_state is not not_started")
 
 
+def _unreachable(out: Outcome, what: str) -> None:
+    check(out.code == "E_BACKEND_UNAVAILABLE", f"{what}: {out.describe()}")
+    check(out.details.get("dispatch_state") == "not_started", f"{what}: dispatch_state is not not_started")
+
+
 def _refused_then_usable(subject: Subject, sample: Sample, bad: Any, good: Any, judge: Any, what: str) -> None:
     """A state that refuses a call, set first before the call and then between the token and
     the confirm; once the state clears, the same token still runs the write (DCLI-055)."""
@@ -182,6 +187,10 @@ def d04(subject: Subject) -> list[str]:
         sample = _std(subject, "doc save")
         _refused_then_usable(subject, sample, lambda c: c.control("set_session", session="fake-1", state="busy"),
                              lambda c: c.control("set_session", session="fake-1", state="ready"), _busy, "on a busy instance")
+        # An instance the tool cannot drive refuses the write and sends nothing (DCLI-204).
+        _refused_then_usable(subject, sample, lambda c: c.control("set_session", session="fake-1", state="unreachable"),
+                             lambda c: c.control("set_session", session="fake-1", state="ready"), _unreachable,
+                             "on an instance the tool cannot drive")
         with Case(subject) as case:
             # The application itself answers busy to the dispatch: nothing began, the token stays usable.
             argv = sample.prepare(case)

@@ -659,7 +659,6 @@ SCHEMA_ENUMS = [
     ("receipt.schema.json", "/$defs/outcome/properties/delivery/enum", lambda c: c["receipt"]["dimensions"]["delivery"]),
     ("receipt.schema.json", "/$defs/outcome/properties/persistence/enum", lambda c: c["receipt"]["dimensions"]["persistence"]),
     ("receipt.schema.json", "/$defs/outcome/properties/verification/enum", lambda c: c["receipt"]["dimensions"]["verification"]),
-    ("receipt.schema.json", "/$defs/receipt/properties/failed_stage/enum", lambda c: c["receipt"]["failed_stages"]),
     ("batch.schema.json", "/properties/summary/required", lambda c: c["batch"]["summary_keys"]),
     ("batch.schema.json", "/properties/items/items/properties", lambda c: c["batch"]["item_keys"]),
     ("objects.schema.json", "/$defs/session/required", lambda c: c["objects"]["session"]),
