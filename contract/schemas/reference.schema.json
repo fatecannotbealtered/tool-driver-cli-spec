@@ -91,7 +91,8 @@
         "default": true,
         "maximum": {"type": "number"},
         "secret": {"type": "boolean"},
-        "coordinate_system": {"$ref": "#/$defs/coordinate_system"}
+        "coordinate_system": {"$ref": "#/$defs/coordinate_system"},
+        "schema": {"type": "object"}
       }
     },
     "command": {
@@ -117,10 +118,14 @@
             "additionalProperties": false,
             "properties": {
               "when": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-              "tier": {"$ref": "preview.schema.json#/$defs/tier"}
+              "tier": {"$ref": "preview.schema.json#/$defs/tier"},
+              "description": {"type": "string", "minLength": 1}
             }
           }
         },
+        "doc_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "long": {"const": true},
+        "verify_after_save": {"const": true},
         "maturity": {"enum": ["draft", "verified", "stable"]},
         "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
         "modes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mode"}},

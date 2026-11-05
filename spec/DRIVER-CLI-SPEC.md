@@ -323,7 +323,7 @@ Check: 🤖 General conformance test R02.
 
 ### DCLI-023 Nouns
 
-A noun MUST be a full English word. The one exception is an abbreviation that is common in the industry or in the application, such as `pcb` or `bom`, which MAY be used. Invented abbreviations such as `sch`, `fab` or `kb` MUST NOT be used. The noun SHOULD be the application's own term, as used in its user interface and manual, because users and Agents use those words.
+A noun MUST be a full English word, or several full words joined by hyphens, such as `forward-annotation` or `cross-section`. The one exception is an abbreviation that is common in the industry or in the application, such as `pcb` or `bom`, which MAY be used. Invented abbreviations such as `sch`, `fab` or `kb` MUST NOT be used. The noun SHOULD be the application's own term, as used in its user interface and manual, because users and Agents use those words.
 
 Why: The Agent maps the user's words to commands; an invented abbreviation breaks that mapping.
 Check: 👀 Review of the command tree.
@@ -425,7 +425,7 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `effects` | Its effects (DCLI-051) |
 | `modes` | The modes it supports (DCLI-201) |
 | `target_kind` | The kind of object it acts on, which becomes the target key's kind (DCLI-028) |
-| `flags` | Every flag, each with its type (`string`, `integer`, `number`, `boolean`, `quantity` or `path`, and `list`, `input` or `duration` for the shared flags of DCLI-026), the unit quantity of a `quantity` flag (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true`, with the type `path`, when it names a file the command creates (DCLI-051) |
+| `flags` | Every flag, each with its type (`string`, `integer`, `number`, `boolean`, `quantity`, `path` or `json`, and `list`, `input` or `duration` for the shared flags of DCLI-026), the `schema` of a `json` flag, the unit quantity of a `quantity` flag (DCLI-080), `secret: true` when it carries a secret (DSEC-040), and `output: true`, with the type `path`, when it names a file the command creates (DCLI-051) |
 | `untrusted_fields` | The output fields that hold untrusted text (DSEC-021) |
 | `adapter_capabilities` | The adapter capabilities it calls (DCLI-260); `reference` lists them |
 | `survey_ids` | The IDs of the capabilities in the capability survey that the command implements (DREPO-061) |
@@ -434,6 +434,17 @@ Every command MUST be registered before it can run. The runtime registers the bu
 | `tolerances` | Per field, how far a read-back value may differ from the preview and still match (DCLI-057) |
 | `default_fields` | The fields a list returns by default (DCLI-007) |
 | `related_knowledge` | The IDs of related knowledge entries (DSKL-124) |
+
+A registration MAY also hold these fields:
+
+| Field | Content |
+|---|---|
+| `tier_when` | Conditions of this command that make a call stricter, each `{when, tier, description}`; the adapter's preview names the ones that hold for a call (DCLI-052) |
+| `doc_kinds` | The kinds of document the command works on, when the application has several, such as `part`, `assembly` and `drawing` (DCLI-210) |
+| `verify_after_save` | `true` when, in session mode, the application shows the change correctly only after the document is saved; `doc save` then verifies it (DCLI-057) |
+| `long` | `true` when the work can take longer than one call may; the runtime then runs it as a long job (DCLI-065) |
+
+A `json` flag takes a structured value, such as a pad table: on the command line, inline JSON or the path of a file that holds it; in an `--input` item, the value itself. Its `schema` is a JSON Schema of type `object` or `array`, and `reference` shows it. A physical number inside the value MUST carry the unit in its key, with the standard unit's suffix, such as `width_mm` (DCLI-081). The runtime checks the top-level type and the adapter checks the rest, answering `E_VALIDATION` when it is wrong.
 
 The runtime MUST reject a registration that breaks these rules, such as a physical parameter without a unit quantity (DCLI-085), and MUST derive the confirmation tier from the registration, never take it from the author (DCLI-052). `reference` is built from the registrations (DCLI-031). `contract/commands.json` in the tool's project MUST be generated from the registrations, and `contract/schemas/commands.schema.json` validates it.
 
@@ -465,9 +476,10 @@ Check: 🤖 General conformance tests R01 and R05.
 
 `reference` MUST describe every command from its registration (DCLI-029): path, summary, flags, output schema, examples, effects, confirmation tier, maturity and evidence, modes, required adapter capabilities, possible error codes and related knowledge entries (DSKL-124). It MUST also return a `driver` block with the supported modes, the application and its supported version range. When a clause lets a tool depart from a default, `reference` MUST show each departure on the command it affects, with the ID of the clause that allows it, in the command's `departures` list.
 
-- `tier` MUST give the confirmation tier for each mode the command supports. A tier that depends on the call MUST be described in `tier_when`, such as `doc close --discard`, closing an instance the tool did not start, or a save-as or export over an existing file.
+- `tier` MUST give the confirmation tier for each mode the command supports. A tier that depends on the call MUST be described in `tier_when`, such as `doc close --discard`, closing an instance the tool did not start, a save-as or export over an existing file, or a condition the command registers itself, with its `description` (DCLI-029).
+- A command that registers `doc_kinds`, `long` or `verify_after_save` MUST show them, so the Agent knows before the call which documents it takes, that it returns a long job, and that its verification waits for the save.
 - Every parameter and output field that holds a coordinate MUST name its `coordinate_system` (DCLI-084).
-- `reference` without flags MUST return only the index, within 8000 characters.
+- `reference` without flags MUST return only the index, within 8000 characters: each command with its path and its one-sentence summary. Limits and conditions belong in the command's own description.
 - `reference --command <path>` MUST return one command, within 6000 characters.
 - `reference --all --output <path>` MUST write the description of every command to that file and return only a summary (DCLI-008).
 
@@ -576,7 +588,8 @@ Every command MUST declare its effects. The effect sets the default confirmation
 | `physical` | A physical action, such as moving a machine axis or switching power on | dangerous | `T2` |
 
 - A command that declares several effects MUST take the strictest confirmation tier among them.
-- Whatever the effect, these operations MUST be dangerous: an irreversible change, discarding unsaved changes, and closing an instance the tool did not start. A command whose change the application cannot take back, such as a delete without undo, MUST declare `irreversible: true` in its registration (DCLI-029); the runtime then makes it dangerous and never guesses.
+- A command that creates a new file as well as changing a document, such as one that adds a board to a project, declares `artifact` with its other effects.
+- Whatever the effect, these operations MUST be dangerous: an irreversible change, discarding unsaved changes, and closing an instance the tool did not start. A change is irreversible when no command of the application or of the tool can set the earlier state back: a delete without undo is irreversible, in file mode too, while a move or a field change, which another call can set back, is not. Such a command MUST declare `irreversible: true` in its registration (DCLI-029); the runtime then makes it dangerous and never guesses.
 - Halt commands declare `lifecycle` and are always direct (DSEC-018).
 
 Why: The confirmation effort follows the risk: changes held in memory run at once, while writes to disk and to the outside world are confirmed.
@@ -592,6 +605,7 @@ Check: 🤖 General conformance test R01 checks that every command declares its 
 
 - The tier follows from the rules of DCLI-051 and is decided by the runtime. A tool MUST NOT lower it (DSEC-003).
 - A direct-tier write whose preview touches a target key beyond those named in its inputs, such as a move that also drags connected tracks, MUST be treated as two-step.
+- A command MAY register its own conditions in `tier_when` (DCLI-029), such as a delete that takes a whole sheet. When one holds for a call, the adapter's preview names it in `tier_raises`, and the runtime MUST make the call as strict as that condition's tier. A condition the command did not register MUST be refused with `E_PROTOCOL`.
 - `reference` MUST show the tier of every write command in every mode (DCLI-031), so the Agent never guesses.
 - When the scope file sets `confirm: always`, every write except a halt command MUST be two-step, direct-tier writes included (DSEC-013, DSEC-018).
 
@@ -638,6 +652,7 @@ Every write builds a preview, in the direct tier too, where the runtime keeps it
 
 - Each change names the target key of the object it changes. Changes the tool did not make are grouped, one item per object.
 - `after` MUST be the value the application will actually store, such as a position snapped to the grid, not the value the Agent asked for; read-back compares with it (DCLI-057).
+- The changes MUST include the direct effects the adapter can foresee, not only the fields the inputs set: a track that joins two nets lists the net it changes, so the person sees it before confirming (DCLI-068).
 - With `--output <path>`, the full preview, with every change, is written to that file, and the response holds the rest of the preview (DCLI-008).
 - The `action` and every `label` are listed in `meta.untrusted` when they contain untrusted text (DCLI-004).
 
@@ -710,6 +725,9 @@ What the read-back checks depends on the write:
 | `doc save` in session mode | The saved file is read again and the changed fields are found in it; when the file cannot be read that way, verification is `incomplete` |
 | A long job | The job's outputs, when it ends (DCLI-065) |
 
+- A write that creates files and also changes a document MUST be verified both ways: the files exist, and the changed fields read back. Verification is `passed` only when both pass.
+- A command registered with `verify_after_save` (DCLI-029) reports verification `deferred` in session mode, with a note that `doc save` verifies it, because the application shows the change correctly only after a save. The next `doc save` of that document MUST read back the deferred changes from the saved document as well, report `E_VERIFY_FAILED` when one does not match, and settle each deferred operation record with its result. The read-back after the save MUST NOT change the document or discard anything.
+
 When anything was applied, saved or delivered, `verification` MUST NOT be `not_applicable`.
 
 Why: A change counts as done only when the tool has seen it in place, compared with what the application was expected to store.
@@ -771,7 +789,7 @@ A write that succeeds MUST return `data` = `{operation_id, receipt, result}`, wh
 | `change` | `not_applicable`, `not_applied`, `applied`, `partial`, `rolled_back`, `unknown` |
 | `delivery` | `not_applicable`, `not_attempted`, `delivered`, `partial`, `rejected`, `unknown` |
 | `persistence` | `not_applicable`, `unchanged`, `saved`, `partial`, `unknown` |
-| `verification` | `not_applicable`, `not_run`, `passed`, `failed`, `incomplete` |
+| `verification` | `not_applicable`, `not_run`, `passed`, `failed`, `incomplete`, `deferred` |
 
 The five dimensions MUST be reported separately and MUST NOT be merged into one success flag.
 
@@ -818,7 +836,7 @@ Check: 🤖 Driver conformance tests D06 and D21.
 
 - A command that acts on several objects MUST take them in one of two forms. Both give one preview and one token for the whole batch.
   - `--ids a,b,c` applies the same values to every object. The runtime MUST remove duplicates and keep the input order.
-  - `--input <file|->` with `{"items": [{...}, ...]}` gives each object its own values, such as 20 parts moved to 20 positions. Each item names its object with `id`; two items for the same object MUST return `E_USAGE`.
+  - `--input <file|->` with `{"items": [{...}, ...]}` gives each object its own values, such as 20 parts moved to 20 positions. Each item names its object with `id`; two items for the same object MUST return `E_USAGE`. An item of a `create` command MAY omit `id`: it makes a new object, and the adapter's preview gives it a target key.
 - An empty list MUST return `E_USAGE`. When the preview shows that any object cannot run (`can_apply: false`), the whole batch MUST NOT run. The batch locks all its targets first (DCLI-060).
 - The batch has its own operation ID, and each object is a child operation with its own record and receipt (DCLI-059).
 - A batch that succeeds MUST return `data` = `{operation_id, items, summary}`. Each item is compact, `{target, operation_id, ok, code}`, and a skipped object is `{target, ok: false, skipped: true}`; the full receipt of an item comes from `operation get --id <operation_id>`. `summary` is `{total, succeeded, failed, unknown, skipped}`. When the batch does not fully succeed, `error.details.batch` holds the same object.
@@ -835,8 +853,17 @@ Check: 🤖 Driver conformance tests D06, D08 and D24; runtime unit tests.
 
 A call that does work MUST return within 60 seconds. Work that can take longer MUST become a long job. Waiting is not work: `job get --wait` may wait longer (DCLI-220).
 
-- Submitting a job is a normal write (DCLI-050), usually a command with the verb `run` (DCLI-022). Its receipt reports `execution: completed` and `change: not_applicable`, because what it did was start the job. `data.result.job` MUST be `{id, state, poll}`, where `poll` is the exact command that checks the job, such as `job get --job 7 --wait 60s`.
-- The target stays locked until the job ends (DCLI-060).
+A long job runs in one of two places:
+
+- The application runs it: the adapter's `apply` starts the work in the application and reports the job, and `job_status` reports its state (DCLI-260).
+- The runtime runs it: the command is registered with `long: true` (DCLI-029). The call does every check, records the job and starts a worker, then returns at once. The worker is the tool's own program, started again with `job get --job <id>` and the variable `<PREFIX>_JOB_WORKER=<id>`, detached from the call and with no window. It makes the adapter call without the 60-second limit, up to `jobs.worker_max_seconds` in the contract, and records the outcome in the state directory. The tool author writes no job code.
+
+Writes and reads:
+
+- Submitting a write job is a normal write (DCLI-050), usually a command with the verb `run` (DCLI-022). Its receipt reports `execution: completed` and `change: not_applicable`, because what it did was start the job. `data.result.job` MUST be `{id, state, poll}`, where `poll` is the exact command that checks the job, such as `job get --job 7 --wait 60s`. A long write takes one object per call, and a long command takes no secret flag, because the worker never sees a secret.
+- A long read, such as a design rule check of a large board, changes nothing: it needs no scope and no confirmation and has no operation record. Its call returns `data.job` = `{id, state, poll}`; `job get` returns the read's result when the job ends.
+- The target of a write job stays locked until the job ends (DCLI-060).
+- When the worker ends without recording an outcome, a write job ends `unknown` and a read job `failed`.
 - When the job reaches a final state, the runtime MUST complete the job's operation record with a full receipt: the outputs are read back, and every file the job produced is recorded with its size and SHA-256 (DCLI-057). `job get` then returns the job as DCLI-220 sets.
 - A job that ends in `unknown` is settled like any outcome-unknown write, with `operation resolve` (DCLI-063).
 
@@ -878,6 +905,22 @@ A tool MAY offer `doc undo`, which undoes the tool's most recent change. It MUST
 
 Why: A promise the application cannot keep is worse than no promise.
 Check: 👀 Review against the capability survey (DREPO-060).
+
+### DCLI-068 The result shows what the change made
+
+The `result` of a write MUST describe each object the write created or changed as the application now holds it, and the direct effects of the change, so that the Agent knows from this one return whether the change is right. It MUST NOT be only a success flag.
+
+- A track or wire: its end points and width as stored, after snapping; its layer; its net; the pins or other tracks each end connects to; whether an end is left unconnected.
+- A modelling feature: whether it regenerated; its actual dimensions; the references it uses.
+- The result MUST hold only the objects the change touched and their direct effects, not the whole design: for a track joined to `GND`, the net's name, not every member of `GND`.
+- The result holds what the application reports without lengthy computation. A check that takes long, such as a design rule check, MUST be its own `check` command, which the Agent calls when it needs it.
+- An effect the adapter can foresee is a change in the preview (DCLI-054); an effect known only after the change is in the `result`.
+- When the application cannot report an effect, such as the connections of an object, the capability survey MUST say so (DREPO-060), and the result MUST NOT pretend to know it.
+
+Read commands give the same structured view of the design: positions, sizes and connections as data. The Agent checks a change with the result, the receipt and the read commands, never by recognizing a screenshot; renders and screenshots are for people and for purely visual questions, such as whether a drawing looks crowded.
+
+Why: An Agent that must take a screenshot after every line works slowly, pays for every image and still misreads it. A structured result is fast, exact and the same every time.
+Check: 👀 Review of each write command's output schema against the capability survey; the `normal` rows of the behavior matrices show the results (DVER-030).
 
 ## Self-update
 
@@ -1521,6 +1564,7 @@ Check: 👀 Review of the host component.
 - [ ] DCLI-065 Long jobs
 - [ ] DCLI-066 Human required
 - [ ] DCLI-067 Undo and guarantees
+- [ ] DCLI-068 The result shows what the change made
 - [ ] DCLI-070 update is required
 - [ ] DCLI-071 Choosing the version
 - [ ] DCLI-072 Moving the running program aside

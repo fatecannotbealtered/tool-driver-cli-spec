@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .adapter import AdapterStore, Backend, BadProtocol, BadReply, CapabilityError, Lost, Unanswered
-from .args import Call, command_line
+from .args import Call, command_line, quote
 from .errors import NEXT_ACTION, DriverError, usage
 from .records import Locks, Mutex, Records, utc_now
 from .registry import Command
@@ -60,6 +60,7 @@ class Run:
         self.call = call
         self.env = env
         prefix = tool.prefix
+        self.worker = env.get(f"{prefix}_JOB_WORKER")  # set only in the worker of a long job (DCLI-065)
         state = env.get(f"{prefix}_STATE_DIR") or str(Path.home() / f".{tool.name}")
         self.state = StateDir(state)
         self.records = Records(self.state, self.contract["operation"]["retention_days"], self.contract["operation"]["id_prefix"])
@@ -149,12 +150,24 @@ class Run:
         """Turn an error the adapter or a host reported into the runtime's error (DCLI-279)."""
         data = exc.data
         code = data.get("code")
-        if code not in self.contract.errors or code in ("E_AMBIGUOUS", "E_CONFLICT", "E_FORBIDDEN", "E_CONFIRMATION_REQUIRED",
-                                                         "E_USAGE", "E_OUTCOME_UNKNOWN", "E_PARTIAL"):
+        if code not in self.contract["host_protocol"]["allowed_error_codes"]:
             return DriverError("E_PROTOCOL", f"The adapter answered with an error it may not use: {code}.",
                                dispatch_state=dispatch_state)
         extra: dict[str, Any] = {}
         untrusted = []
+        if code == "E_AMBIGUOUS":
+            # The adapter found several objects for one name; the Agent picks from them (DCLI-012).
+            candidates = data.get("candidates")
+            if not isinstance(candidates, list) or len(candidates) < 2 or not all(isinstance(c, dict) for c in candidates):
+                return DriverError("E_PROTOCOL", "The adapter answered E_AMBIGUOUS without at least two candidates.",
+                                   dispatch_state=dispatch_state)
+            extra["candidates"] = candidates
+            untrusted.append("details.candidates")
+        if code == "E_CONFLICT":
+            if data.get("conflict") not in self.contract["conflict_values"]:
+                return DriverError("E_PROTOCOL", f"The adapter answered E_CONFLICT with an unknown conflict: {data.get('conflict')}.",
+                                   dispatch_state=dispatch_state)
+            extra["conflict"] = data["conflict"]
         if isinstance(data.get("native_message"), str):
             extra["native_message"] = data["native_message"]
             untrusted.append("details.native_message")
@@ -289,7 +302,25 @@ class Run:
         return [s for s in self.sessions()["items"] if any(self._matches(d, ref) for d in s.get("documents", []))]
 
     def where(self, command: Command, need_document: bool = True) -> Where:
-        """Choose the mode, the session, the document and the device of a call (DCLI-201, DCLI-202)."""
+        """Choose the mode, the session, the document and the device of a call (DCLI-201, DCLI-202),
+        and refuse a document of a kind the command does not work on (DCLI-210)."""
+        where = self._where(command, need_document)
+        doc = where.document
+        if command.doc_kinds and doc is not None:
+            kind = doc.get("kind")
+            if kind is None and where.session is not None and where.session.get("state") != "ready":
+                return where  # the session gate refuses the call first (DCLI-204)
+            if kind is None:
+                raise DriverError("E_PROTOCOL", f"The adapter reports no kind for document {doc.get('id')}, "
+                                                f"and {command.path} works only on {', '.join(command.doc_kinds)}.")
+            if kind not in command.doc_kinds:
+                raise DriverError("E_VALIDATION", f"{command.path} works on {', '.join(command.doc_kinds)}, "
+                                                  f"not on the {kind} {doc.get('path') or doc.get('id')}; nothing was sent.",
+                                  untrusted=["message"],
+                                  next_action=f"Run `{self.tool.name} reference --command {quote(command.path)}` to see what it works on.")
+        return where
+
+    def _where(self, command: Command, need_document: bool = True) -> Where:
         call = self.call
         assert call is not None
         modes = [m for m in command.modes if m in self.tool.modes]
@@ -309,12 +340,20 @@ class Run:
                 self.resolved["--session"] = holders[0]["id"]
                 return Where("session", session=holders[0], document=self._session_doc(holders[0], doc_ref, True))
             if "file" in modes:
-                if holders and command.writes:
+                if holders and any(e in ("change", "persist") for e in command.effects):
                     raise DriverError(
                         "E_CONFLICT", f"Session {holders[0]['id']} has {doc_ref} open; a write to the file would undo its changes.",
                         conflict="file_open_in_session",
                         next_action=f"Run the command on the session with --session {holders[0]['id']}, or close the document there first.",
                     )
+                if holders:
+                    # A write that only makes other files from the document may go ahead; it says
+                    # that it used the file on disk, not the instance's unsaved state (DCLI-201).
+                    open_doc = next((d for d in holders[0].get("documents", []) if self._matches(d, doc_ref)), {})
+                    if open_doc.get("dirty") is not False:
+                        self.notices.append({"type": "document", "severity": "warning",
+                                             "message": f"Session {holders[0]['id']} has {doc_ref} open and may have unsaved changes; "
+                                                        "this call used the file on disk."})
                 return Where("file", document=self._file_doc(doc_ref))
             raise DriverError("E_NOT_FOUND", f"No running instance has the document {doc_ref} open.",
                               next_action=f"Run `{self.tool.name} doc list` to see the open documents.")
@@ -458,7 +497,8 @@ class Run:
         elif "ids" in adapter:
             selected = list(adapter["ids"])
         elif items is not None:
-            selected = [str(i["id"]) for i in items]
+            # An item of a create command may lack an id: it makes a new object (DCLI-064).
+            selected = [str(i["id"]) if "id" in i else f"#{n + 1}" for n, i in enumerate(items)]
         changed = [k for k in adapter if k not in ("id", "ids", "items")] + [k for i in items or [] for k in i if k != "id"]
         if command.verb == "update" and not changed:
             raise usage(f"{command.path} changes only the properties given, and none is given.", None)
@@ -477,6 +517,10 @@ class Run:
                 digest = _file_digest(adapter[key], flag.name)
                 bound[key] = {"path": adapter[key], **digest}
                 echo[key] = digest
+            elif flag.type == "json":
+                # A structured value can be long; the preview names it by size and digest (DCLI-008).
+                text = json.dumps(adapter[key], sort_keys=True, separators=(",", ":")).encode("utf-8")
+                echo[key] = {"sha256": hashlib.sha256(text).hexdigest(), "bytes": len(text)}
         batch = "ids" in adapter or items is not None
         return Inputs(adapter, bound, echo, selected, batch, items, secrets)
 
@@ -518,6 +562,8 @@ class Run:
                     if not isinstance(value, list) or not value or not all(isinstance(v, str) and v for v in value):
                         raise usage(f"{where}: {key} is a non-empty list of IDs.", "--input")
                     out[std] = list(dict.fromkeys(value))
+                elif flag.type == "json" and not isinstance(value, str):
+                    out[std] = json_value(flag, value, f"{where}: {key}")
                 elif isinstance(value, str):
                     out[std] = self._parser_convert(flag, value)
                 elif flag.type in ("integer", "number") and isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -537,12 +583,13 @@ class Run:
             items = []
             seen = set()
             for n, item in enumerate(raw):
-                if not isinstance(item, dict) or "id" not in item:
+                if not isinstance(item, dict) or ("id" not in item and command.verb != "create"):
                     raise usage(f"--input item {n + 1} must be an object with an id.", "--input")
                 normal = norm(item, f"--input item {n + 1}", True)
-                if normal["id"] in seen:
-                    raise usage(f"--input names {normal['id']} twice; give each object once.", "--input")
-                seen.add(normal["id"])
+                if "id" in normal:
+                    if normal["id"] in seen:
+                        raise usage(f"--input names {normal['id']} twice; give each object once.", "--input")
+                    seen.add(normal["id"])
                 items.append(normal)
         adapter = norm(top, "--input", False)
         if items is not None:
@@ -553,6 +600,16 @@ class Run:
         from .args import Parser
 
         return Parser(self.contract, {}, self.tool.name).convert(flag, value)
+
+
+def json_value(flag: Any, value: Any, where: str) -> Any:
+    """A structured value: an object or a list, of the type its flag's schema names (DCLI-026).
+    The adapter checks the content and answers E_VALIDATION when it is wrong."""
+    want = (flag.schema or {}).get("type")
+    kinds = {"object": dict, "array": list}
+    if not isinstance(value, (dict, list)) or (want in kinds and not isinstance(value, kinds[want])):
+        raise usage(f"{where} must be a JSON {want or 'object or array'}.", flag.name)
+    return value
 
 
 def _file_digest(path: str, name: str) -> dict[str, Any]:

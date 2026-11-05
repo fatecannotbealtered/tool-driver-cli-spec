@@ -21,6 +21,9 @@ def command(path: str, summary: str, effects: list[str], modes: list[str], flags
         "output_schema": extra.pop("output_schema", PART), "examples": [f"sample-cli {e}" for e in examples],
         "maturity": "draft", "evidence": [],
     }
+    for name in ("long", "doc_kinds", "verify_after_save", "tier_when"):
+        if name in extra:
+            reg[name] = extra.pop(name)
     assert not extra, extra
     return reg
 
@@ -59,4 +62,10 @@ COMMANDS = [
             ["axis move --device cnc-01 --id x --position 10mm"], target_kind="axis", output_schema={"type": "object"}),
     command("cycle stop", "Stop the running machine cycle.", ["lifecycle"], ["device"], [],
             ["cycle stop --device cnc-01"], target_kind="device", halt=True, output_schema={"type": "object"}),
+    command("route run", "Route a net; the runtime runs the work as a long job.", ["change"], ["session"],
+            [{"name": "--net", "type": "string", "summary": "The net to route."}],
+            ["route run --doc board.fake --net GND"], target_kind="document", output_schema={"type": "object"}, long=True),
+    command("design check", "Check the design rules; the runtime runs the check as a long job.", ["observe"], ["file", "session"],
+            [], ["design check --doc board.fake"], target_kind="document", output_schema={"type": "object"}, long=True,
+            doc_kinds=["board"]),
 ]

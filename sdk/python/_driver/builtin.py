@@ -120,6 +120,8 @@ def describe(tool: Tool, command: Command) -> dict[str, Any]:
             entry["secret"] = True
         if flag.coordinate_system:
             entry["coordinate_system"] = flag.coordinate_system
+        if flag.schema is not None:
+            entry["schema"] = flag.schema
         flags.append(entry)
     out: dict[str, Any] = {"path": command.path, "summary": command.summary, "flags": flags,
                            "output_schema": command.output_schema, "examples": command.examples,
@@ -138,6 +140,12 @@ def describe(tool: Tool, command: Command) -> dict[str, Any]:
     out["formats"] = command.formats
     if command.output_coordinate_system:
         out["output_coordinate_system"] = command.output_coordinate_system
+    if command.doc_kinds:
+        out["doc_kinds"] = command.doc_kinds
+    if command.long:
+        out["long"] = True
+    if command.verify_after_save:
+        out["verify_after_save"] = True
     return out
 
 

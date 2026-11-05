@@ -39,7 +39,7 @@
             "properties": {
               "id": {"$ref": "#/$defs/id"},
               "path": {"type": ["string", "null"]},
-              "dirty": {"type": "boolean"}
+              "dirty": {"type": ["boolean", "null"]}
             }
           }
         },
@@ -63,7 +63,7 @@
       ]
     },
     "document": {
-      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key `untitled:<session-id>/<n>` in `key`, whose number only the adapter knows; a document with a path has no `key`.",
+      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key `untitled:<session-id>/<n>` in `key`, whose number only the adapter knows; a document with a path has no `key`. `kind` names the kind of document when the application has several; `dirty` is null when the application cannot tell whether there are unsaved changes.",
       "type": "object",
       "required": ["id", "path", "revision", "dirty", "readonly"],
       "properties": {
@@ -71,8 +71,9 @@
         "path": {"type": ["string", "null"]},
         "key": {"$ref": "preview.schema.json#/$defs/target_key"},
         "session": {"type": ["string", "null"]},
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
         "revision": {"type": "string", "minLength": 1},
-        "dirty": {"type": "boolean"},
+        "dirty": {"type": ["boolean", "null"]},
         "readonly": {"type": "boolean"},
         "disk": {"enum": ["in_sync", "changed", "missing"]}
       },

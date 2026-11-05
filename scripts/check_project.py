@@ -735,8 +735,10 @@ def plugin_manifest(facts: Facts) -> str | None:
         methods = json.loads(read(path)).get("methods", []) if path.is_file() else []
     except ValueError:
         methods = []
+    # plugin/source/ holds code that is built into the installed files; it is not installed.
     files = {p.relative_to(folder).as_posix(): digest(p) for p in sorted(folder.rglob("*"))
-             if p.is_file() and p.name not in ("manifest.json", "README.md") and "__pycache__" not in p.parts}
+             if p.is_file() and p.name not in ("manifest.json", "README.md") and "__pycache__" not in p.parts
+             and p.relative_to(folder).parts[0] != "source"}
     data = {"version": facts.version, "protocol_version": facts.contract["host_protocol"]["version"],
             "files": files, "methods": methods if isinstance(methods, list) else []}
     return json.dumps(data, indent=2) + "\n"

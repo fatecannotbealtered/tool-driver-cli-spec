@@ -51,13 +51,17 @@
           }
         },
         "create_doc": {
+          "description": "Without session, file mode: the adapter writes the file at path. In a session without path, an untitled document.",
           "type": "object",
-          "required": ["operation_id", "session"],
+          "required": ["operation_id"],
           "additionalProperties": false,
           "properties": {
             "operation_id": {"$ref": "#/$defs/operation_id"},
             "session": {"$ref": "#/$defs/id"},
             "kind": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "template": {"type": "string", "minLength": 1},
+            "overwrite": {"type": "boolean"},
             "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
           }
         },
@@ -215,7 +219,7 @@
         },
         "create_doc": {
           "$ref": "#/$defs/write_facts",
-          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}},
+          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}, "files": {"$ref": "#/$defs/files"}},
           "unevaluatedProperties": false
         },
         "open_doc": {
@@ -249,7 +253,7 @@
           "properties": {"result": true}
         },
         "preview": {
-          "description": "What the change would do. `after` is the value the application will actually store. For a batch, targets lists one target per selected object, in the order of the selection. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
+          "description": "What the change would do. `after` is the value the application will actually store; changes list the direct effects the adapter can foresee, such as two nets joined, as well as the fields set. For a batch, targets lists one target per selected object, in the order of the selection. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
           "type": "object",
           "required": ["changes", "can_apply"],
           "additionalProperties": false,
@@ -262,7 +266,11 @@
               "items": {"allOf": [{"$ref": "preview.schema.json#/$defs/change"}, {"required": ["origin"], "properties": {"origin": {"const": "external"}}}]}
             },
             "can_apply": {"type": "boolean"},
-            "blocked_by": {"type": "array", "items": {"type": "string"}}
+            "blocked_by": {"type": "array", "items": {"type": "string"}},
+            "tier_raises": {
+              "description": "Conditions the command registers in tier_when that hold for this call; each makes the call as strict as its tier (DCLI-052).",
+              "type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+            }
           },
           "if": {"properties": {"can_apply": {"const": false}}},
           "then": {"required": ["blocked_by"], "properties": {"blocked_by": {"minItems": 1}}}

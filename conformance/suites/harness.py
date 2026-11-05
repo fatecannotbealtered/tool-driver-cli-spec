@@ -175,6 +175,7 @@ class Subject:
             "host_component": self.host_component,
             "physical": any("physical" in r["effects"] for r in regs),
             "halt": any(r["halt"] and any(m in ("session", "device") for m in r["modes"]) for r in regs),
+            "long_jobs": any(r.get("long") for r in regs),
         }
 
 

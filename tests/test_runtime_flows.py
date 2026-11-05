@@ -273,3 +273,75 @@ if __name__ == "__main__":
     unittest.main()
 
 
+
+
+class LongJobsAndKinds(unittest.TestCase):
+    """Long jobs run in the tool's own worker (DCLI-065); document kinds (DCLI-210)."""
+
+    def test_a_long_write_returns_a_job_and_the_worker_settles_it(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]
+            self.assertEqual(out.data["receipt"]["outcome"]["change"], "not_applicable")
+            done = case.run("job", "get", "--job", job["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed", done.stdout[:600])
+            self.assertEqual(len(case.applied()), 1)
+
+    def test_a_long_read_needs_no_scope_and_returns_its_result_later(self):
+        with Case(subject()) as case:
+            case.revoke()
+            out = case.run("design", "check", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["job"]
+            done = case.run("job", "get", "--job", job["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertIsNone(done.data["operation_id"])
+            self.assertIn("result", done.data)
+            listed = case.run("job", "list")
+            self.assertIn(job["id"], [j["id"] for j in listed.data["items"]])
+
+    def test_a_document_of_another_kind_is_refused(self):
+        with Case(subject()) as case:
+            made = case.run("doc", "create", "--session", "fake-1", "--kind", "drawing")
+            self.assertTrue(made.ok, made.stdout[:400])
+            doc = made.data["result"]["id"]
+            out = case.run("design", "check", "--session", "fake-1", "--doc", doc)
+            self.assertEqual(out.code, "E_VALIDATION", out.stdout[:400])
+
+
+class ReadBackPause(unittest.TestCase):
+    """The read_back_mismatch row: a change made while the tool waits is found (DVER-030)."""
+
+    def test_a_change_made_during_the_pause_fails_the_verification(self):
+        with Case(subject()) as case:
+            env = {**case.env, f"{case.subject.prefix}_TEST_PAUSE_BEFORE_READ_BACK": "30"}
+            proc = subprocess.Popen(case.subject.argv + MOVE + ["--id", "R1", "--x", "1mm", "--y", "2mm"], cwd=case.subject.project,
+                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=FLAGS)
+            pause = case.state_dir / "pause.json"
+            end = time.monotonic() + 30
+            while not pause.exists():
+                self.assertLess(time.monotonic(), end, "the tool never paused")
+                time.sleep(0.05)
+            self.assertIn("targets", json.loads(pause.read_text(encoding="utf-8")))
+            case.control("edit", document="doc-1", object="R1", field="x_mm", value=99.0)
+            stdout, _ = proc.communicate(timeout=60)
+            env_out = json.loads(stdout.decode("utf-8"))
+            self.assertEqual(env_out["error"]["code"], "E_VERIFY_FAILED", stdout[:600])
+            self.assertFalse(pause.exists())
+
+
+class CreateDocuments(unittest.TestCase):
+    """doc create with --path in file mode makes the file (DCLI-212)."""
+
+    def test_file_mode_creates_the_file_and_verifies_it(self):
+        with Case(subject()) as case:
+            path = str(case.work / "new-board.fake")
+            first = case.run("doc", "create", "--path", path, "--kind", "board")
+            self.assertTrue(first.ok, first.stdout[:400])
+            self.assertTrue(os.path.isfile(path))
+            self.assertEqual(first.data["receipt"]["outcome"]["verification"], "passed", first.stdout[:600])
+            again = case.run("doc", "create", "--path", path)
+            self.assertEqual(again.code, "E_CONFIRMATION_REQUIRED", again.stdout[:400])

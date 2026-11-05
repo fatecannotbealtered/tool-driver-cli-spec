@@ -156,6 +156,53 @@
           "items": {
             "$ref": "knowledge.schema.json#/$defs/id"
           }
+        },
+        "tier_when": {
+          "description": "Conditions of this command that make a call stricter; the adapter's preview names the ones it finds in tier_raises (DCLI-031, DCLI-052).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "when",
+              "tier",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "tier": {
+                "enum": [
+                  "two_step",
+                  "dangerous"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "doc_kinds": {
+          "description": "The kinds of document the command works on, when the application has several (DCLI-210).",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          }
+        },
+        "verify_after_save": {
+          "description": "In session mode the application shows the change correctly only after a save; doc save verifies it (DCLI-057).",
+          "type": "boolean"
+        },
+        "long": {
+          "description": "The work can take longer than one call may; the runtime runs it as a long job (DCLI-065).",
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -207,6 +254,7 @@
             "boolean",
             "quantity",
             "path",
+            "json",
             "list",
             "input",
             "duration"
@@ -229,9 +277,49 @@
         },
         "coordinate_system": {
           "$ref": "reference.schema.json#/$defs/coordinate_system"
+        },
+        "schema": {
+          "description": "The JSON Schema of a json flag's value, an object or an array (DCLI-026).",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "object",
+                "array"
+              ]
+            }
+          }
         }
       },
       "allOf": [
+        {
+          "description": "A json flag, and only a json flag, has a schema.",
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "json"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "schema"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "schema"
+              ]
+            }
+          }
+        },
         {
           "description": "A physical parameter has the type quantity and names its quantity (DCLI-085).",
           "if": {

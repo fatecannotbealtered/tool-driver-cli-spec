@@ -82,6 +82,7 @@ class Document:
     dirty: bool = False
     readonly: bool = False
     disk: str = "in_sync"
+    kind: str = "board"
     tool_changes: list[dict[str, Any]] = field(default_factory=list)
     external_changes: list[dict[str, Any]] = field(default_factory=list)
     history: list[dict[str, Any]] = field(default_factory=list)
@@ -92,7 +93,7 @@ class Document:
 
     def view(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "id": self.id, "path": self.path, "session": self.session,
+            "id": self.id, "path": self.path, "session": self.session, "kind": self.kind,
             "revision": f"r{self.revision}", "dirty": self.dirty, "readonly": self.readonly,
         }
         if self.path is None:
@@ -725,10 +726,28 @@ class World:
         return {"items": [d.view() for d in docs]}
 
     def cap_create_doc(self, params: dict[str, Any]) -> dict[str, Any]:
-        self._gate(params)
-        doc = self._add_document({"untitled": True}, params["session"])
-        return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
-                "persistence": "unchanged", "document": doc.view()}
+        """Untitled in an instance; at a path in an instance (not yet saved); or, without a
+        session, a new file on disk (file mode, DCLI-212)."""
+        session = params.get("session")
+        if session is not None:
+            self._gate(params)
+        path = params.get("path")
+        if path is None and session is None:
+            raise HostError("E_VALIDATION", "a document made without an instance needs a path")
+        if path is not None and Path(path).exists() and not params.get("overwrite"):
+            raise HostError("E_VALIDATION", f"{path} exists")
+        objects = self._load(params["template"]) if params.get("template") else {}
+        spec = {"untitled": True} if path is None else {"path": path, "objects": objects}
+        doc = self._add_document(spec, session, write=session is None)
+        if params.get("kind"):
+            doc.kind = params["kind"]
+        out = {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
+               "persistence": "saved" if session is None else "unchanged", "document": doc.view()}
+        if session is None:
+            out["files"] = [{"path": path}]
+        else:
+            doc.dirty = path is not None
+        return out
 
     def cap_open_doc(self, params: dict[str, Any]) -> dict[str, Any]:
         self._gate(params)
