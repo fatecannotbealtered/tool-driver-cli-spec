@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-CLI-SPEC_zh.md)
 
-> Version 1.0.0 · Clauses DCLI-001 to DCLI-281
+> Version 1.0.1 · Clauses DCLI-001 to DCLI-281
 
 ## How to Read
 
@@ -1511,7 +1511,7 @@ Check: 🤖 Runtime unit tests.
 
 ### DCLI-280 Protocol version
 
-The protocol version MUST follow SemVer and MUST be recorded both in the contract and in the host component's manifest. This specification defines protocol version 1.0.0.
+The protocol version MUST follow SemVer and MUST be recorded both in the contract and in the host component's manifest. This specification defines protocol version 1.1.0.
 
 Why: Both sides can compare versions before they exchange a single write.
 Check: 🤖 Driver conformance test D20.

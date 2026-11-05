@@ -27,7 +27,7 @@
 tool-driver-cli-spec 在 GitHub Releases 上的每个发布包里都有开发用 Skill `build-driver-cli`。它带着你的 Agent 走完下面八步，最后对照规范检查工具。
 
 1. 从 <https://github.com/fatecannotbealtered/tool-driver-cli-spec/releases> 下载 `tool-driver-cli-spec-<version>.zip` 和 `tool-driver-cli-spec-<version>.sha256`。
-2. 校验下载的文件。用 bash 时，`sha256sum -c tool-driver-cli-spec-<version>.sha256` 必须输出 `OK`（macOS 上改用 `shasum -a 256 -c`）。用 PowerShell 时，`Get-FileHash tool-driver-cli-spec-<version>.zip` 输出的值必须与 `.sha256` 文件里的值相同，比较时不区分大小写。值不同就删掉这两个文件，不要使用。
+2. 校验下载的文件：`python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" tool-driver-cli-spec-<version>.zip` 输出的值必须等于 `.sha256` 文件的第一个词。build-driver-cli Skill 做的也是这项校验。值不同就删掉这两个文件，不要使用。
 3. 用 `python -m zipfile -e tool-driver-cli-spec-<version>.zip .` 解压。
 4. 把 `skills/build-driver-cli/` 复制到 Agent 的 Skill 文件夹，比如 Claude Code 的 `~/.claude/skills/`，或者 `~/.agents/skills/`。
 

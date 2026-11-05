@@ -1,7 +1,7 @@
 {
   "$schema": "schemas/contract.schema.json",
   "name": "tool-driver-cli-spec",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "schema_version": "1.0",
   "spec_documents": [
     {
@@ -701,7 +701,7 @@
     ]
   },
   "host_protocol": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "transport": {"windows": "named_pipe", "macos": "unix_socket", "linux": "unix_socket"},
     "discovery_dir": "hosts/",
     "discovery_keys": ["address", "pid", "application", "protocol_version", "plugin_version", "started_at"],
