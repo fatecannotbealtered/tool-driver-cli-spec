@@ -4,6 +4,43 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-05
+
+Changes from rebuilding the Xpedition and Creo tools on the real applications, and a sweep that removes what no command or Agent acts on.
+
+### Added
+
+- Slow standard writes as long jobs (DCLI-065): a tool lists in `long_commands` the standard writes its application takes over a minute for, such as `doc open` of a large project or `session close`; the runtime runs them in its worker with the command's own checks and read-back, and `job get` returns their result, such as the new session.
+- The session state `unreachable`: the process runs but the tool cannot drive it, such as a second instance when the application lets a tool reach only one. Writes are refused with `E_BACKEND_UNAVAILABLE` and nothing is sent (DCLI-204, D04).
+- `session open --kind` starts the program that handles that kind of document (DCLI-206).
+- The adapter names knowledge entries in a blocked preview and in a dialog's `blocker`; the runtime puts them in the error (DSKL-124).
+- A receipt lists at most 10 produced files, missing ones first, and `more_files` gives the count and the `operation get --output` command that writes the whole record (DCLI-061).
+- The sample placeholders `{job}` and `{inputs}` (DVER-002): `run_matrix` fills `{job}` from `--set job=` or a job it starts with `--job-from`; `{inputs}` is the project's `tests/inputs/`, whose files a command only reads need no authorization (DVER-050).
+
+### Changed
+
+- `doc save` may read the changed fields from the instance when the application can read the saved file only after closing and opening the document again; the adapter then checks that the file on disk changed (DCLI-057).
+- Every list, domain lists included, pages with `--limit` default 20 and at most 100, kept by the runtime (DCLI-026).
+- The installed host component lives where the application loads it, one copy per state directory where the application allows (DSEC-050).
+- A coding Agent preparing live runs may draft the scope file and the Authorized Targets; the person saves them (DSEC-011).
+- The host protocol is version 1.2.0: `open_session` takes `kind`, a preview and a blocker may carry `knowledge`.
+- Conformance R04 checks every read with untrusted fields, and a read of a whole document on a document-level field.
+
+### Removed
+
+- From every envelope: `schema_version` and `meta.duration_ms`; `meta` appears only when it holds notices or untrusted paths (DCLI-003, DCLI-004).
+- From previews: the `inputs` echo; the token still binds the inputs (DCLI-054).
+- From `reference`: `effects` and `tier` in the index, and the fixed error list and `departures` in a command; adapter capabilities and evidence appear only in `reference --all` (DCLI-031).
+- From receipts: `failed_stage`. From live records: `envelope_sha256`.
+- From registrations: `adapter_capabilities`, which the runtime derives (a command whose application runs a job registers `jobs: true`), `survey_ids` and `departures` (DCLI-029).
+- `knowledge/index.json`, and the knowledge fields `lang`, `based_on`, `updated_on`, `provider` and `added_at` (DSKL-120 to DSKL-122).
+- The Skill field `metadata.requires` (DSKL-002, DSKL-024), and the COMPATIBILITY sections "Client and Host" and "Host Component Versions" (DREPO-016).
+
+### Fixed
+
+- A required flag left out returns `E_USAGE`, for standard and built-in commands too (`doc open`, `doc get`, `job get`).
+- `run_matrix` ends the whole process tree on a timeout, and writes its files with LF.
+
 ## [1.0.1] - 2026-11-05
 
 Changes from reworking three tools onto 1.0.0. Every change serves the same goals: fast, accurate and steady, and the Agent knows the result of a change from the structured return.
