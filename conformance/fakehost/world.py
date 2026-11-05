@@ -890,12 +890,13 @@ class World:
         with self.lock:
             self.devices[device]["state"] = state
 
-    def edit(self, document: str, obj: str, name: str, value: Any) -> None:
-        """A person changes a document in the application (DCLI-277)."""
+    def edit(self, document: str, obj: str | None, name: str, value: Any) -> None:
+        """A person changes a document in the application (DCLI-277). Without an object, the
+        change is to a field of the document itself, which a read of the whole document returns."""
         with self.lock:
             doc = self._document({"document": document})
             assert doc is not None
-            values = doc.objects.setdefault(obj, {})
+            values = doc.objects.setdefault(obj or "", {})
             before = values.get(name)
             values[name] = value
             doc.dirty = True

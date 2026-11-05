@@ -60,7 +60,7 @@ def build(out_dir: Path) -> tuple[Path, str]:
     zip_path = out_dir / f"{NAME}-{ver}.zip"
     zip_path.write_bytes(buffer.getvalue())
     digest = hashlib.sha256(buffer.getvalue()).hexdigest()
-    (out_dir / f"{NAME}-{ver}.sha256").write_text(f"{digest}  {zip_path.name}\n", encoding="utf-8")
+    (out_dir / f"{NAME}-{ver}.sha256").write_text(f"{digest}  {zip_path.name}\n", encoding="utf-8", newline="\n")
     return zip_path, digest
 
 

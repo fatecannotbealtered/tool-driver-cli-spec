@@ -77,7 +77,7 @@ Check: 👀 Review of the CI workflow: both suites run on every shipped platform
 
 The tool MUST supply one valid sample for each domain write command, as the arguments of the `normal` row of its behavior matrix (DVER-030). A sample is the arguments of one call that the command accepts and that, run with `--dry-run`, returns a valid preview (G02). The general suite runs the samples in its write tests against the fake host (DVER-020). Samples for built-in and standard commands come with the suites. A command at maturity `draft` still needs its sample (DVER-040).
 
-The same arguments serve the fake host and the real application. A sample MUST therefore name its session, document, device and output directory only through these placeholders, which the suites fill from the fake host and the matrix runner fills from the authorized targets (DVER-050). Every row of a behavior matrix MAY use them.
+The same arguments serve the fake host and the real application. A sample MUST therefore name its session, document, device, output directory, job and input files only through these placeholders, which the suites fill from the fake host and the matrix runner fills from the authorized targets (DVER-050). Every row of a behavior matrix MAY use them.
 
 <!-- contract:sample_placeholders -->
 | Placeholder | With the fake host | On the real application |
@@ -86,6 +86,8 @@ The same arguments serve the fake host and the real application. A sample MUST t
 | `{doc}` | A document of the fake host: open in that instance, or a file in file mode | The authorized document or file |
 | `{device}` | The fake host's device | The authorized device |
 | `{dir}` | A new empty temporary directory, for output files | A new empty directory inside an authorized folder |
+| `{job}` | A job the suite started with the sample of a long command | A job started in the same run: `--set job=<id>`, or the job the `normal` row of a long command starts first (`run_matrix --job-from`) |
+| `{inputs}` | The project's `tests/inputs/` folder: files a command only reads, such as a design description | The same folder |
 
 Why: The suite cannot guess valid arguments for a domain command. Without a sample, the confirmation tests cannot run on it, and keeping it in the matrix leaves one place to update.
 Check: 🤖 General conformance test G00.
@@ -372,7 +374,7 @@ Check: 🤖 `check_project` compares the tool version in each record and report 
 
 ### DVER-050 Authorized targets only
 
-Live runs MUST use only the application instances, files, folders and devices that a person has authorized and listed under Authorized Targets in `docs/E2E.md` (DREPO-017). That section is the only list of authorized targets; other documents, such as `AGENTS.md`, point to it. Only a person adds a target to it. Live runs MUST NOT touch any other project, instance or device. The scope file used for live runs MUST grant only these targets (DSEC-012), so the runtime refuses any write outside them.
+Live runs MUST use only the application instances, files, folders and devices that a person has authorized and listed under Authorized Targets in `docs/E2E.md` (DREPO-017). A file that a command only reads from the project's `tests/inputs/` folder (`{inputs}`, DVER-002) is not a target and needs no authorization; everything a command writes MUST still be an authorized target. That section is the only list of authorized targets; other documents, such as `AGENTS.md`, point to it. Only a person adds a target to it. Live runs MUST NOT touch any other project, instance or device. The scope file used for live runs MUST grant only these targets (DSEC-012), so the runtime refuses any write outside them.
 
 Why: A live run makes real changes. On an unauthorized project or a production machine, a test can do real damage. A single list cannot disagree with a second one.
 Check: 🤖 `check_project`: every entry in the `targets` of every record in `docs/evidence/` is listed under Authorized Targets; 👀 review of the scope file used for live runs.

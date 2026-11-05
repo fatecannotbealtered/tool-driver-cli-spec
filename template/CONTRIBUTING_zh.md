@@ -77,7 +77,7 @@ python scripts/spec.py check
 
 **单元测试。** 工具自己的测试放在 `tests/`。每个测试都把 `{{PREFIX}}_STATE_DIR` 设为新建的临时目录，并且要么把 `{{PREFIX}}_SCOPE_FILE` 指向这个目录里的授权范围文件，要么去掉这个变量。
 
-**行为矩阵。** 每个领域命令，以及每个调用适配层能力的标准命令，都在 `tests/matrix/` 里有一个矩阵文件，以命令路径命名，如 `tests/matrix/part-move.json`。文件把每一行各列一次：`normal`、`empty`、`invalid_input`、`not_found`、`ambiguous`、`conflict`、`no_scope`、`busy`、`dialog`、`disconnect`、`unsaved` 和 `read_back_mismatch`。适用的行写明参数和预期的退出码与错误码；不适用的行写 `applies: false` 和原因。写命令 `normal` 行的参数就是它的样例，通用一致性测试会拿它在模拟宿主上运行。参数只通过占位符 `{session}`、`{doc}`、`{device}` 和 `{dir}` 指定会话、文档、设备和输出文件夹。
+**行为矩阵。** 每个领域命令，以及每个调用适配层能力的标准命令，都在 `tests/matrix/` 里有一个矩阵文件，以命令路径命名，如 `tests/matrix/part-move.json`。文件把每一行各列一次：`normal`、`empty`、`invalid_input`、`not_found`、`ambiguous`、`conflict`、`no_scope`、`busy`、`dialog`、`disconnect`、`unsaved` 和 `read_back_mismatch`。适用的行写明参数和预期的退出码与错误码；不适用的行写 `applies: false` 和原因。写命令 `normal` 行的参数就是它的样例，通用一致性测试会拿它在模拟宿主上运行。参数只通过占位符 `{session}`、`{doc}`、`{device}` 和 `{dir}` 指定会话、文档、设备和输出文件夹，通过 `{job}` 指定作业，通过 `{inputs}`（即 `tests/inputs/` 文件夹）指定命令只读取的文件。
 
 **真实软件记录。** `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>` 在真实的 {{application}} 上运行一个矩阵，矩阵用到的每个占位符各给一个 `--set`，占位符名不带花括号，如 `--set doc=<file>`；每个值都必须是授权目标。它把真实软件记录写进 `docs/evidence/`，并填上每一行的实际结果和 `live:` 证据引用。具体步骤见 `docs/E2E_zh.md`。无法按需制造的行，如 `disconnect`，可以标为 `unrunnable` 并写明原因；`normal`、`dialog` 和 `read_back_mismatch` 这三行不可以。`--row read_back_mismatch` 让工具在读回之前等一会儿，其间从外部改掉结果；列出了 `doc_kinds` 的命令，用 `--kind` 在每种文档上各运行一次 `normal` 行。
 
