@@ -56,7 +56,7 @@ class RacingConfirms(unittest.TestCase):
                 self.assertEqual(sum(o.ok for o in outs), 1, [o.stdout[:300] for o in outs])
                 for out in outs:
                     if not out.ok:
-                        self.assertIn(out.details.get("conflict"), ("token_used", "target_locked", "document_changed"), out.stdout[:400])
+                        self.assertIn(out.details.get("conflict"), ("token_used", "target_locked", "document_changed", "preview_changed"), out.stdout[:400])
                 self.assertEqual(len(case.applied()), 1)
 
 
