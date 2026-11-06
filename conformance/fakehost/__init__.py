@@ -19,6 +19,9 @@ or as its own process with ``python -m fakehost --state-dir DIR``.
 The world starts with one instance ``fake-1`` holding document ``doc-1``, one file-mode
 document ``file-1`` and one simulated device ``dev-1``; pass ``config`` to change it, and
 ``host_component: true`` to serve each instance on its own endpoint with a discovery file.
+A document is of the kind it is created or its instance is opened with (``kind``), else of the
+kind ``config["kinds"]`` gives its file extension, such as ``{".prj": "project"}``, else of the
+kind ``set_kind`` set, ``board`` at first.
 
 Control methods, called as ``fake.<name>`` on the main address:
 

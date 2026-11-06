@@ -39,6 +39,7 @@
         "applies": {"type": "boolean"},
         "reason": {"type": "string", "minLength": 1},
         "arguments": {"type": "array", "items": {"type": "string"}},
+        "kind_arguments": {"description": "The normal row's arguments for a document kind whose objects the arguments do not fit, keyed by kind; arguments serve the other kinds (DVER-030).", "type": "object", "minProperties": 1, "additionalProperties": {"type": "array", "items": {"type": "string"}}},
         "expected": {"$ref": "#/$defs/result"},
         "actual": {"$ref": "#/$defs/result"},
         "evidence": {"$ref": "reference.schema.json#/$defs/evidence_ref"},
@@ -51,12 +52,13 @@
         "dependentRequired": {"actual": ["evidence"], "evidence": ["actual"]},
         "allOf": [
           {"if": {"required": ["unrunnable"]}, "then": {"not": {"anyOf": [{"required": ["actual"]}, {"required": ["evidence"]}]}}},
-          {"if": {"properties": {"row": {"enum": ["normal", "dialog", "read_back_mismatch"]}}}, "then": {"not": {"required": ["unrunnable"]}}}
+          {"if": {"properties": {"row": {"enum": ["normal", "dialog", "read_back_mismatch"]}}}, "then": {"not": {"required": ["unrunnable"]}}},
+          {"if": {"not": {"properties": {"row": {"const": "normal"}}}}, "then": {"not": {"required": ["kind_arguments"]}}}
         ]
       },
       "else": {
         "required": ["reason"],
-        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["unrunnable"]}]}
+        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["kind_arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["unrunnable"]}]}
       }
     },
     "result": {

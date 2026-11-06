@@ -75,6 +75,9 @@ class Run:
         self.resolved: dict[str, str] = {}  # target flags filled in by the runtime, for generated commands
         self.dispatching: str | None = None  # the operation whose change may be in flight
         self.on_hang: Any = None  # set by the tool: reports a hung in-process adapter call and exits
+        # Set while a read follows a write whose apply replied: settles it with the note given,
+        # before the hang ends the process (DCLI-278).
+        self.settle_hang: Any = None
         self._sessions: dict[str, Any] | None = None
         self._devices: list[dict[str, Any]] | None = None
 

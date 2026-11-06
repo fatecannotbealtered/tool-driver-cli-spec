@@ -2,7 +2,7 @@
 
 [English](DRIVER-REPO-SPEC.md) | 中文
 
-> 版本 1.0.3 · 条款 DREPO-001 至 DREPO-062
+> 版本 1.0.4 · 条款 DREPO-001 至 DREPO-062
 
 ## 怎么读
 
@@ -182,7 +182,7 @@
 | `docs/E2E.md` | 真实软件验收，含唯一的授权目标清单（DREPO-017、DVER-051） |
 | `docs/E2E_zh.md` | 中文真实软件验收文档 |
 | `docs/evidence/` | 真实软件记录和评测报告（DVER-042、DSKL-043） |
-| `scripts/` | 构建、打包、冒烟测试和检查脚本 |
+| `scripts/` | 构建、打包、冒烟测试和检查脚本；其中一部分是固定副本（DREPO-035） |
 | `tests/` | 工具的测试，包括一致性测试的运行和行为矩阵（DVER-001、DVER-030） |
 | `tests/matrix/` | 每条命令一份行为矩阵（DVER-030） |
 | `.github/workflows/ci.yml` | 合并门槛（DREPO-041） |
@@ -420,7 +420,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 | `platform` | 出包平台：Windows、macOS、Linux | `package.json` 里的平台包（DREPO-043） |
 | `risk` | 工具的风险等级，T0 至 T2（DSEC-002） | `reference` |
 | `maturity` | 工具各领域命令中最低的成熟度（DVER-040） | `reference` |
-| `spec` | 固定的规范版本，如 tool-driver-cli-spec 1.0.3 | `.agent/SPEC_VERSION` |
+| `spec` | 固定的规范版本，如 tool-driver-cli-spec 1.0.4 | `.agent/SPEC_VERSION` |
 | `license` | 工具的许可证 | `package.json` |
 
 驱动 KiCad 10.0、支持文件和会话模式的工具，徽章行大致如下；具体样式由模板定义：
@@ -434,7 +434,7 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 ![platform](https://img.shields.io/badge/platform-Windows_·_macOS_·_Linux-555555)
 ![risk](https://img.shields.io/badge/risk-T1-d29922)
 ![maturity](https://img.shields.io/badge/maturity-verified-8957e5)
-![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.3-0969da)
+![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.4-0969da)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ```
 
@@ -523,12 +523,19 @@ README 必须在一句话定位下面用一行显示下面这些徽章，按此�
 
 ### DREPO-034 只同步，不手改
 
-- 固定副本（DREPO-030 至 DREPO-033）禁止手改。
+- 固定副本（DREPO-030 至 DREPO-033 和 DREPO-035）禁止手改。
 - 升级时，作者运行同步脚本 `sync_spec`，它从同一个规范发布整体替换所有固定副本。
 - 禁止用其他方式固定规范、契约或运行时，如只复制一部分、用子模块或包依赖。
 
 为什么：只有一种固定方式，又按哈希核对，每个工具依据哪套规则、运行哪份运行时就一清二楚，谁的本地修补也藏不进副本里。
 检查：🤖 `check_project` 按 `.agent/SPEC_VERSION` 指明的发布核对每个固定文件的哈希。
+
+### DREPO-035 脚本副本
+
+`scripts/spec.py`、`scripts/build.py`、`scripts/pack.py`、`scripts/platforms.py` 和 `scripts/release_gate.py` 必须是同一个发布里模板的脚本，原样不改。`scripts/smoke.py` 和 `scripts/` 里的其他脚本归作者。
+
+为什么：这些脚本在每个工具里都一样；只有 `sync_spec` 把它们和发布的其余部分一起替换，对它们的修正才能到达工具。
+检查：🤖 `check_project` 核对哈希（DREPO-034）。
 
 ## 版本、CI 与发布
 
@@ -702,6 +709,7 @@ README 的「安装」一节必须按顺序给出下面几步：
 - [ ] DREPO-032 运行时副本
 - [ ] DREPO-033 许可证
 - [ ] DREPO-034 只同步，不手改
+- [ ] DREPO-035 脚本副本
 - [ ] DREPO-040 版本与标签
 - [ ] DREPO-041 合并门槛
 - [ ] DREPO-042 平台交付

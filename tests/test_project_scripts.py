@@ -244,6 +244,26 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual([p.text() for p in self.problems()], [])
         self.assertEqual(sync_spec.sync(self.project), [])
 
+    def test_script_copies_are_pinned(self):
+        self.edit("scripts/build.py", "def target()", "def target_of_this_machine()")
+        self.edit("scripts/build.py", "system, cpu = target()", "system, cpu = target_of_this_machine()")
+        self.expect("DREPO-035")
+        self.assertIn("wrote scripts/build.py", sync_spec.sync(self.project))
+        self.assertNotIn("DREPO-035", self.clauses())
+        (self.project / "scripts" / "mine.py").write_text("print('the author keeps it')\n", encoding="utf-8")
+        self.assertNotIn("DREPO-035", self.clauses())  # scripts of the author's own are not pinned
+
+    def test_sync_lists_the_template_files_that_changed(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        old = cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "template"
+        shutil.copytree(REPO / "template", old)
+        (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
+        (old / "scripts" / "build.py").write_text("an older script\n", encoding="utf-8")  # pinned: sync replaces it
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}):
+            self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
+            self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded
+        self.assertEqual(sync_spec.template_changes(self.project, check_project.bundle_version()), [])
+
     # -------------------------------------------------------------- versions, platforms and the survey
 
     def test_one_version_everywhere(self):
@@ -562,6 +582,11 @@ class ProjectTest(unittest.TestCase):
         self.assertIn("DREPO-031", {p.clause for p in found}, [p.text() for p in found])
         self.assertNotIn("DREPO-013", {p.clause for p in found}, [p.text() for p in found])
 
+    def test_kind_arguments_name_kinds_of_the_command(self):
+        self.edit("tests/matrix/part-move.json", '"row": "normal",', '"row": "normal", "kind_arguments": {"assembly": ["--id", "R1"]},')
+        found = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("kind_arguments names assembly" in m for m in found), found)
+
     def test_evidence_records_validate(self):
         (self.project / "docs" / "evidence" / "2026-11-01-bad.json").write_text(json.dumps({"kind": "live"}), encoding="utf-8")
         self.expect("DVER-042")
@@ -661,6 +686,30 @@ class RunMatrixTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs)
         run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs, job_pending=True)
+
+    def test_two_runs_of_one_matrix_keep_each_other_s_rows(self):
+        root = self.tmp()
+        path = root / "part-move.json"
+        rows = [{"row": "normal", "applies": True, "arguments": ["--id", "R1"], "expected": {"exit": 0}},
+                {"row": "busy", "applies": True, "arguments": ["--id", "R1"], "expected": {"exit": 7, "code": "E_BUSY"}}]
+        path.write_text(json.dumps({"command": "part move", "rows": rows}), encoding="utf-8")
+        # Both runs read the matrix before either wrote it back.
+        normal, busy = json.loads(json.dumps(rows[0])), json.loads(json.dumps(rows[1]))
+        busy["actual"] = {"exit": 7, "code": "E_BUSY"}
+        normal["actual"] = {"exit": 0}
+        run_matrix._write_back(path, [busy], "b.json")
+        run_matrix._write_back(path, [normal], "a.json")
+        written = {r["row"]: r for r in json.loads(path.read_text(encoding="utf-8"))["rows"]}
+        self.assertEqual(written["busy"]["evidence"], "live:docs/evidence/b.json#busy")
+        self.assertEqual(written["normal"]["evidence"], "live:docs/evidence/a.json#normal")
+        self.assertFalse((root / "part-move.json.lock").exists())
+
+    def test_runs_started_in_the_same_second_write_their_own_records(self):
+        folder = self.tmp() / "evidence"
+        names = [run_matrix._write_record(folder, "2026-11-06-101010-part-move", {"run": n}) for n in range(3)]
+        self.assertEqual(names, ["2026-11-06-101010-part-move.json", "2026-11-06-101010-part-move-2.json",
+                                 "2026-11-06-101010-part-move-3.json"])
+        self.assertEqual(json.loads((folder / names[2]).read_text(encoding="utf-8")), {"run": 2})
 
     def test_job_comes_from_the_normal_row_of_a_long_command(self):
         root = self.tmp()

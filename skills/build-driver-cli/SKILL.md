@@ -13,7 +13,7 @@ description: >-
   Not for using a driver tool to do work in an application; use that tool's own Skill, such as kicad-cli.
   不负责用驱动工具在软件里干活，那要用该工具自己的 Skill，比如 kicad-cli。
 metadata:
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # build-driver-cli
@@ -67,7 +67,7 @@ Each step names the clauses to read, what to fill, the check and when it is done
 
 ### 3 Generate the project
 
-- Read: DREPO-001 to DREPO-004, DREPO-019, DREPO-030 to DREPO-034, DREPO-053.
+- Read: DREPO-001 to DREPO-004, DREPO-019, DREPO-030 to DREPO-035, DREPO-053.
 - Fill: the person decides `--tool`, `--package` (under an npm scope they own), `--repo` and `--author`. Run `python <spec>/scripts/instantiate.py <new project folder> --tool <tool> --package <package> --application <name> --versions "<range>" --modes <modes>`, adding `--host-component`, `--platforms`, `--repo` and `--author`. In the project, run `git init`, commit the generated files and continue on a branch. Move the survey into `docs/APPLICATION.md` and `docs/APPLICATION_zh.md`. Fill each `{{fill: ...}}` text when its step comes; each says what to write.
 - Check: `python scripts/spec.py check --json`.
 - Done when it lists only DREPO-019 placeholders and the DCLI-029 note that no domain command is registered.
@@ -82,7 +82,7 @@ Each step names the clauses to read, what to fill, the check and when it is done
 ### 5 Implement the adapter
 
 - Read: DCLI-028, DCLI-057, DCLI-063, DCLI-066, DCLI-203, DCLI-204, DCLI-240, DCLI-260 to DCLI-262, DCLI-275; in session mode without a host component, also DCLI-277.
-- Fill: in `<pkg>/adapter/__init__.py`, one method per capability the chosen modes require, plus the optional ones your workflows need: in session mode, `open_doc` and `close_doc`, which live runs and the evaluation use. Each takes the request of `<spec>/contract/schemas/adapter.schema.json` and returns its reply. `read`, `preview`, `apply` and `read_back` receive `{command, inputs, ...}`, with values already in standard units such as `x_mm`, and dispatch on `command`. A failure raises `AdapterError(code, message, dispatch_state=...)` with a code of DCLI-279, such as `E_AMBIGUOUS` with `candidates` for two parts with one reference; an error the adapter recognizes names its knowledge entries with `knowledge=[...]` (revisit after step 7 writes them). The preview lists the direct effects it can foresee, and names in `tier_raises` the registered conditions that hold. `self.store` keeps state between calls. Report facts only; the runtime judges success. With a host component, see [references/host-component.md](references/host-component.md).
+- Fill: in `<pkg>/adapter/__init__.py`, one method per capability the chosen modes require, plus the optional ones your workflows need: in session mode, `open_doc` and `close_doc`, which live runs and the evaluation use. Each takes the request of `<spec>/contract/schemas/adapter.schema.json` and returns its reply. `read`, `preview`, `apply` and `read_back` receive `{command, inputs, ...}`, with values already in standard units such as `x_mm`, and dispatch on `command`. A failure raises `AdapterError(code, message, dispatch_state=...)` with a code of DCLI-279, such as `E_AMBIGUOUS` with `candidates` for two parts with one reference; an error the adapter recognizes names its knowledge entries with `knowledge=[...]` (revisit after step 7 writes them). The preview lists the direct effects it can foresee, and names in `tier_raises` the registered conditions that hold. `self.store` keeps state between calls. Report facts only; the runtime judges success. `sessions` looks for the application's dialogs on every call, also while the application answers, and keeps the limits of DCLI-205 itself. With a host component, see [references/host-component.md](references/host-component.md).
 - Check: on the machine with the application, the `application` check of `python -m <pkg> doctor` passes, so `probe` finds it; `python -m ruff check .` and `python -m unittest discover -s tests` pass, with unit tests for the adapter.
 - Done when every capability the DCLI-260 table requires for the modes is implemented and `probe` finds the application.
 
@@ -90,7 +90,7 @@ Each step names the clauses to read, what to fill, the check and when it is done
 
 - Read: DVER-001, DVER-002, DVER-030, DVER-031, DVER-040 to DVER-043, DVER-050, DSEC-034. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
 - Fill: every file in `tests/matrix/`, one per domain command and per standard command whose adapter capabilities the tool implements (`generate` writes the first version; other standard commands need none); the tool's own tests in `tests/`.
-- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`: the person lists the targets under Authorized Targets and writes the scope file, or asks you to in their own message, and then you write it once they agree to the content you showed; with a host component, first run `plugin install` with the live-run state directory (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` after the person prepares it; `dialog` and `read_back_mismatch` are never `unrunnable`. `--row read_back_mismatch` makes the tool wait before its read-back while the person, or a script given with `--tamper`, changes the result. A command with `doc_kinds` runs its `normal` row once per kind, with `--kind`. Commit the live records.
+- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`: the person lists the targets under Authorized Targets and writes the scope file, or asks you to in their own message, and then you write it once they agree to the content you showed; with a host component, first run `plugin install` with the live-run state directory (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` after the person prepares it; `dialog` and `read_back_mismatch` are never `unrunnable`. `--row read_back_mismatch` makes the tool wait before its read-back while the person, or a script given with `--tamper`, changes the result. A command with `doc_kinds` runs its `normal` row once per kind, with `--kind`; when the objects differ between kinds, give the row `kind_arguments`. Commit the live records.
 - Done when both suites pass, every matrix row that applies has passed live or is marked `unrunnable` with a reason, and each command's `maturity` matches its evidence.
 
 ### 7 Write Skills and knowledge
@@ -129,4 +129,4 @@ Run it before you ask for the release in step 8, and whenever you are asked to r
 
 ## Move to a new specification release
 
-Run `python scripts/spec.py sync <version>`; it replaces every pinned copy and writes the generated content. Then read the CHANGELOG of the new release, run `python scripts/spec.py check` and `python scripts/spec.py suites`, and fix what they report.
+Run `python scripts/spec.py sync <version>`; it replaces every pinned copy, writes the generated content and lists the other template files that changed since the release pinned before: compare the project's copies with them and carry over what applies. Then read the CHANGELOG of the new release, run `python scripts/spec.py check` and `python scripts/spec.py suites`, and fix what they report.

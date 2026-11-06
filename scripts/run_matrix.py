@@ -21,6 +21,11 @@ command standing for the interpreter run_matrix runs on. The run is marked
 ``tampered``. The ``normal`` row of a command registered with ``verify_after_save`` is followed
 by ``doc save`` on the same document, and passes only when that save verified the change.
 
+Several runs of one matrix may run at once, such as a ``busy`` row while the ``normal`` row's
+job runs: each writes its own record and changes only its own rows of the matrix. A command
+that lists ``doc_kinds`` may give its ``normal`` row ``kind_arguments`` for a kind whose objects
+the ``arguments`` do not fit; ``--kind`` then picks them.
+
 ``{inputs}`` is the project's ``tests/inputs/`` folder. ``{job}`` is the ``--set job=`` value, or
 else the job that the ``normal`` row of a long command starts at the beginning of the run: the
 command ``--job-from`` names, or the tool's only long command.
@@ -33,6 +38,7 @@ result never counts as a pass (DVER-021).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
@@ -45,7 +51,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -179,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
     inputs = root / "tests" / "inputs"
     values["inputs"] = str(inputs)
     secret = {f["name"] for f in command.get("flags", []) if f.get("secret")}
-    needs_job = "job" not in values and any("{job}" in a for r in rows for a in r["arguments"])
+    needs_job = "job" not in values and any("{job}" in a for r in rows
+                                            for a in r["arguments"] + r.get("kind_arguments", {}).get(args.kind or "", []))
     starter = None
     if needs_job:
         starter = _job_starter(root, facts, args.job_from, values, authorized)
@@ -187,7 +194,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--job-from fills {job}; no row to run uses it, or --set job= already does")
     filled = []
     for row in rows:
-        arguments = [_fill(a, values) for a in row["arguments"]]
+        # The normal row may give its own arguments for a kind whose objects differ (DVER-030).
+        given = row.get("kind_arguments", {}).get(args.kind) if row["row"] == "normal" and args.kind else None
+        arguments = [_fill(a, values) for a in (given or row["arguments"])]
         _check_row(row["row"], command, arguments, authorized, inputs, needs_job)
         filled.append((row, arguments, mode_of(command, arguments, args.mode)))
 
@@ -256,19 +265,67 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{row['row']}: {'pass' if passed else 'fail'} (exit {exit_code}{', ' + code if code else ''})"
               f"{' - ' + '; '.join(notes) if notes else ''}")
     now = datetime.datetime.now(datetime.timezone.utc)
-    name = f"{now.strftime('%Y-%m-%d-%H%M%S')}-{args.command.replace(' ', '-')}.json"
     record = {"kind": "live", "tool": facts.tool, "tool_version": facts.version, "commit": commit,
               "application": {"name": facts.driver.get("application"), "version": app_version}, "os": platform.platform(),
               "platform": PLATFORMS[sys.platform], "recorded_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
               "targets": sorted(used), "runs": runs}
-    folder = root / "docs" / "evidence"
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / name).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-    for row, _, _ in filled:
-        row["evidence"] = f"live:docs/evidence/{name}#{row['row']}"
-    matrix_path.write_text(json.dumps(matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    name = _write_record(root / "docs" / "evidence", f"{now.strftime('%Y-%m-%d-%H%M%S')}-{args.command.replace(' ', '-')}", record)
+    _write_back(matrix_path, [row for row, _, _ in filled], name)
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")
     return 0 if all(r["result"] == "pass" for r in runs) else 1
+
+
+def _write_back(path: Path, rows: list[dict[str, Any]], name: str) -> None:
+    """Give the rows this run ran their actual result and evidence in the matrix file."""
+    with _locked(path):
+        # Another run of this matrix may have written its rows meanwhile: only this run's rows change.
+        latest = json.loads(check_project.read(path))
+        mine = {row["row"]: row for row in rows}
+        for row in latest["rows"]:
+            if row["row"] in mine:
+                row["actual"] = mine[row["row"]]["actual"]
+                row["evidence"] = f"live:docs/evidence/{name}#{row['row']}"
+        path.write_text(json.dumps(latest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+
+
+def _write_record(folder: Path, stem: str, record: dict[str, Any]) -> str:
+    """Write the live record under a name no other run took, even one started in the same second."""
+    folder.mkdir(parents=True, exist_ok=True)
+    text = (json.dumps(record, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    for number in range(1, 1000):
+        name = f"{stem}.json" if number == 1 else f"{stem}-{number}.json"
+        try:
+            with open(folder / name, "xb") as handle:
+                handle.write(text)
+            return name
+        except FileExistsError:
+            continue
+    raise SystemExit(f"docs/evidence/ already holds 999 records named {stem}")
+
+
+@contextlib.contextmanager
+def _locked(path: Path) -> Iterator[None]:
+    """Hold a lock file next to the matrix while its rows are written back."""
+    lock = path.with_name(path.name + ".lock")
+    end = time.monotonic() + 60
+    while True:
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > 60:
+                    lock.unlink(missing_ok=True)  # left behind by a run that ended without removing it
+                    continue
+            except OSError:
+                continue
+            if time.monotonic() > end:
+                raise SystemExit(f"{lock.name} is held by another run; delete it if no run is writing the matrix") from None
+            time.sleep(0.2)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
 
 
 def _check_row(name: str, command: dict[str, Any], arguments: list[str], authorized: list[str], inputs: Path,

@@ -4,10 +4,16 @@
     python scripts/sync_spec.py <project>
 
 It runs from an unpacked specification release (or a checkout of this repository) and
-replaces, as a whole, everything a tool pins (DREPO-030 to DREPO-034): the five
+replaces, as a whole, everything a tool pins (DREPO-030 to DREPO-035): the five
 specifications in ``.agent/`` with ``.agent/SPEC_VERSION``, ``contract/driver-contract.json``,
-the driver runtime in ``<pkg>/_driver/`` with its ``MANIFEST.json``, and the licenses in
-``licenses/``. Files of an earlier release that this one no longer has are removed.
+the driver runtime in ``<pkg>/_driver/`` with its ``MANIFEST.json``, the licenses in
+``licenses/``, and the scripts in ``scripts/`` that are the same in every tool. Files of an
+earlier release that this one no longer has are removed from ``.agent/``, ``licenses/`` and
+``<pkg>/_driver/``.
+
+When the release the project pinned before is in the download cache of ``scripts/spec.py``, it
+lists the other template files that changed since then, such as ``docs/E2E.md``: compare the
+project's copies with them and carry over what applies.
 
 Afterwards run ``python scripts/spec.py generate`` and ``python scripts/spec.py check`` in
 the project: the fixed text and the generated content follow the new release.
@@ -16,13 +22,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from check_project import bundle_version, pinned_files, runtime_manifest  # noqa: E402
+from check_project import BUNDLE, JUNK, bundle_version, digest, pinned_files, runtime_manifest  # noqa: E402
+
+NAME = "tool-driver-cli-spec"
 
 
 def package_dir(project: Path) -> str:
@@ -72,15 +81,45 @@ def sync(project: Path) -> list[str]:
     return changed
 
 
+def template_changes(project: Path, before: str | None) -> list[str] | None:
+    """The template files, other than pinned copies, that differ from release ``before``; None
+    when that release is not in the download cache of ``scripts/spec.py``."""
+    if not before or before == bundle_version():
+        return []
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / NAME / before / f"{NAME}-{before}"
+    old, new = cache / "template", BUNDLE / "template"
+    if not old.is_dir():
+        return None
+    pinned = {source.resolve() for source, _ in pinned_files(package_dir(project))}
+    changed = []
+    for path in sorted(new.rglob("*")):
+        rel = path.relative_to(new).as_posix()
+        if path.is_file() and path.resolve() not in pinned and path.name not in JUNK and "__pycache__" not in path.parts:
+            if not (old / rel).is_file() or digest(old / rel) != digest(path):
+                changed.append(rel)
+    return changed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("project", type=Path)
     args = parser.parse_args(argv)
     project = args.project.resolve()
+    pinned_before = project / ".agent" / "SPEC_VERSION"
+    before = pinned_before.read_text(encoding="utf-8").strip() if pinned_before.is_file() else None
     changed = sync(project)
     for line in changed:
         print(line)
     print(f"Pinned tool-driver-cli-spec {bundle_version()}: {len(changed)} change(s).")
+    template = template_changes(project, before)
+    if template is None:
+        print(f"Release {before} is not in the download cache, so the template files that changed since then are not "
+              f"listed; the CHANGELOG of {bundle_version()} names them.")
+    elif template:
+        print(f"The template changed these files since {before}; compare the project's copies with template/ of this "
+              "release and carry over what applies:")
+        for rel in template:
+            print(f"  {rel}")
     return 0
 
 

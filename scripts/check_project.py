@@ -1118,7 +1118,7 @@ class Checker:
                 self.add(clause, dest, "this pinned file is missing; run `python scripts/spec.py sync <version>`")
             elif digest(path) != digest(source):
                 self.add(clause, dest, f"differs from release {release}; pinned copies are never edited (DREPO-034)")
-        runtime = {digest(source) for source, dest in pinned_files(self.facts.pkg) if dest.endswith(".py")}
+        runtime = {digest(source) for source, dest in pinned_files(self.facts.pkg) if "/_driver/" in dest}
         for path in self.files():
             rel = path.relative_to(self.root).as_posix()
             if path.suffix == ".py" and path.stat().st_size > 200 and digest(path) in runtime:
@@ -1441,6 +1441,9 @@ class Checker:
                     self.add("DVER-030", rel, f"row {row['row']} applies only when {', '.join(spec['applies_when'])}")
                 if row["row"] == "normal" and not row["applies"]:
                     self.add("DVER-030", rel, "the normal row always applies; for a write command it is the write sample (DVER-002)")
+                strange = sorted(set(row.get("kind_arguments", {})) - set(command.get("doc_kinds") or []))
+                if strange:
+                    self.add("DVER-030", rel, f"kind_arguments names {', '.join(strange)}, not a kind in the doc_kinds of `{command['path']}`")
                 if row["applies"] and "actual" in row and not same_result(row["actual"], row.get("expected")):
                     self.add("DVER-030", rel, f"row {row['row']} failed: expected {row.get('expected')}, got {row['actual']}")
                 if row.get("evidence"):
@@ -1697,8 +1700,8 @@ def question_facts(path: Path, contract: dict[str, Any]) -> tuple[dict[str, Any]
         problems.append("SCOPE is an object of scope file fields, or None for no scope file")
     elif isinstance(scope, dict) and set(scope) - set(contract["scope_file"]["fields"]):
         problems.append(f"SCOPE holds fields a scope file does not have: {sorted(set(scope) - set(contract['scope_file']['fields']))}")
-    if "FAKE_HOST" in values and not isinstance(values["FAKE_HOST"], dict):
-        problems.append("FAKE_HOST is an object")
+    if "FAKE_HOST" in values and values["FAKE_HOST"] is not None and not isinstance(values["FAKE_HOST"], dict):
+        problems.append("FAKE_HOST is an object, or None for a question that runs only on the real application")
     if "FILES" in values:
         files = values["FILES"]
         folder = path.parent / files if isinstance(files, str) else None
@@ -1754,9 +1757,14 @@ def runtime_files() -> list[Path]:
     return sorted(p for p in folder.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix == ".py")
 
 
+# The template's scripts that are the same in every tool; smoke.py is the author's (DREPO-035).
+SCRIPT_COPIES = ("spec.py", "build.py", "pack.py", "platforms.py", "release_gate.py")
+
+
 def pinned_files(pkg: str) -> list[tuple[Path, str]]:
     """Each pinned file of the release and where it goes in a tool project."""
     out = [(path, f".agent/{path.name}") for path in spec_files()]
+    out += [(BUNDLE / "template" / "scripts" / name, f"scripts/{name}") for name in SCRIPT_COPIES]
     out.append((BUNDLE / "contract" / "driver-contract.json", "contract/driver-contract.json"))
     runtime = BUNDLE / "sdk" / "python" / "_driver"
     out += [(path, f"{pkg}/_driver/{path.relative_to(runtime).as_posix()}") for path in runtime_files()]
@@ -1772,6 +1780,8 @@ def pinned_clause(dest: str) -> str:
         return "DREPO-031"
     if dest.startswith("licenses/"):
         return "DREPO-033"
+    if dest.startswith("scripts/"):
+        return "DREPO-035"
     return "DREPO-032"
 
 

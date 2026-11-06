@@ -198,6 +198,19 @@ class MainAddressTest(HostTestCase):
         docs = c.call("documents", {"session": "fake-1"})["items"]
         self.assertEqual({d["kind"] for d in docs}, {"part"})
 
+    def test_each_document_has_its_own_kind(self):
+        c = self.client()
+        c.control("reset", config={"kinds": {".prj": "project"}}, commands=COMMANDS)
+        work = Path(self.tmp.name)
+        for name in ("demo.prj", "demo.pcb", "other.prj"):
+            (work / name).write_text("{}", encoding="utf-8")
+        project = c.call("open_doc", {"session": "fake-1", "path": str(work / "demo.prj"), "operation_id": "op_1"})["document"]
+        board = c.call("open_session", {"path": str(work / "demo.pcb"), "kind": "board", "operation_id": "op_2"})["session"]
+        other = c.call("open_session", {"path": str(work / "other.prj"), "operation_id": "op_3"})["session"]
+        self.assertEqual(project["kind"], "project")  # from its file extension
+        kinds = {d["path"]: d["kind"] for s in (board, other) for d in c.call("documents", {"session": s["id"]})["items"]}
+        self.assertEqual(kinds, {str(work / "demo.pcb"): "board", str(work / "other.prj"): "project"})
+
     def test_an_edit_of_a_list_field_stores_a_list(self):
         c = self.client()
         c.control("edit", document="doc-1", object="R1", field="lines[*]", value="text")

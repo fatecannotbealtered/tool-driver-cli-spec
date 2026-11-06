@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-REPO-SPEC_zh.md)
 
-> Version 1.0.3 · Clauses DREPO-001 to DREPO-062
+> Version 1.0.4 · Clauses DREPO-001 to DREPO-062
 
 ## How to Read
 
@@ -182,7 +182,7 @@ Every tool project MUST have these paths. This table and the conditional paths b
 | `docs/E2E.md` | Live acceptance, with the only list of authorized targets (DREPO-017, DVER-051) |
 | `docs/E2E_zh.md` | The Chinese live acceptance document |
 | `docs/evidence/` | Live records and eval reports (DVER-042, DSKL-043) |
-| `scripts/` | Build, packaging, smoke test and check scripts |
+| `scripts/` | Build, packaging, smoke test and check scripts; some are pinned copies (DREPO-035) |
 | `tests/` | The tool's tests, including the conformance runs and the behavior matrices (DVER-001, DVER-030) |
 | `tests/matrix/` | One behavior matrix per command (DVER-030) |
 | `.github/workflows/ci.yml` | The merge gate (DREPO-041) |
@@ -420,7 +420,7 @@ The README MUST show these badges, in this order, in one row under the pitch:
 | `platform` | The shipped platforms: Windows, macOS, Linux | The platform packages in `package.json` (DREPO-043) |
 | `risk` | The tool's risk tier, T0 to T2 (DSEC-002) | `reference` |
 | `maturity` | The lowest maturity among the tool's domain commands (DVER-040) | `reference` |
-| `spec` | The pinned specification version, such as tool-driver-cli-spec 1.0.3 | `.agent/SPEC_VERSION` |
+| `spec` | The pinned specification version, such as tool-driver-cli-spec 1.0.4 | `.agent/SPEC_VERSION` |
 | `license` | The tool's license | `package.json` |
 
 A badge row for a tool that drives KiCad 10.0 in file and session mode looks like this; the template defines the exact style:
@@ -434,7 +434,7 @@ A badge row for a tool that drives KiCad 10.0 in file and session mode looks lik
 ![platform](https://img.shields.io/badge/platform-Windows_·_macOS_·_Linux-555555)
 ![risk](https://img.shields.io/badge/risk-T1-d29922)
 ![maturity](https://img.shields.io/badge/maturity-verified-8957e5)
-![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.3-0969da)
+![spec](https://img.shields.io/badge/spec-tool--driver--cli--spec_1.0.4-0969da)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 ```
 
@@ -523,12 +523,19 @@ Check: 🤖 `check_project` compares hashes (DREPO-034).
 
 ### DREPO-034 Sync, never edit
 
-- Pinned copies (DREPO-030 to DREPO-033) MUST NOT be edited by hand.
+- Pinned copies (DREPO-030 to DREPO-033 and DREPO-035) MUST NOT be edited by hand.
 - To upgrade, the author runs the sync script `sync_spec`. It replaces all pinned copies together, from one specification release.
 - A tool MUST NOT pin the specification, the contract or the runtime in any other way, such as partial copies, submodules or package dependencies.
 
 Why: One way of pinning, checked by hash, means every tool states exactly which rules and which runtime it runs, and nobody's local fix hides in a copy.
 Check: 🤖 `check_project` checks the hash of every pinned file against the release named in `.agent/SPEC_VERSION`.
+
+### DREPO-035 Script copies
+
+`scripts/spec.py`, `scripts/build.py`, `scripts/pack.py`, `scripts/platforms.py` and `scripts/release_gate.py` MUST be the template's scripts of the same release, unchanged. `scripts/smoke.py` and any other script in `scripts/` are the author's.
+
+Why: These scripts are the same in every tool; a fix to them reaches a tool only when `sync_spec` replaces them with the rest of the release.
+Check: 🤖 `check_project` compares hashes (DREPO-034).
 
 ## Versions, CI and Release
 
@@ -702,6 +709,7 @@ Check: 👀 Review; `build-driver-cli` lists every clause the tool does not meet
 - [ ] DREPO-032 Runtime copy
 - [ ] DREPO-033 Licenses
 - [ ] DREPO-034 Sync, never edit
+- [ ] DREPO-035 Script copies
 - [ ] DREPO-040 Versions and tags
 - [ ] DREPO-041 Merge gate
 - [ ] DREPO-042 Platform delivery

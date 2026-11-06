@@ -44,7 +44,7 @@ def grade(run):
 - `{documents}` in `TURNS` and in scope targets stands for the documents folder, which the Agent reaches only through the tool.
 - For `knowledge_lookup`, ask for a fact that only your entry gives, never common knowledge.
 - The runner writes the Agent's scope file from `COMMANDS` and `SCOPE`; never write a scope file yourself. `run.tool(...)` in a grader or hook runs under a scope of its own that grants every effect on the documents folder and the `SCOPE` targets, so a hook can open and close documents.
-- Add `right(agent, turn)`, which does what the scenario requires, and one or more `wrong_<name>(agent, turn)`, each making a mistake the grader must catch. Give `FAKE_HOST` the world they need on the fake host.
+- Add `right(agent, turn)`, which does what the scenario requires, and one or more `wrong_<name>(agent, turn)`, each making a mistake the grader must catch. Give `FAKE_HOST` the world they need on the fake host; when it opens files of several document kinds, give `kinds`, such as `{".prj": "project", ".pcb": "board"}`. Set `FAKE_HOST = None` for a question the fake host cannot answer, such as one that reads values from a real file.
 
 ## Session mode
 
@@ -103,6 +103,6 @@ The release holds a question for every scenario in `conformance/eval/`. Start fr
 ## Check
 
 1. `python scripts/spec.py check` checks every question file.
-2. `python scripts/spec.py eval --check --fake-host` shows that each grader passes `right` and fails every `wrong`.
+2. `python scripts/spec.py eval --check --fake-host` shows that each grader passes `right` and fails every `wrong`. It skips questions with `FAKE_HOST = None`; check those with `--check --workspace-root <folder>` on the real application.
 3. A person lists a folder for the evaluation workspaces under Authorized Targets in `docs/E2E.md`, with any other target a `SCOPE` names. Then `python scripts/spec.py eval --workspace-root <folder>` runs the questions with Claude Code on the real application and writes `docs/evidence/eval-<date>.json`. Claude Code must be on PATH, whichever Agent builds the tool, and the run uses model credits. Use `--only <id>` to rerun one question while you work.
 4. A command becomes `stable` only with that report: newest for the current minor version, every current question run and passed, and one question that lists the command in `COMMANDS` and ran it. Add `eval:docs/evidence/eval-<date>.json` to its `evidence`, set its `maturity` to `stable`, then run `python scripts/spec.py generate` and `python scripts/spec.py check`.

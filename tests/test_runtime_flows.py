@@ -647,5 +647,27 @@ class ManyFiles(unittest.TestCase):
         self.assertIn("operation get --id op_x --output", slim["more_files"]["command"])
 
 
+class Fixes104(unittest.TestCase):
+    """What the tools found when they synced to 1.0.3."""
+
+    MOVE_R1 = ["part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "1mm", "--y", "2mm"]
+
+    def test_a_call_that_made_no_file_is_verified_by_its_changes(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"SAMPLE_CLI_PART_FILE": "1"}):
+            sub = Subject([sys.executable, "-m", "sample_cli"], REPO / "tests" / "sample")
+            sub.registrations["part move"]["effects"] = ["change", "artifact"]  # what the fake host reads
+            with Case(sub) as case:
+                made = case.run(*self.MOVE_R1)
+                self.assertTrue(made.ok, made.stdout[:400])
+                self.assertEqual(made.data["receipt"]["outcome"]["verification"], "passed", made.stdout[:600])
+                case.control("fault", rule={"method": "apply", "command": "part move", "action": "result",
+                                            "result": {"files": []}})
+                out = case.run(*self.MOVE_R1[:-4], "--x", "5mm", "--y", "6mm")
+                self.assertTrue(out.ok, out.stdout[:600])
+                self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed", out.stdout[:600])
+
+
 if __name__ == "__main__":
     unittest.main()

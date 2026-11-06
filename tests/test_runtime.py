@@ -361,7 +361,16 @@ class SampleAdapter(Adapter):
 
     def read_back(self, request):
         data, inputs = self._load(request), request["inputs"]
+        if inputs.get("value") == "slow" and self.hang is not None:
+            self.hang.wait(10)  # the watchdog fires meanwhile; then the process is gone
+            raise Ended()
         return {"observed": {file_key(request["document"], "/" + inputs["id"]): data.get(inputs["id"], {})}}
+
+    hang = None
+
+
+class Ended(BaseException):
+    """Stands for the end of the process in a test that cannot end it."""
 
 
 class InProcess(unittest.TestCase):
@@ -420,6 +429,36 @@ class InProcess(unittest.TestCase):
                 details = env["error"]["details"]
                 self.assertEqual((env["error"]["code"], details["knowledge"]), (code, [entry]))
                 self.assertIn(f"sample-cli knowledge get --id {entry}", details["next_action"])
+
+    def test_a_read_back_that_hangs_leaves_the_outcome_known(self):
+        import threading
+        from unittest import mock
+
+        args = ("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "slow")
+        _, env = self.run_tool(*args)
+        token = env["error"]["details"]["confirm_token"]
+        exits = []
+        SampleAdapter.hang = threading.Event()
+
+        def end(code):
+            exits.append(code)
+            SampleAdapter.hang.set()
+
+        out = io.StringIO()
+        try:
+            with mock.patch("_driver.runtime.READ_DEADLINE_MS", 300), mock.patch("_driver.tool.os._exit", end):
+                with self.assertRaises(Ended):
+                    self.tool.run([*args, "--confirm", token], env=self.env, stdout=out)
+        finally:
+            SampleAdapter.hang = None
+        env = json.loads(out.getvalue())
+        self.assertEqual((exits, env["error"]["code"]), ([1], "E_VERIFY_INCOMPLETE"))
+        outcome = env["error"]["details"]["receipt"]["outcome"]
+        self.assertEqual((outcome["change"], outcome["verification"]), ("applied", "incomplete"))
+        self.assertIn("read_back", env["error"]["details"]["receipt"]["notes"][0])
+        # The outcome is known, so the target is not locked: the next write goes through.
+        _, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "3k")
+        self.assertEqual(env["error"]["code"], "E_CONFIRMATION_REQUIRED")
 
     def test_missing_capability_is_unsupported(self):
         code, env = self.run_tool("session", "list")

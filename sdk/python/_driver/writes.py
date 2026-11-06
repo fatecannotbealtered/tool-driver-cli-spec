@@ -206,8 +206,11 @@ class DomainWrite(WriteSpec):
         file_changes = [c for c in tool_changes if c.get("field") == "exists" and is_file_target(c["target"])]
         other = [c for c in tool_changes if c not in file_changes]
         parts = []
-        if facts.get("files") or "artifact" in self.command.effects or file_changes:
-            parts.append(verify_files(facts, file_changes))
+        # A call that made no file, of a command that makes one only in some calls, is verified
+        # by its other changes alone (DCLI-057).
+        if facts.get("files") or file_changes or self.outputs():
+            parts.append(verify_files(facts, file_changes + [{"target": file_key(p), "field": "exists"}
+                                                             for p in self.outputs()]))
         if other:
             # A command that makes files and also changes the document verifies both (DCLI-057).
             inputs = self.child_inputs(child) if child is not None else None
@@ -893,11 +896,21 @@ class Engine:
         expects = any(c.get("origin", "tool") == "tool" for c in changes)
         paused = None
         if execution == "completed" and (lasting or change == "partial" or persistence == "partial" or expects):
+            if child is None:
+                def settle(note: str) -> Result:
+                    # apply replied, so a read after it that hangs leaves the outcome known (DCLI-278).
+                    receipt["outcome"] = _outcome(execution, change, delivery, persistence, "incomplete")
+                    receipt.update(observed={}, mismatched=[], notes=[note])
+                    return self.finish_single(spec, record, out, hung=True)
+
+                self.run.settle_hang = settle
             try:
                 paused = self.pause_before_read_back(spec, operation_id, facts, changes, child)
                 verification = spec.verify(operation_id, facts, changes, child)
             except Exception as exc:  # noqa: BLE001 - after dispatch, a failure to verify is not a known outcome
                 verification = Verification("incomplete", notes=[f"The read-back could not be done: {type(exc).__name__}: {exc}"])
+            finally:
+                self.run.settle_hang = None
             if paused is not None:
                 verification.notes.insert(0, paused)
         receipt["outcome"] = _outcome(execution, change, delivery, persistence, verification.status)
@@ -961,11 +974,12 @@ class Engine:
 
     # ------------------------------------------------------------------ one write
 
-    def finish_single(self, spec: WriteSpec, record: dict[str, Any], out: dict[str, Any]) -> Result:
+    def finish_single(self, spec: WriteSpec, record: dict[str, Any], out: dict[str, Any], hung: bool = False) -> Result:
+        """``hung``: an adapter call still hangs on the main thread, so nothing may call the adapter."""
         run = self.run
         operation_id = record["operation_id"]
         receipt = out["receipt"]
-        self._decorate(spec, receipt)
+        self._decorate(spec, receipt, fresh=not hung)
         error: DriverError | None = out["error"]
         if out["unspend"]:
             # Refused before anything was sent: a token stays usable (DCLI-055).
@@ -1088,12 +1102,12 @@ class Engine:
         return DriverError(code, message or code, dispatch_state=dispatch_state, receipt=receipt, untrusted=untrusted,
                            next_action=details_next, **extra)
 
-    def _decorate(self, spec: WriteSpec, receipt: dict[str, Any]) -> None:
+    def _decorate(self, spec: WriteSpec, receipt: dict[str, Any], fresh: bool = True) -> None:
         if spec.session_ref():
             receipt["session"] = spec.session_ref()
         doc = spec.where.document
         if doc is not None:
-            receipt["document"] = self._fresh_document(spec) or {"id": doc["id"], "revision": doc["revision"], "dirty": doc["dirty"]}
+            receipt["document"] = (self._fresh_document(spec) if fresh else None) or                 {"id": doc["id"], "revision": doc["revision"], "dirty": doc["dirty"]}
         if self.run.fake or (spec.where.device or {}).get("simulated"):
             receipt["simulated"] = True
 
