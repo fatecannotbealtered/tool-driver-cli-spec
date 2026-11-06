@@ -206,7 +206,7 @@
 |---|---|---|
 | `E_USAGE` | `problem`、`parameter` | 哪里有误，是哪个参数；数值没带单位时，`problem` 列出可接受的单位（DCLI-082） |
 | `E_AMBIGUOUS` | `candidates` | 匹配到的对象或实例；实例带 DCLI-202 规定的会话摘要。只有用户点名了某一个，Agent 才能选它 |
-| `E_CONFLICT` | `conflict` | 哪个前置条件不满足，取值见契约的 `conflict_values`（DCLI-056、DCLI-201、DCLI-206、DCLI-211、DCLI-212）。软件内部的冲突，比如同名对象已经存在、对象正被别的对象使用，取 `application_state`，由 `message` 说明是什么挡住了它 |
+| `E_CONFLICT` | `conflict` | 哪个前置条件不满足，取值见契约的 `conflict_values`（DCLI-056、DCLI-201、DCLI-206、DCLI-211、DCLI-212）。软件内部的冲突，比如已经打开了另一个同名模型、模型正被别的模型使用，取 `application_state`，由 `message` 说明是什么挡住了它；它用于没有自己预览的能力，比如 `open_doc`、`close_doc`，或者派发时状态已经变了。领域命令的预览把这类冲突报告为 `can_apply: false` 加 `blocked_by`（DCLI-054） |
 | `E_FORBIDDEN` | `scope` | `{missing, snippet}`：`missing` 为 `{effects, targets, dangerous}`，即授权范围缺什么；`snippet` 是人可以直接粘进授权范围文件的片段（DSEC-015） |
 | `E_OUTCOME_UNKNOWN` | `lookup` | 查清结果的确切命令（DCLI-063） |
 | `E_BUSY` | `retry_after_ms` | 等多久再试 |
@@ -589,6 +589,7 @@
 
 - 声明了多个效果的命令，必须取其中最严的确认级别。
 - 既修改文档、又新建文件的命令，比如往工程里加一块板，在其他效果之外再声明 `artifact`。
+- 文件名由软件自己定的 `artifact` 命令没有 `output` 参数；它的预览必须把这个文件或文件所在的文档列为目标，授权范围才能覆盖它，执行时在 `files` 里报告这个文件（DCLI-260）。
 - 不论效果是什么，以下操作都必须是危险级：不可撤回的修改、放弃未保存的修改、关闭不是本工具启动的实例。软件和本工具都没有命令能恢复原状的修改，就是不可撤回的：没有撤销功能的删除不可撤回，文件模式下也一样；移动和改字段可以用另一次调用改回去，不算不可撤回。这样的命令必须在登记里声明 `irreversible: true`（DCLI-029）；运行时据此把它定为危险级，从不靠猜。
 - 停止命令声明 `lifecycle`，并且总是直接执行（DSEC-018）。
 
@@ -1278,11 +1279,11 @@ Windows 上正在运行的程序不能被覆盖，但可以改名移走。所以
 
 ### DCLI-220 长任务对象与命令
 
-长任务至少必须有以下字段：`id`、`operation_id`（读操作的长任务为 `null`，DCLI-065）、`state`、`cancel_requested`、`started_at` 和 `finished_at`（任务结束前为 `null`）。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
+长任务至少必须有以下字段：`id`、`operation_id`（读操作的长任务为 `null`，DCLI-065）、`state`、`cancel_requested`、`started_at`，以及任务结束后的 `finished_at`。软件报告进度时，还必须有 `progress` `{done, total, unit}`；总量未知时 `total` 为 `null`。
 
 `state` 取 `planned`、`running`、`blocked`、`completed`、`failed`、`partial`、`unknown`、`cancelled` 之一。`blocked` 的任务还带 `action`：人要先做什么，任务才能继续（DCLI-066）。由运行时运行的长任务（DCLI-065），所在会话被弹窗挡住时必须报为 `blocked`，`action` 和 `knowledge`（适配层给出条目时）取自会话的 `blocker`（DCLI-202）；人处理完弹窗后，它又报为 `running`。任务处于终态（`completed`、`failed`、`partial`、`unknown` 或 `cancelled`）时，`job get` 必须同时返回它的 `receipt`、`result`，以及按 DCLI-062 由回执推导出的 `ok`；`ok` 为 `false` 时，错误码放在 `code` 里（DCLI-065）。读操作的长任务没有回执：返回 `ok`；`ok` 为 `true` 时返回读操作的 `result`，为 `false` 时返回 `code` 和 `message`。这些都是 `data` 里的字段：`job get` 本身是成功的，DCLI-062 所说的 `error.details.receipt` 属于写操作，不属于 `job get`。
 
-`job list` 列出所有会话的长任务。`job get --job <id> --wait <duration>` 必须在任务结束或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
+`job list` 列出所有会话的长任务，被挡住的报为 `blocked`。`job get --job <id> --wait <duration>` 必须在任务结束、被挡住或时长用完时返回，以先到者为准。`--wait` 可以长达 600 秒，因为等待不算工作（DCLI-065）；超过时返回 `E_USAGE`。`job get` 必须返回 `poll_after_ms`，即过多久再查才有意义。
 
 为什么：Agent 用一次次有时限的调用等待长时间的工作，而不是让一次调用一直挂着；任务的真实结果也以与其他写操作相同的形式读到。被弹窗卡住的任务会如实说出来，Agent 就去找人，而不是干等。
 检查：🤖 驱动一致性测试 D11 和 D26；运行时单元测试检查被挡住的任务。

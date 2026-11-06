@@ -10,20 +10,22 @@ Changes from syncing the KiCad, Xpedition and Creo tools to 1.0.2.
 
 ### Added
 
-- The conflict value `application_state` for a conflict inside the application, such as an object of that name that already exists or an object another one uses; `message` says what stands in the way (DCLI-012, DCLI-279).
-- A read result and the facts of a write may carry `notices`; the runtime puts them in `meta.notices` with the type `application` and marks their text untrusted. A tool that runs only in file mode adds the notice of DCLI-201 this way (DCLI-004, DCLI-260).
-- A job the runtime runs shows as `blocked` while a dialog holds its session, with the `action` and `knowledge` of the session's blocker; `job get --wait` returns as soon as it sees the dialog (DCLI-220).
+- The conflict value `application_state` for a conflict inside the application that no preview can report, such as `doc open` while another model of that name is open, or `doc close` of a model another one uses; `message` says what stands in the way. A domain command's preview still reports such a conflict with `can_apply: false` (DCLI-012, DCLI-279).
+- A read result and the facts of a write may carry `notices`; the runtime puts them in `meta.notices` with the type `application` and marks their text untrusted, keeps one copy of a notice every item of a batch gives and at most five, and drops them first when an envelope is too long. Notices from a long job's worker are shown by `job get`. A tool that runs only in file mode adds the notice of DCLI-201 this way (DCLI-004, DCLI-260).
+- A job the runtime runs shows as `blocked` while a dialog holds its session, with the `action` and `knowledge` of the session's blocker, in `job get` and `job list`. `job get --wait` returns when a job becomes blocked, whoever runs it, and `run_matrix` then waits for the person instead of asking again at once (DCLI-220).
 - `{python}` in a `run_matrix --tamper` command stands for the interpreter `run_matrix` runs on (DVER-030).
-- A coding Agent that prepares live runs may write the scope file and the Authorized Targets when the person explicitly asks in their own message, after showing the content (DSEC-011, DVER-050). The template's AGENTS.md rule 6 says so; copy the new text.
+- A coding Agent that prepares live runs may write the scope file and the Authorized Targets, and point `<PREFIX>_SCOPE_FILE` at that file, when the person explicitly asks in their own message and agrees to the content it showed (DSEC-011, DVER-050). The template's AGENTS.md rule 6 says so; copy the new text.
+- An `artifact` command whose file the application names has no `output` flag; its preview names the file or the document it goes into, and its apply reports the file (DCLI-051).
 
 ### Changed
 
 - A live record keeps the envelope as the tool wrote it: `check_project` no longer checks it against the current envelope schema, and `envelope_sha256` is accepted again, so records from 1.0.1 and earlier count as evidence again (DVER-042).
-- The runtime refuses a `list` result without an `items` list with `E_PROTOCOL`, because `--limit` and `--offset` page the items (DCLI-006).
+- The runtime refuses a `list` result without an `items` list with `E_PROTOCOL`, a long list's too, because `--limit` and `--offset` page the items (DCLI-006).
+- A job has `finished_at` once it has ended; a running read job no longer shows `finished_at: null` (DCLI-220).
 - The tool's own state directory and the host component copy that belongs to it are not authorized targets (DVER-050).
 - The fake host makes its documents of the kind a test sets, and the suites set the first kind of a command registered with `doc_kinds`; an `artifact` command without an `output` flag makes a file the fake host names; a file that is not a fake host document opens as an empty document (DVER-020).
 - D04, D09 and G04 follow a `doc save` listed in `long_commands` to its end. D08 and D26 cause the mismatch of a command that only makes files with a missing file. R04 reads with `--fields all` and can put its text into a list field such as `lines[*]`.
-- The template's entry Skill tells the Agent what to do with a `blocked` job.
+- The template's entry Skill tells the Agent what to do with a `blocked` job, and that a write job that ended with `E_BUSY` starts again from its first call.
 
 ### Fixed
 

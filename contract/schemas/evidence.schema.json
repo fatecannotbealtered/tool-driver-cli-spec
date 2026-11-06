@@ -33,7 +33,7 @@
           "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "tampered": {"const": true},
           "envelope": {
-            "description": "The envelope the tool printed, kept as it was written. It is not checked against the current envelope schema: a record stays valid for every release with the same major and minor version (DVER-041).",
+            "description": "The envelope the tool printed, kept as it was written. It is not checked against the current envelope schema, so a record stays valid as long as its tool version counts (DVER-043).",
             "type": "object",
             "required": ["ok"],
             "properties": {"ok": {"type": "boolean"}}

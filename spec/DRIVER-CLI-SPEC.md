@@ -206,7 +206,7 @@ These codes and cases MUST carry these fields in `details`:
 |---|---|---|
 | `E_USAGE` | `problem`, `parameter` | What is wrong, and with which parameter; for a number without a unit, `problem` lists the accepted units (DCLI-082) |
 | `E_AMBIGUOUS` | `candidates` | The objects or instances that match; an instance carries the session summary of DCLI-202. The Agent picks one only when the user named it |
-| `E_CONFLICT` | `conflict` | Which precondition failed, one of the contract's `conflict_values` (DCLI-056, DCLI-201, DCLI-206, DCLI-211, DCLI-212). A conflict inside the application, such as an object of that name that already exists or an object another one uses, is `application_state`, and `message` says what stands in the way |
+| `E_CONFLICT` | `conflict` | Which precondition failed, one of the contract's `conflict_values` (DCLI-056, DCLI-201, DCLI-206, DCLI-211, DCLI-212). A conflict inside the application, such as another model of that name already open or a model another one uses, is `application_state`, and `message` says what stands in the way; it is for a capability that has no preview of its own, such as `open_doc` or `close_doc`, or a dispatch the state changed under. A domain command's preview reports such a conflict as `can_apply: false` with `blocked_by` (DCLI-054) |
 | `E_FORBIDDEN` | `scope` | `{missing, snippet}`: `missing` is `{effects, targets, dangerous}`, what the scope lacks; `snippet` is a scope fragment the person can paste into the scope file (DSEC-015) |
 | `E_OUTCOME_UNKNOWN` | `lookup` | The exact command that settles the outcome (DCLI-063) |
 | `E_BUSY` | `retry_after_ms` | How long to wait before trying again |
@@ -589,6 +589,7 @@ Every command MUST declare its effects. The effect sets the default confirmation
 
 - A command that declares several effects MUST take the strictest confirmation tier among them.
 - A command that creates a new file as well as changing a document, such as one that adds a board to a project, declares `artifact` with its other effects.
+- An `artifact` command whose file the application names itself has no `output` flag; its preview MUST name as a target the file or the document it goes into, so the scope covers it, and its apply reports the file in `files` (DCLI-260).
 - Whatever the effect, these operations MUST be dangerous: an irreversible change, discarding unsaved changes, and closing an instance the tool did not start. A change is irreversible when no command of the application or of the tool can set the earlier state back: a delete without undo is irreversible, in file mode too, while a move or a field change, which another call can set back, is not. Such a command MUST declare `irreversible: true` in its registration (DCLI-029); the runtime then makes it dangerous and never guesses.
 - Halt commands declare `lifecycle` and are always direct (DSEC-018).
 
@@ -1278,11 +1279,11 @@ Removed: its rules are part of DCLI-201 and DCLI-210.
 
 ### DCLI-220 Job object and commands
 
-A job MUST have at least these fields: `id`, `operation_id` (`null` for a read job, DCLI-065), `state`, `cancel_requested`, `started_at` and `finished_at` (`null` until the job ends). When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
+A job MUST have at least these fields: `id`, `operation_id` (`null` for a read job, DCLI-065), `state`, `cancel_requested`, `started_at`, and `finished_at` once the job has ended. When the application reports progress, the job MUST also have `progress` `{done, total, unit}`; `total` is `null` when unknown.
 
 `state` is one of `planned`, `running`, `blocked`, `completed`, `failed`, `partial`, `unknown` and `cancelled`. A `blocked` job also carries `action`: what a person must do before it can go on (DCLI-066). A job the runtime runs (DCLI-065) MUST show as `blocked` while a dialog holds its session, with `action`, and `knowledge` when the adapter names entries, taken from the session's `blocker` (DCLI-202); once the person has dealt with the dialog it shows as `running` again. When the job is in a final state (`completed`, `failed`, `partial`, `unknown` or `cancelled`), `job get` MUST also return its `receipt`, its `result`, and `ok`, derived from the receipt as DCLI-062 sets, with the error code in `code` when `ok` is `false` (DCLI-065). A read job has no receipt: it returns `ok`, the read's `result` when `ok` is `true`, and `code` and `message` when it is `false`. These are fields of `data`: `job get` itself succeeds, and the `error.details.receipt` of DCLI-062 belongs to the write, not to `job get`.
 
-`job list` lists the long jobs of every session. `job get --job <id> --wait <duration>` MUST return when the job ends or the time runs out, whichever comes first. `--wait` MAY be up to 600 seconds, because waiting is not work (DCLI-065); a longer value returns `E_USAGE`. `job get` MUST return `poll_after_ms`, the time after which asking again is useful.
+`job list` lists the long jobs of every session, a blocked one as `blocked`. `job get --job <id> --wait <duration>` MUST return when the job ends, becomes blocked, or the time runs out, whichever comes first. `--wait` MAY be up to 600 seconds, because waiting is not work (DCLI-065); a longer value returns `E_USAGE`. `job get` MUST return `poll_after_ms`, the time after which asking again is useful.
 
 Why: The Agent waits for long work in bounded calls instead of one call that hangs, and reads the job's real outcome in the same shape as that of any write. A job stuck behind a dialog says so, so the Agent asks the person instead of waiting.
 Check: 🤖 Driver conformance tests D11 and D26; runtime unit tests for a blocked job.

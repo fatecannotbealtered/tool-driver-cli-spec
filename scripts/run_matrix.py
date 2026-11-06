@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kind", help="the kind of the document, for a command that lists doc_kinds")
     parser.add_argument("--pause", type=int, default=120, help="seconds the tool waits before the read-back in read_back_mismatch")
     parser.add_argument("--tamper", help="a command that changes the written result while the tool waits; "
-                                         "{python} in it is the interpreter run_matrix runs on")
+                                         "{python} in it, unquoted, is the interpreter run_matrix runs on")
     parser.add_argument("--job-from", help="the long command whose normal row starts the job that fills {job}")
     parser.add_argument("--application-version", help="default: the version context reports")
     args = parser.parse_args(argv)
@@ -443,6 +443,10 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
         view = out.get("data") or {}
         if view.get("state") in ("completed", "failed", "partial", "unknown", "cancelled"):
             break
+        if view.get("state") == "blocked":
+            # job get returns at once while a dialog holds the job: the person deals with it.
+            print(f"Job {job['id']} waits for a person: {view.get('action', 'other')}.", file=sys.stderr, flush=True)
+            time.sleep(max(5.0, (view.get("poll_after_ms") or 0) / 1000))
     else:
         notes.append(f"job {job['id']} did not end within {JOB_WAIT_S} s")
         return 1, {"ok": False, "error": {"code": "E_TIMEOUT"}}

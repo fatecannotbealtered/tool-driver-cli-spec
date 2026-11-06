@@ -151,6 +151,8 @@ def finish(case: Case, out: Outcome) -> Outcome:
         return out
     done = case.run("job", "get", "--job", job["id"], "--wait", "60s")
     data = done.data or {}
+    if data.get("state") not in ("completed", "failed", "partial", "unknown", "cancelled"):
+        return done  # the job did not end, or job get failed: the caller's check shows it
     if data.get("ok"):
         envelope = {"ok": True, "data": {"operation_id": data.get("operation_id"), "receipt": data.get("receipt"),
                                          "result": data.get("result")}}

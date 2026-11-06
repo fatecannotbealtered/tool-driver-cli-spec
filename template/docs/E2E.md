@@ -6,7 +6,7 @@ Live runs execute the behavior matrices of {{tool}} on the real {{application}},
 
 ## Authorized Targets
 
-This section is the only list of the {{application}} instances, files, folders and devices that live runs may use. Only a person adds a target to it, or a coding Agent the person explicitly asks to, after showing the person the target. Each target is one list item that starts with the target in backticks, written the way the scope file writes targets: a `file://` URL of a file or folder, or `device:<id>` for a device, followed by a colon and a description of the target. An instance of {{application}} has no lasting ID, so live runs use only instances a person started for the run, with documents from the files and folders listed here. Live runs use no other target, and the scope file for live runs grants only the targets listed here.
+This section is the only list of the {{application}} instances, files, folders and devices that live runs may use. Only a person adds a target to it, or a coding Agent the person explicitly asks to in their own message, once the person agrees to the target it showed. Each target is one list item that starts with the target in backticks, written the way the scope file writes targets: a `file://` URL of a file or folder, or `device:<id>` for a device, followed by a colon and a description of the target. An instance of {{application}} has no lasting ID, so live runs use only instances a person started for the run, with documents from the files and folders listed here. Live runs use no other target, and the scope file for live runs grants only the targets listed here.
 
 No target is authorized yet.
 

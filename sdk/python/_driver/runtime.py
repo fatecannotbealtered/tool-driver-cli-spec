@@ -158,8 +158,12 @@ class Run:
         for notice in notices if isinstance(notices, list) else []:
             if isinstance(notice, dict) and notice.get("severity") in ("info", "warning") \
                     and isinstance(notice.get("message"), str) and notice["message"]:
-                self.notices.append({"type": "application", "severity": notice["severity"], "message": notice["message"],
-                                     "_untrusted": True})
+                entry = {"type": "application", "severity": notice["severity"], "message": notice["message"][:300],
+                         "_untrusted": True}
+                kept = [n for n in self.notices if n.get("type") == "application"]
+                # Each item of a batch may say the same: one copy, and a few notices at most.
+                if entry not in kept and len(kept) < 5:
+                    self.notices.append(entry)
 
     def host_error(self, exc: CapabilityError, dispatch_state: str, write: bool = False) -> DriverError:
         """Turn an error the adapter or a host reported into the runtime's error (DCLI-279)."""
