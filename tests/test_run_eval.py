@@ -1,6 +1,8 @@
 """Tests for scripts/run_eval.py, the evaluation runner, against the sample tool and the fake host."""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -10,6 +12,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -97,6 +100,12 @@ class QuestionFormatTest(unittest.TestCase):
         for part in ("SCENARIO 'made_up'", "COMMANDS is a list", "TURNS is a list", "SCOPE is an object",
                      "FAKE_HOST must be a literal", "FILES names a folder"):
             self.assertIn(part, text)
+
+    def test_fake_host_none_marks_a_question_for_the_real_application(self):
+        _, _, problems = self.facts_of("real_only.py", QUESTION.replace("FAKE_HOST =", "FAKE_HOST = None\nIGNORED ="))
+        self.assertEqual(problems, [])
+        _, _, problems = self.facts_of("wrong.py", QUESTION.replace("FAKE_HOST =", 'FAKE_HOST = "real"\nIGNORED ='))
+        self.assertTrue(any("FAKE_HOST is an object" in p for p in problems), problems)
 
     def test_the_file_name_is_the_question_id(self):
         _, _, problems = self.facts_of("Read-R1.py", QUESTION)
@@ -221,6 +230,26 @@ class RunTest(unittest.TestCase):
         finally:
             session.close()
         self.assertEqual(run_eval.check_graders(SAMPLE, self.facts, [loaded], True, self.tmp, False), 0)
+
+    def test_a_question_only_for_the_real_application_is_skipped_on_the_fake_host(self):
+        questions = self.load(real_only=QUESTION.replace("FAKE_HOST =", "FAKE_HOST = None\nIGNORED ="), read_r1=QUESTION)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            kept = run_eval.on_fake_host(questions)
+        self.assertEqual([q.id for q in kept], ["read_r1"])
+        self.assertIn("SKIP real_only", out.getvalue())
+
+    def test_the_agent_loads_only_the_tool_s_skills(self):
+        self.assertEqual(run_eval.claude_skills(SAMPLE), ["Skill(sample-cli)", "Skill(sample-cli *)"])
+        self.assertNotIn("Skill", run_eval.CLAUDE_TOOLS)
+        home = self.tmp / "claude"
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home)}):
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [])
+            shutil.copytree(SAMPLE / "skills" / "sample-cli", home / "skills" / "sample-cli")
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [])  # the same copy changes nothing
+            with open(home / "skills" / "sample-cli" / "SKILL.md", "a", encoding="utf-8") as handle:
+                handle.write("\nAn older version.\n")
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [home / "skills" / "sample-cli"])
 
     def test_no_scope_file(self):
         [loaded] = self.load(unscoped=QUESTION.replace("FAKE_HOST =", "SCOPE = None\nFAKE_HOST ="))

@@ -39,6 +39,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "instances": [{"id": "fake-1", "documents": [{"id": "doc-1", "name": "doc-1.fake"}]}],
     "files": [{"id": "file-1", "name": "file-1.fake"}],
     "devices": [{"id": "dev-1", "model": "FakeDevice", "firmware": "1.0.0", "state": "ready", "simulated": True}],
+    "kinds": {},  # file extension -> the kind of a document opened from such a file, such as {".prj": "project"}
 }
 
 
@@ -185,6 +186,7 @@ class World:
             self.pending_jobs: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             self.counter = 0
             self.kind = "board"
+            self.kinds = {suffix.lower(): kind for suffix, kind in cfg["kinds"].items()}
             for spec in cfg["instances"]:
                 inst = self._add_instance(spec.get("id"), owned=False)
                 for doc in spec.get("documents", []):
@@ -210,8 +212,8 @@ class World:
     def _add_document(self, spec: dict[str, Any], session: str | None, write: bool = True) -> Document:
         doc_id = spec.get("id") or self._next("doc")
         path = None if spec.get("untitled") else spec.get("path") or str(self.workdir / spec.get("name", f"{doc_id}.fake"))
-        doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})),
-                       kind=spec.get("kind") or self.kind)
+        kind = spec.get("kind") or (self.kinds.get(Path(path).suffix.lower()) if path else None) or self.kind
+        doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})), kind=kind)
         if path is None:
             inst = self.instances[session]
             inst.untitled += 1
@@ -690,7 +692,8 @@ class World:
         objects = self._load(params["path"]) if params.get("path") else None
         inst = self._add_instance(None, owned=True)
         if params.get("path"):
-            self._add_document({"path": params["path"], "objects": objects}, inst.id, write=False)
+            # The kind of document the instance is for is the kind of the document it opens (DCLI-206).
+            self._add_document({"path": params["path"], "objects": objects, "kind": params.get("kind")}, inst.id, write=False)
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable",
                 "persistence": "not_applicable", "session": self._session_view(inst)}
 
@@ -923,8 +926,8 @@ class World:
             doc.external_changes.append({"target": doc.key(obj), "field": name, "before": before, "after": value, "origin": "external"})
 
     def set_kind(self, kind: str) -> None:
-        """Every document, open now or later, is of this kind: a test of a command registered
-        with doc_kinds sets one of them (DCLI-210)."""
+        """Every open document, and every later one without a kind of its own, is of this kind:
+        a test of a command registered with doc_kinds sets one of them (DCLI-210)."""
         with self.lock:
             self.kind = kind
             for doc in self.documents.values():

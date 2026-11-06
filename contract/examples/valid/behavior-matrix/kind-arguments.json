@@ -1,0 +1,292 @@
+{
+  "command": "dimension set",
+  "rows": [
+    {
+      "row": "normal",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "d1",
+        "--value",
+        "12mm"
+      ],
+      "expected": {
+        "exit": 0,
+        "summary": "d1 is 12 mm; verification passed."
+      },
+      "actual": {
+        "exit": 0
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#normal",
+      "kind_arguments": {
+        "assembly": [
+          "--session",
+          "{session}",
+          "--doc",
+          "{doc}",
+          "--id",
+          "bracket/d1",
+          "--value",
+          "12mm"
+        ]
+      }
+    },
+    {
+      "row": "empty",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--ids",
+        "",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#empty"
+    },
+    {
+      "row": "invalid_input",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_USAGE",
+        "summary": "Bare number: the problem lists the accepted units."
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_USAGE"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#invalid_input"
+    },
+    {
+      "row": "not_found",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R999",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 3,
+        "code": "E_NOT_FOUND"
+      },
+      "actual": {
+        "exit": 3,
+        "code": "E_NOT_FOUND"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#not_found"
+    },
+    {
+      "row": "ambiguous",
+      "applies": true,
+      "arguments": [
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 2,
+        "code": "E_AMBIGUOUS",
+        "summary": "Two instances have the board open."
+      },
+      "actual": {
+        "exit": 2,
+        "code": "E_AMBIGUOUS"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#ambiguous"
+    },
+    {
+      "row": "conflict",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 6,
+        "code": "E_CONFLICT",
+        "summary": "Another operation holds the lock on R1."
+      },
+      "actual": {
+        "exit": 6,
+        "code": "E_CONFLICT"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#conflict"
+    },
+    {
+      "row": "no_scope",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 4,
+        "code": "E_FORBIDDEN"
+      },
+      "actual": {
+        "exit": 4,
+        "code": "E_FORBIDDEN"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#no_scope"
+    },
+    {
+      "row": "busy",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 7,
+        "code": "E_BUSY"
+      },
+      "actual": {
+        "exit": 7,
+        "code": "E_BUSY"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#busy"
+    },
+    {
+      "row": "dialog",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 9,
+        "code": "E_HUMAN_REQUIRED",
+        "summary": "The Board Setup dialog is open in KiCad."
+      },
+      "actual": {
+        "exit": 9,
+        "code": "E_HUMAN_REQUIRED"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#dialog"
+    },
+    {
+      "row": "disconnect",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 8,
+        "code": "E_OUTCOME_UNKNOWN",
+        "summary": "The connection closes before the reply."
+      },
+      "unrunnable": "The connection to KiCad cannot be cut on demand at the moment of a call; driver tests D06 and D21 cover it."
+    },
+    {
+      "row": "unsaved",
+      "applies": false,
+      "reason": "A move works the same on a document with unsaved changes; only save and close react to them."
+    },
+    {
+      "row": "read_back_mismatch",
+      "applies": true,
+      "arguments": [
+        "--session",
+        "{session}",
+        "--doc",
+        "{doc}",
+        "--id",
+        "R1",
+        "--x",
+        "12.5mm",
+        "--y",
+        "30mm"
+      ],
+      "expected": {
+        "exit": 1,
+        "code": "E_VERIFY_FAILED",
+        "summary": "While the tool waits before its read-back, the person moves R1 in KiCad; the read-back finds the other position."
+      },
+      "actual": {
+        "exit": 1,
+        "code": "E_VERIFY_FAILED"
+      },
+      "evidence": "live:docs/evidence/2026-11-01-footprint-move.json#read_back_mismatch"
+    }
+  ]
+}

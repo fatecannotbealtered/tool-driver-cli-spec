@@ -54,8 +54,9 @@ PLATFORMS = {"win32": "windows", "darwin": "macos"}
 HOME_VARIABLES = ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
                   "XDG_CACHE_HOME")
 SHELLS = ("Bash", "PowerShell")
-# File tools reach only the workspace, and never the installed Skills or the Agent's settings.
-CLAUDE_TOOLS = ["Read(./**)", "Edit(./**)", "Write(./**)", "Skill"]
+# File tools reach only the workspace, and never the installed Skills or the Agent's settings;
+# the Skill tool loads only the tool's own Skills (claude_skills).
+CLAUDE_TOOLS = ["Read(./**)", "Edit(./**)", "Write(./**)"]
 CLAUDE_DENIED = [f"{tool}(./{folder}/**)" for tool in ("Edit", "Write") for folder in (".claude", ".agents")]
 # A Claude Code session started from another one would otherwise join it.
 CLAUDE_SESSION_VARIABLES = {"CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT",
@@ -93,7 +94,8 @@ class Question:
         self.turns: list[str] = values["TURNS"]
         self.scope: dict[str, Any] | None = values.get("SCOPE", {})
         self.files = path.parent / values["FILES"] if "FILES" in values else None
-        self.fake_host: dict[str, Any] = values.get("FAKE_HOST", {})
+        # None: the question runs only on the real application, such as one that reads real files.
+        self.fake_host: dict[str, Any] | None = values.get("FAKE_HOST", {})
         spec = importlib.util.spec_from_file_location(f"eval_question_{self.id}", path)
         assert spec and spec.loader
         module = importlib.util.module_from_spec(spec)
@@ -105,6 +107,15 @@ class Question:
         self.right: Callable[..., Any] | None = getattr(module, "right", None)
         self.wrong = [(name, getattr(module, name)) for name in sorted(functions)
                       if name == "wrong" or name.startswith("wrong_")]
+
+
+def on_fake_host(questions: list[Question]) -> list[Question]:
+    """The questions that run on the fake host; the others are named as skipped."""
+    for question in questions:
+        if question.fake_host is None:
+            print(f"SKIP {question.id}: FAKE_HOST is None, so it runs only on the real application; "
+                  "check it with --workspace-root in place of --fake-host", flush=True)
+    return [q for q in questions if q.fake_host is not None]
 
 
 def load_questions(folder: Path, contract: dict[str, Any], only: list[str] | None) -> list[Question]:
@@ -281,7 +292,7 @@ class Session:
             sys.path.insert(0, str(HERE.parent / "conformance"))
             from fakehost import Client, FakeHost
 
-            config = dict(question.fake_host)
+            config = dict(question.fake_host or {})
             config.setdefault("host_component", facts.host_component)
             commands = (facts.registration or {}).get("commands", [])
             self.host = FakeHost(state_dir=str(self.tmp / "state"), config=config, commands=commands,
@@ -529,6 +540,29 @@ def git_bash() -> Path | None:
     return None
 
 
+def skill_names(project: Path) -> list[str]:
+    folder = project / "skills"
+    return sorted(d.name for d in folder.iterdir() if (d / "SKILL.md").is_file()) if folder.is_dir() else []
+
+
+def claude_skills(project: Path) -> list[str]:
+    """The permission rules that let the Agent load the tool's own Skills and no other."""
+    return [rule for name in skill_names(project) for rule in (f"Skill({name})", f"Skill({name} *)")]
+
+
+def shadowing_skills(project: Path) -> list[Path]:
+    """Personal Skills of Claude Code that it would load in place of the tool's Skills of the same
+    name, because a personal Skill wins over a project one, when their files differ."""
+    personal = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "skills"
+
+    def files(folder: Path) -> dict[str, str]:
+        return {f.relative_to(folder).as_posix(): check_project.digest(f) for f in folder.rglob("*")
+                if f.is_file() and f.name not in check_project.JUNK and "__pycache__" not in f.parts}
+
+    return [personal / name for name in skill_names(project)
+            if (personal / name).is_dir() and files(personal / name) != files(project / "skills" / name)]
+
+
 class ClaudeAgent:
     """Claude Code in print mode; each further turn resumes the same conversation."""
 
@@ -552,7 +586,8 @@ class ClaudeAgent:
         shells = [f"{shell}({name}{rest})" for shell in SHELLS for name in (tool, "sleep") for rest in ("", " *")]
         cmd = [self.executable, "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk",
                "--setting-sources", "project", "--strict-mcp-config", "--append-system-prompt",
-               CLAUDE_RULES.format(tool=tool), "--allowedTools", *shells, *CLAUDE_TOOLS, "--disallowedTools", *CLAUDE_DENIED]
+               CLAUDE_RULES.format(tool=tool), "--allowedTools", *shells, *CLAUDE_TOOLS, *claude_skills(session.project),
+               "--disallowedTools", *CLAUDE_DENIED]
         if self.requested:
             cmd += ["--model", self.requested]
         if self.conversation:
@@ -742,7 +777,12 @@ def main(argv: list[str] | None = None) -> int:
             unknown = [c for c in question.commands if c not in paths]
             if unknown:
                 raise EvalError(f"{question.id}: COMMANDS names commands the tool does not have: {', '.join(unknown)}")
-        if not args.fake_host:
+        if args.fake_host:
+            questions = on_fake_host(questions)
+            if not questions:
+                print("no question runs on the fake host")
+                return 0
+        else:
             authorize(project, questions, root)
         if root is not None:
             root.mkdir(parents=True, exist_ok=True)
@@ -751,6 +791,10 @@ def main(argv: list[str] | None = None) -> int:
         report = Path(args.report).resolve() if args.report else None
         if report is None and not args.fake_host and not args.only:
             report = default_report(project)
+        stale = shadowing_skills(project)
+        if stale:
+            raise EvalError(f"Claude Code would load {', '.join(map(str, stale))} in place of the tool's Skill of that name, "
+                            "and its files differ; move it out of that folder for the evaluation, then run again")
         return evaluate(project, facts, questions, ClaudeAgent(args.model), args.fake_host, root, args.keep, report)
     except EvalError as exc:
         print(f"run_eval: {exc}", file=sys.stderr)

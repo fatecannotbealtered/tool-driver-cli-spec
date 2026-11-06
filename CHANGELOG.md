@@ -4,6 +4,30 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-06
+
+Changes from syncing the KiCad, Creo and Xpedition tools to 1.0.3.
+
+### Added
+
+- The scripts that are the same in every tool, `scripts/spec.py`, `build.py`, `pack.py`, `platforms.py` and `release_gate.py`, are pinned copies: `sync_spec` replaces them and `check_project` compares their hashes. `smoke.py` stays the author's. The template's AGENTS.md rule 1 lists them; `generate` updates it (DREPO-035, DREPO-034).
+- `sync_spec` lists the other template files that changed since the release the project pinned before, with both template folders, when that release is in the download cache of `scripts/spec.py`, so the author can carry over changes such as those in `docs/E2E.md`. A file whose only change is fixed text that `generate` writes is left out.
+- The `normal` row of a behavior matrix may give `kind_arguments`, the arguments for one document kind keyed by that kind, for a command whose objects differ between kinds; `run_matrix --kind` uses them and runs only the `normal` row on such a kind, and `check_project` checks that each key is one of the command's `doc_kinds` (DVER-030).
+- `FAKE_HOST = None` marks an evaluation question that runs only on the real application, such as one that reads values from a real file; `run_eval --fake-host` skips it and says so (DSKL-044).
+- The fake host gives a document the kind its instance was opened or it was created with, and an evaluation question's `FAKE_HOST` may give each file extension its kind with `kinds` (DVER-020).
+
+### Changed
+
+- A call of a command that makes a file only in some calls, and declares `artifact`, is verified by its other changes when it made no file: no file in `files`, in its preview or in an `output` flag. A file that an `output` flag or a file target of the preview names is checked even when the adapter does not report it, in a long job too (DCLI-051, DCLI-057).
+- When `apply` has replied and only a read after it, such as the read-back, passes its deadline in the CLI's process, the runtime records the change with verification `incomplete` before the watchdog ends the process, for an item of a batch, whose later items are then skipped, and in a long job's worker too; the target is not left locked as outcome unknown (DCLI-278).
+- An adapter looks for dialogs on every `sessions` call, also while the application answers its automation interface; a dialog the tool's own running work answers itself leaves the session `busy`. An adapter in the CLI's process keeps the session read limits itself (DCLI-204, DCLI-205).
+- A read may report `E_CONFLICT` with `application_state` when the application's state stands in its way (DCLI-012). The runtime no longer turns a read's `E_CONFLICT` or `E_AMBIGUOUS` without `dispatch_state` into `E_PROTOCOL`: a read sends no change.
+- `run_eval` lets Claude Code load only the tool's own Skills, and stops when a personal Skill of the same name differs from the project's, because Claude Code would load the personal one in its place.
+
+### Fixed
+
+- Several `run_matrix` runs of one matrix no longer overwrite each other's rows: each writes back only its own rows, under a lock, and records started in the same second get different names.
+
 ## [1.0.3] - 2026-11-05
 
 Changes from syncing the KiCad, Xpedition and Creo tools to 1.0.2.

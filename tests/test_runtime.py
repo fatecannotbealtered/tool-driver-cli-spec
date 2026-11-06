@@ -322,6 +322,9 @@ class SampleAdapter(Adapter):
         path = request.get("path")
         if not path or not os.path.isfile(path):
             return {"items": []}
+        if SampleAdapter.slow_documents and SampleAdapter.hang is not None:
+            SampleAdapter.hang.wait(10)  # the state read after a verified write does not answer
+            raise Ended()
         data = Path(path).read_bytes()
         import hashlib
 
@@ -342,6 +345,8 @@ class SampleAdapter(Adapter):
         if inputs["id"] == "locked":
             raise AdapterError("E_NATIVE_FAILURE", "the part is locked", dispatch_state="not_started",
                                knowledge=["locked-parts"])
+        if inputs["id"] == "reopen":  # a read that the application's state refuses, without a dispatch state
+            raise AdapterError("E_CONFLICT", "the design must be opened again to read it", conflict="application_state")
         fields = {k: v for k, v in inputs.items() if k != "id"}
         before = data.get(inputs["id"], {})
         return {"action": f"Change {inputs['id']}", "targets": [{"key": key, "kind": "part"}],
@@ -357,11 +362,58 @@ class SampleAdapter(Adapter):
                                action="dismiss_dialog", knowledge=["license-dialog"])
         data.setdefault(inputs["id"], {}).update({k: v for k, v in inputs.items() if k != "id"})
         Path(request["document"]).write_text(json.dumps(data), encoding="utf-8")
+        if inputs.get("value") == "slowdoc":
+            SampleAdapter.slow_documents = True
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
 
     def read_back(self, request):
         data, inputs = self._load(request), request["inputs"]
+        if inputs.get("value") == "slow" and self.hang is not None:
+            self.hang.wait(10)  # the watchdog fires meanwhile; then the process is gone
+            raise Ended()
         return {"observed": {file_key(request["document"], "/" + inputs["id"]): data.get(inputs["id"], {})}}
+
+    hang = None
+    slow_documents = False
+
+
+class Ended(BaseException):
+    """Stands for the end of the process in a test that cannot end it."""
+
+
+class BatchAdapter(SampleAdapter):
+    """Several parts at once; the read-back of R2 hangs while ``hang`` is set."""
+
+    def preview(self, request):
+        data, inputs = self._load(request), request["inputs"]
+        keys = [(i, file_key(request["document"], "/" + i)) for i in inputs["ids"]]
+        return {"action": "Change parts", "targets": [{"key": k, "kind": "part"} for _, k in keys],
+                "changes": [{"target": k, "field": "value", "before": data.get(i, {}).get("value"), "after": inputs["value"]}
+                            for i, k in keys], "can_apply": True}
+
+    def apply(self, request):
+        data, inputs = self._load(request), request["inputs"]
+        for i in inputs["ids"]:
+            data.setdefault(i, {})["value"] = inputs["value"]
+        Path(request["document"]).write_text(json.dumps(data), encoding="utf-8")
+        return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
+
+    def read_back(self, request):
+        data, ids = self._load(request), request["inputs"]["ids"]
+        if "R2" in ids and SampleAdapter.hang is not None:
+            SampleAdapter.hang.wait(10)
+            raise Ended()
+        return {"observed": {file_key(request["document"], "/" + i): data.get(i, {}) for i in ids}}
+
+
+class LibraryAdapter(SampleAdapter):
+    """Its preview names a new library file that the apply does not make."""
+
+    def preview(self, request):
+        out = super().preview(request)
+        library = file_key(str(Path(request["document"]).parent / "new.lib"))
+        out["targets"].append({"key": library, "kind": "file"})
+        return out
 
 
 class InProcess(unittest.TestCase):
@@ -405,6 +457,90 @@ class InProcess(unittest.TestCase):
         self.assertEqual((code, env["error"]["code"]), (3, "E_NOT_FOUND"))
         self.assertIn("$.error.details.native_message", env["meta"]["untrusted"])
 
+    def test_a_batch_item_whose_read_back_hangs_ends_the_batch_with_the_outcome_known(self):
+        import threading
+        from unittest import mock
+
+        reg = registration(path="part update", modes=["file"], flags=[
+            {"name": "--ids", "type": "list"}, {"name": "--value", "type": "string"}], tolerances={})
+        tool = Tool(root=SAMPLE, adapter=BatchAdapter, commands=[reg], application="Files", versions="any",
+                    modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        args = ["part", "update", "--doc", str(self.doc), "--ids", "R1,R2,R3", "--value", "5k"]
+        out = io.StringIO()
+        tool.run(args, env=self.env, stdout=out)
+        token = json.loads(out.getvalue())["error"]["details"]["confirm_token"]
+        exits = []
+        SampleAdapter.hang = threading.Event()
+
+        def end(code):
+            exits.append(code)
+            SampleAdapter.hang.set()
+
+        out = io.StringIO()
+        try:
+            with mock.patch("_driver.runtime.READ_DEADLINE_MS", 300), mock.patch("_driver.tool.os._exit", end):
+                with self.assertRaises(Ended):
+                    tool.run([*args, "--confirm", token], env=self.env, stdout=out)
+        finally:
+            SampleAdapter.hang = None
+        env = json.loads(out.getvalue())
+        self.assertEqual(env["error"]["code"], "E_PARTIAL", env)
+        items = env["error"]["details"]["batch"]["items"]
+        self.assertEqual([(i.get("ok"), i.get("code"), i.get("skipped")) for i in items],
+                         [(True, None, None), (False, "E_VERIFY_INCOMPLETE", None), (False, None, True)])
+        self.assertTrue(exits)
+        # Nothing stays locked: the next write to R2 asks for confirmation.
+        out = io.StringIO()
+        tool.run(["part", "update", "--doc", str(self.doc), "--ids", "R2", "--value", "6k"], env=self.env, stdout=out)
+        self.assertEqual(json.loads(out.getvalue())["error"]["code"], "E_CONFIRMATION_REQUIRED")
+
+    def test_a_file_the_preview_names_is_checked(self):
+        reg = registration(path="part update", modes=["file"], effects=["change", "artifact"], flags=[
+            {"name": "--id", "type": "string", "required": True}, {"name": "--value", "type": "string"}], tolerances={})
+        tool = Tool(root=SAMPLE, adapter=LibraryAdapter, commands=[reg], application="Files", versions="any",
+                    modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        scope = json.loads((self.tmp / "scope.json").read_text(encoding="utf-8"))
+        (self.tmp / "scope.json").write_text(json.dumps({**scope, "effects": ["change", "artifact"]}), encoding="utf-8")
+        args = ["part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "2k"]
+        out = io.StringIO()
+        tool.run(args, env=self.env, stdout=out)
+        out2 = io.StringIO()
+        tool.run([*args, "--confirm", json.loads(out.getvalue())["error"]["details"]["confirm_token"]], env=self.env, stdout=out2)
+        env = json.loads(out2.getvalue())
+        self.assertEqual(env["error"]["code"], "E_VERIFY_FAILED", env)  # new.lib was never made
+        self.assertIn("exists@" + file_key(str(self.tmp / "new.lib")), env["error"]["details"]["receipt"]["mismatched"])
+
+    def test_a_read_after_a_verified_write_that_hangs_keeps_the_outcome(self):
+        import threading
+        from unittest import mock
+
+        args = ("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "slowdoc")
+        _, env = self.run_tool(*args)
+        token = env["error"]["details"]["confirm_token"]
+        exits = []
+        SampleAdapter.hang = threading.Event()
+
+        def end(code):
+            exits.append(code)
+            SampleAdapter.hang.set()
+
+        out = io.StringIO()
+        try:
+            with mock.patch("_driver.tool.os._exit", end):  # the state read waits 2 s at most
+                with self.assertRaises(Ended):
+                    self.tool.run([*args, "--confirm", token], env=self.env, stdout=out)
+        finally:
+            SampleAdapter.hang, SampleAdapter.slow_documents = None, False
+        env = json.loads(out.getvalue())
+        self.assertEqual((exits, env["ok"]), ([0], True), env)
+        self.assertEqual(env["data"]["receipt"]["outcome"]["verification"], "passed")
+        _, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "3k")
+        self.assertEqual(env["error"]["code"], "E_CONFIRMATION_REQUIRED")  # not locked
+
+    def test_a_read_may_report_a_conflict_inside_the_application(self):
+        code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "reopen", "--value", "x")
+        self.assertEqual((env["error"]["code"], env["error"]["details"].get("conflict")), ("E_CONFLICT", "application_state"), env)
+
     def test_a_recognized_error_points_to_knowledge(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "locked", "--value", "x")
         self.assertEqual(env["error"]["code"], "E_NATIVE_FAILURE")
@@ -420,6 +556,36 @@ class InProcess(unittest.TestCase):
                 details = env["error"]["details"]
                 self.assertEqual((env["error"]["code"], details["knowledge"]), (code, [entry]))
                 self.assertIn(f"sample-cli knowledge get --id {entry}", details["next_action"])
+
+    def test_a_read_back_that_hangs_leaves_the_outcome_known(self):
+        import threading
+        from unittest import mock
+
+        args = ("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "slow")
+        _, env = self.run_tool(*args)
+        token = env["error"]["details"]["confirm_token"]
+        exits = []
+        SampleAdapter.hang = threading.Event()
+
+        def end(code):
+            exits.append(code)
+            SampleAdapter.hang.set()
+
+        out = io.StringIO()
+        try:
+            with mock.patch("_driver.runtime.READ_DEADLINE_MS", 300), mock.patch("_driver.tool.os._exit", end):
+                with self.assertRaises(Ended):
+                    self.tool.run([*args, "--confirm", token], env=self.env, stdout=out)
+        finally:
+            SampleAdapter.hang = None
+        env = json.loads(out.getvalue())
+        self.assertEqual((exits, env["error"]["code"]), ([1], "E_VERIFY_INCOMPLETE"))
+        outcome = env["error"]["details"]["receipt"]["outcome"]
+        self.assertEqual((outcome["change"], outcome["verification"]), ("applied", "incomplete"))
+        self.assertIn("read_back", env["error"]["details"]["receipt"]["notes"][0])
+        # The outcome is known, so the target is not locked: the next write goes through.
+        _, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "3k")
+        self.assertEqual(env["error"]["code"], "E_CONFIRMATION_REQUIRED")
 
     def test_missing_capability_is_unsupported(self):
         code, env = self.run_tool("session", "list")
