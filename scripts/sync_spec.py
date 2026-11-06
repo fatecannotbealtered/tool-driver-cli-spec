@@ -11,9 +11,10 @@ the driver runtime in ``<pkg>/_driver/`` with its ``MANIFEST.json``, the license
 earlier release that this one no longer has are removed from ``.agent/``, ``licenses/`` and
 ``<pkg>/_driver/``.
 
-When the release the project pinned before is in the download cache of ``scripts/spec.py``, it
-lists the other template files that changed since then, such as ``docs/E2E.md``: compare the
-project's copies with them and carry over what applies.
+It also lists the other template files that changed since the release the project pinned
+before, such as ``docs/E2E.md``: compare the project's copies with them and carry over what
+applies. That release comes from the download cache of ``scripts/spec.py``; when it is missing
+there, it is downloaded first, checked against ``.agent/SPEC_SHA256``.
 
 Afterwards run ``python scripts/spec.py generate`` and ``python scripts/spec.py check`` in
 the project: the fixed text and the generated content follow the new release.
@@ -21,6 +22,7 @@ the project: the fixed text and the generated content follow the new release.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -88,6 +90,27 @@ def old_template(before: str | None) -> Path | None:
     return cache / "template" if before and (cache / "template").is_dir() else None
 
 
+def download(version: str, pin: str | None) -> None:
+    """Put a release into the download cache with the download of ``scripts/spec.py``."""
+    loader = importlib.util.spec_from_file_location("spec_download", BUNDLE / "template" / "scripts" / "spec.py")
+    module = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    module.download(version, pin)
+
+
+def fetch_old(project: Path, before: str | None) -> str | None:
+    """Download release ``before`` when it is missing from the download cache, before sync
+    replaces the SHA-256 the project pinned with it; the reason when that fails."""
+    if not before or before == bundle_version() or old_template(before) is not None:
+        return None
+    pin = project / ".agent" / "SPEC_SHA256"
+    try:
+        download(before, (pin.read_text(encoding="utf-8").strip() or None) if pin.is_file() else None)
+    except (SystemExit, Exception) as exc:  # the download only serves the listing, never the sync
+        return str(exc) or type(exc).__name__
+    return None if old_template(before) is not None else f"release {before} holds no template/"
+
+
 def only_fixed_text(rel: str, old: str, new: str) -> bool:
     """The file differs only in sections whose text generate copies from the template."""
     english = rel[:-6] + ".md" if rel.endswith("_zh.md") else rel
@@ -104,7 +127,7 @@ def only_fixed_text(rel: str, old: str, new: str) -> bool:
 
 def template_changes(project: Path, before: str | None) -> list[str] | None:
     """The template files, other than pinned copies and fixed text, that differ from release
-    ``before``; None when that release is not in the download cache."""
+    ``before``; None when that release is not in the download cache (see ``fetch_old``)."""
     if not before or before == bundle_version():
         return []
     old, new = old_template(before), BUNDLE / "template"
@@ -130,14 +153,15 @@ def main(argv: list[str] | None = None) -> int:
     project = args.project.resolve()
     pinned_before = project / ".agent" / "SPEC_VERSION"
     before = pinned_before.read_text(encoding="utf-8").strip() if pinned_before.is_file() else None
+    failed = fetch_old(project, before)
     changed = sync(project)
     for line in changed:
         print(line)
     print(f"Pinned tool-driver-cli-spec {bundle_version()}: {len(changed)} change(s).")
     template = template_changes(project, before)
     if template is None:
-        print(f"Release {before} is not in the download cache, so the template files that changed since then are not "
-              "listed; compare the project's copies with template/ of this release.")
+        print(f"Release {before} could not be downloaded ({failed}), so the template files that changed since then "
+              "are not listed; compare the project's copies with template/ of this release.")
     elif template:
         print(f"The template changed these files since {before}. Compare each in {BUNDLE / 'template'} with the same file "
               f"in {old_template(before)} and carry over to the project's copy what applies:")

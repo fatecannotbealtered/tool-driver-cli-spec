@@ -4,9 +4,16 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/E2E.md` has a new first section, Authorization Rules, with fixed text from the template: who adds a target to Authorized Targets, how a target is written, and who writes the scope files for live runs and for evaluations on the real application. `check_project` compares it with the template and `generate` keeps it in step, so a change to these rules reaches every tool. Authorized Targets now holds only the list, one item per target, and `check_project` reports any other text there: copy the new section from the template and remove the old rules paragraph from Authorized Targets (DREPO-017).
+
 ### Fixed
 
 - The error for a preview that cannot be applied no longer ends with two periods when a reason in `blocked_by` ends with one.
+- On the real application, `run_eval` also stops when an Agent's Skill folder in the person's home, such as `~/.agents/skills`, holds a copy of the tool's Skill at another version: the tool keeps the person's home there, and its doctor would report the copy and tell the Agent to run `update` (DSKL-044).
+- `sync` lists the template files that changed since the release pinned before even when that release is no longer in the download cache: it downloads the release first, checked against `.agent/SPEC_SHA256`. `scripts/spec.py` has the download as a function of its own.
+- The onboarding guide and the error of `run_matrix` for a target that is not listed no longer say that only a person adds targets or writes the scope file; a coding Agent does when the person explicitly asks in their own message and agrees to what it shows (DSEC-011).
 
 ## [1.0.5] - 2026-11-06
 

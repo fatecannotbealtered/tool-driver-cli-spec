@@ -174,7 +174,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
         target = target_of(name, value)
         if covered(target, authorized) is None:
-            raise SystemExit(f"{name}={value} is not covered by Authorized Targets in docs/E2E.md; only a person adds targets")
+            raise SystemExit(f"{name}={value} is not covered by Authorized Targets in docs/E2E.md; a person adds the target, or explicitly asks the "
+                             "coding Agent to (Authorization Rules in docs/E2E.md)")
         used.add(covered(target, authorized) or target)
     if not used:
         raise SystemExit("a live run names at least one authorized target with --set doc=, dir= or device=")

@@ -65,7 +65,7 @@ Each release of tool-driver-cli-spec on GitHub Releases holds the development Sk
 Tests on the real application make real changes. They use only the targets you list.
 
 - Prepare targets made for testing: a copy of a project, or a device set up for testing. Never a production project or machine.
-- List each target under Authorized Targets in the tool's `docs/E2E.md`, as one list item: the target in backticks, written as a `file://` URL of a file or folder or as `device:<id>`, then a colon and a description. That section is the only list, and the Agent never adds to it. For example:
+- List each target under Authorized Targets in the tool's `docs/E2E.md`, as one list item: the target in backticks, written as a `file://` URL of a file or folder or as `device:<id>`, then a colon and a description. That section is the only list. The Agent adds to it only when you ask it to in your own message, once you agree to the target it shows. For example:
 
   ```markdown
   - `file:///D:/e2e/demo-board/`: a copy of the demo board, made for live runs
@@ -84,7 +84,7 @@ Tests on the real application make real changes. They use only the targets you l
   }
   ```
 
-- The Agent never writes or changes a scope file, even when asked in chat. When a write is refused with `E_FORBIDDEN`, the error carries a snippet that would grant it; the Agent shows it to you, and you paste it into the file if you agree. The tool's `docs/E2E.md` describes the whole procedure.
+- Apart from such an explicit request, the Agent never writes or changes a scope file. When a write is refused with `E_FORBIDDEN`, the error carries a snippet that would grant it; the Agent shows it to you, and if you agree, you add it to the file or explicitly ask the Agent to. The tool's `docs/E2E.md` describes the whole procedure.
 - For the evaluation, list one folder for the evaluation workspaces, and any other target a question's `SCOPE` names, such as a device. The evaluation runner writes each question's scope file itself.
 
 ## Evidence and Maturity

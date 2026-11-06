@@ -244,12 +244,30 @@ class RunTest(unittest.TestCase):
         self.assertNotIn("Skill", run_eval.CLAUDE_TOOLS)
         home = self.tmp / "claude"
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home)}):
-            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [])
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE, self.facts, False), [])
             shutil.copytree(SAMPLE / "skills" / "sample-cli", home / "skills" / "sample-cli")
-            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [])  # the same copy changes nothing
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE, self.facts, False), [])  # the same copy changes nothing
             with open(home / "skills" / "sample-cli" / "SKILL.md", "a", encoding="utf-8") as handle:
                 handle.write("\nAn older version.\n")
-            self.assertEqual(run_eval.shadowing_skills(SAMPLE), [home / "skills" / "sample-cli"])
+            [(path, why)] = run_eval.shadowing_skills(SAMPLE, self.facts, False)
+            self.assertEqual(path, home / "skills" / "sample-cli")
+            self.assertIn("in place of", why)
+
+    def test_on_the_real_application_every_skill_folder_doctor_reads_counts(self):
+        person = self.tmp / "person"
+        old = person / ".agents" / "skills" / "sample-cli"
+        shutil.copytree(SAMPLE / "skills" / "sample-cli", old)
+        text = (old / "SKILL.md").read_text(encoding="utf-8")
+        (old / "SKILL.md").write_text(text + "\nSame version, other words.\n", encoding="utf-8")
+        env = {"CLAUDE_CONFIG_DIR": str(self.tmp / "claude"), "HOME": str(person), "USERPROFILE": str(person)}
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE, self.facts, True), [])  # doctor reads only the version
+            (old / "SKILL.md").write_text(text.replace("version: 0.1.0", "version: 0.0.9"), encoding="utf-8")
+            self.assertEqual(run_eval.shadowing_skills(SAMPLE, self.facts, False), [])  # the fake host gives the tool a home
+            [(path, why)] = run_eval.shadowing_skills(SAMPLE, self.facts, True)
+            self.assertEqual(path, old)
+            self.assertIn("version 0.0.9", why)
+            self.assertIn("update", why)
 
     def test_no_scope_file(self):
         [loaded] = self.load(unscoped=QUESTION.replace("FAKE_HOST =", "SCOPE = None\nFAKE_HOST ="))

@@ -65,7 +65,7 @@ tool-driver-cli-spec 在 GitHub Releases 上的每个发布包里都有开发用
 在真实软件上测试会做出真实的修改，所以只使用你列出的目标。
 
 - 准备专门用来测试的目标：项目的一份副本，或者为测试准备好的设备。不要用正式项目或生产机器。
-- 把每个目标列在工具 `docs/E2E.md` 的「Authorized Targets」一节，一个目标占一个列表项：目标写在反引号里，文件或文件夹写成 `file://` URL，设备写成 `device:<id>`，后面跟冒号和说明。这一节是唯一的清单，Agent 从不往里加目标。例如：
+- 把每个目标列在工具 `docs/E2E.md` 的「Authorized Targets」一节，一个目标占一个列表项：目标写在反引号里，文件或文件夹写成 `file://` URL，设备写成 `device:<id>`，后面跟冒号和说明。这一节是唯一的清单。只有你在自己发的消息里要 Agent 加，并且同意了它给你看的目标，它才往里加。例如：
 
   ```markdown
   - `file:///D:/e2e/demo-board/`: a copy of the demo board, made for live runs
@@ -84,7 +84,7 @@ tool-driver-cli-spec 在 GitHub Releases 上的每个发布包里都有开发用
   }
   ```
 
-- Agent 从不写或改授权范围文件，你在对话里要求也不行。写操作因为缺少授权被拒绝时，`E_FORBIDDEN` 错误里带着一段能放行它的片段；Agent 把片段拿给你看，你同意就把它粘贴进文件。完整做法见工具的 `docs/E2E.md`。
+- 除了你这样明确要求，Agent 从不写或改授权范围文件。写操作因为缺少授权被拒绝时，`E_FORBIDDEN` 错误里带着一段能放行它的片段；Agent 把片段拿给你看，你同意的话，自己把它加进文件，或者明确要 Agent 加。完整做法见工具的 `docs/E2E.md`。
 - 评测时，列出一个放评测工作区的文件夹，以及评测题的 `SCOPE` 用到的其他目标，比如设备。评测运行器会自己为每道题写授权范围文件。
 
 ## 证据与成熟度
