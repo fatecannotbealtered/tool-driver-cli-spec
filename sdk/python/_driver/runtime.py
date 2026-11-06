@@ -175,7 +175,9 @@ class Run:
         if code not in self.contract["host_protocol"]["allowed_error_codes"]:
             return DriverError("E_PROTOCOL", f"The adapter answered with an error it may not use: {code}.",
                                dispatch_state=dispatch_state)
-        if code in ("E_AMBIGUOUS", "E_CONFLICT", "E_BACKEND_UNAVAILABLE", "E_TIMEOUT") and exc.dispatch_state != "not_started":
+        # A read sends no change, so only a write's reply must say that nothing was sent.
+        if code in ("E_AMBIGUOUS", "E_CONFLICT", "E_BACKEND_UNAVAILABLE", "E_TIMEOUT") and write and \
+                exc.dispatch_state != "not_started":
             return DriverError("E_PROTOCOL", f"The adapter answered {code} after sending the change; it comes only before.",
                                dispatch_state=dispatch_state)
         if code == "E_TIMEOUT" and write:

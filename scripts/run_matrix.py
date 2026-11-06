@@ -24,7 +24,8 @@ by ``doc save`` on the same document, and passes only when that save verified th
 Several runs of one matrix may run at once, such as a ``busy`` row while the ``normal`` row's
 job runs: each writes its own record and changes only its own rows of the matrix. A command
 that lists ``doc_kinds`` may give its ``normal`` row ``kind_arguments`` for a kind whose objects
-the ``arguments`` do not fit; ``--kind`` then picks them.
+the ``arguments`` do not fit; ``--kind`` then picks them, and on that kind only the ``normal`` row
+runs.
 
 ``{inputs}`` is the project's ``tests/inputs/`` folder. ``{job}`` is the ``--set job=`` value, or
 else the job that the ``normal`` row of a long command starts at the beginning of the run: the
@@ -180,6 +181,16 @@ def main(argv: list[str] | None = None) -> int:
 
     wanted = {r.strip() for r in args.row.split(",") if r.strip()}
     rows = [r for r in matrix["rows"] if r["applies"] and not r.get("unrunnable") and (not wanted or r["row"] in wanted)]
+    normal = next((r for r in matrix["rows"] if r["row"] == "normal"), {})
+    if args.kind and args.kind in normal.get("kind_arguments", {}):
+        # The other rows' arguments fit the other kinds: on this kind only the normal row runs.
+        others = [r["row"] for r in rows if r["row"] != "normal"]
+        if others and wanted:
+            raise SystemExit(f"on {args.kind} only the normal row runs, with its kind_arguments; run {', '.join(others)} "
+                             "with a kind its arguments fit")
+        if others:
+            print(f"On {args.kind} only the normal row runs; the other rows' arguments are for the other kinds.")
+        rows = [r for r in rows if r["row"] == "normal"]
     if not rows:
         raise SystemExit("no row to run")
     inputs = root / "tests" / "inputs"

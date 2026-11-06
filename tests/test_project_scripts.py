@@ -259,6 +259,8 @@ class ProjectTest(unittest.TestCase):
         shutil.copytree(REPO / "template", old)
         (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
         (old / "scripts" / "build.py").write_text("an older script\n", encoding="utf-8")  # pinned: sync replaces it
+        agents = (old / "AGENTS.md").read_text(encoding="utf-8")
+        (old / "AGENTS.md").write_text(agents.replace("Never edit a pinned copy", "Do not edit a pinned copy"), encoding="utf-8")
         with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}):
             self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
             self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded

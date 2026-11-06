@@ -821,8 +821,9 @@ class Engine:
         return self.finish_single(spec, record, outcome)
 
     def one(self, spec: WriteSpec, record: dict[str, Any], target: dict[str, Any] | None,
-            changes: list[dict[str, Any]], child: int | None) -> dict[str, Any]:
-        """Apply one write and build its receipt. Returns the outcome for the caller to report."""
+            changes: list[dict[str, Any]], child: int | None, on_hung: Any = None) -> dict[str, Any]:
+        """Apply one write and build its receipt. Returns the outcome for the caller to report.
+        ``on_hung``: for an item of a batch, ends the batch when its read-back hangs."""
         operation_id = record["operation_id"]
         receipt: dict[str, Any] = {"operation_id": operation_id, "command": spec.command.path}
         if target is not None:
@@ -896,12 +897,12 @@ class Engine:
         expects = any(c.get("origin", "tool") == "tool" for c in changes)
         paused = None
         if execution == "completed" and (lasting or change == "partial" or persistence == "partial" or expects):
-            if child is None:
+            if child is None or on_hung is not None:
                 def settle(note: str) -> Result:
                     # apply replied, so a read after it that hangs leaves the outcome known (DCLI-278).
                     receipt["outcome"] = _outcome(execution, change, delivery, persistence, "incomplete")
                     receipt.update(observed={}, mismatched=[], notes=[note])
-                    return self.finish_single(spec, record, out, hung=True)
+                    return self.finish_single(spec, record, out, hung=True) if child is None else on_hung(out)
 
                 self.run.settle_hang = settle
             try:
@@ -1152,30 +1153,14 @@ class Engine:
         unfinished: list[int] = []
         stopped = False
         human: DriverError | None = None
-        for index, target in enumerate(targets):
-            if stopped:
-                items.append({"target": target["key"], "ok": False, "skipped": True})
-                unfinished.append(index)
-                continue
-            child_id = run.records.new_id()
-            child_changes = [c for c in changes if covers(target["key"], c["target"])]
-            child = {"operation_id": child_id, "command": spec.command.path, "target": target, "batch": batch_id,
-                     "effects": list(spec.command.effects), "tier": tier, "scope_id": record["scope_id"],
-                     "state": "dispatched", "planned_at": record["planned_at"], "dispatched_at": utc_now(),
-                     "preview": {**record["preview"], "operation_id": child_id, "target": target,
-                                 "changes": self.mask(spec, copy.deepcopy(child_changes[: self.contract["preview"]["max_changes"]])),
-                                 "summary": {"total": len(child_changes), "by_origin": {"tool": len(child_changes)} if child_changes else {},
-                                             "by_kind": {target["kind"]: len(child_changes)} if child_changes else {}}},
-                     "_call": record.get("_call"), "_request": spec.stored_request(index),
-                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns(),
-                     "_changes": self.mask(spec, [copy.deepcopy(c) for c in child_changes if c.get("origin", "tool") == "tool"])}
-            child["preview"].pop("changes_truncated", None)
-            child_keys = _keys([target], child_changes)
-            child["_keys"] = sorted(child_keys)  # stored before dispatch, so a crash leaves them locked
-            run.records.save(child)
-            out = self.one(spec, child, target, child_changes, index)
+
+        def settle(index: int, target: dict[str, Any], child: dict[str, Any], child_keys: set[str],
+                   out: dict[str, Any], hung: bool = False) -> None:
+            """Record one item's outcome; ``hung``: its read-back hangs, so nothing calls the adapter."""
+            nonlocal first_error, stop_error, stopped, human
+            child_id = child["operation_id"]
             receipt = out["receipt"]
-            self._decorate(spec, receipt)
+            self._decorate(spec, receipt, fresh=not hung)
             child["receipt"] = receipt
             error = out["error"]
             if out["job"]:
@@ -1207,6 +1192,51 @@ class Engine:
                 stopped, stop_error = True, error or first_error
             elif not ok and not keep_going:
                 stopped = True
+
+        def hung(index: int, target: dict[str, Any], child: dict[str, Any], child_keys: set[str], out: dict[str, Any]) -> Result:
+            # The process ends with the hang, so the objects after this one are not sent.
+            nonlocal stopped, stop_error
+            settle(index, target, child, child_keys, out, hung=True)
+            for later in range(index + 1, len(targets)):
+                items.append({"target": targets[later]["key"], "ok": False, "skipped": True})
+                unfinished.append(later)
+            if index + 1 < len(targets) and stop_error is None:
+                stopped = True
+                stop_error = first_error or DriverError("E_VERIFY_INCOMPLETE", "The read-back did not answer in time.")
+            return self.end_batch(spec, record, items, children, unknown_children, unfinished, first_error, stop_error, human)
+
+        for index, target in enumerate(targets):
+            if stopped:
+                items.append({"target": target["key"], "ok": False, "skipped": True})
+                unfinished.append(index)
+                continue
+            child_id = run.records.new_id()
+            child_changes = [c for c in changes if covers(target["key"], c["target"])]
+            child = {"operation_id": child_id, "command": spec.command.path, "target": target, "batch": batch_id,
+                     "effects": list(spec.command.effects), "tier": tier, "scope_id": record["scope_id"],
+                     "state": "dispatched", "planned_at": record["planned_at"], "dispatched_at": utc_now(),
+                     "preview": {**record["preview"], "operation_id": child_id, "target": target,
+                                 "changes": self.mask(spec, copy.deepcopy(child_changes[: self.contract["preview"]["max_changes"]])),
+                                 "summary": {"total": len(child_changes), "by_origin": {"tool": len(child_changes)} if child_changes else {},
+                                             "by_kind": {target["kind"]: len(child_changes)} if child_changes else {}}},
+                     "_call": record.get("_call"), "_request": spec.stored_request(index),
+                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns(),
+                     "_changes": self.mask(spec, [copy.deepcopy(c) for c in child_changes if c.get("origin", "tool") == "tool"])}
+            child["preview"].pop("changes_truncated", None)
+            child_keys = _keys([target], child_changes)
+            child["_keys"] = sorted(child_keys)  # stored before dispatch, so a crash leaves them locked
+            run.records.save(child)
+            out = self.one(spec, child, target, child_changes, index,
+                           on_hung=lambda out, i=index, t=target, c=child, k=child_keys: hung(i, t, c, k, out))
+            settle(index, target, child, child_keys, out)
+        return self.end_batch(spec, record, items, children, unknown_children, unfinished, first_error, stop_error, human)
+
+    def end_batch(self, spec: WriteSpec, record: dict[str, Any], items: list[dict[str, Any]], children: list[str],
+                  unknown_children: list[tuple[str, list[str]]], unfinished: list[int], first_error: DriverError | None,
+                  stop_error: DriverError | None, human: DriverError | None) -> Result:
+        """Record the batch and report it (DCLI-064)."""
+        run = self.run
+        batch_id = record["operation_id"]
         summary = {"total": len(items), "succeeded": sum(1 for i in items if i["ok"]),
                    "failed": sum(1 for i in items if not i["ok"] and not i.get("skipped") and i.get("code") != "E_OUTCOME_UNKNOWN"),
                    "unknown": sum(1 for i in items if i.get("code") == "E_OUTCOME_UNKNOWN"),
