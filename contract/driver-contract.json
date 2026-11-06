@@ -1004,7 +1004,7 @@
         "Risks"
       ],
       "docs/COMPATIBILITY.md": ["Support Matrix", "Known Limitations"],
-      "docs/E2E.md": ["Authorized Targets", "Procedure", "Evidence Records"]
+      "docs/E2E.md": ["Authorization Rules", "Authorized Targets", "Procedure", "Evidence Records"]
     },
     "sections_zh": {
       "README.md": ["安装", "能力", "工作方式", "授权", "关于本工具", "配置", "卸载", "开发", "链接"],
@@ -1013,7 +1013,7 @@
       "CONTRIBUTING.md": ["开发环境", "常用命令", "分支与提交约定", "CI 检查", "测试与证据", "新增或修改命令", "合并请求", "安全"],
       "docs/APPLICATION.md": ["软件", "自动化接口", "对象模型", "单位与坐标", "线程与阻塞", "读回", "保存与撤销", "实例与并发", "许可", "能力", "风险"],
       "docs/COMPATIBILITY.md": ["支持矩阵", "已知限制"],
-      "docs/E2E.md": ["授权目标", "步骤", "证据记录"]
+      "docs/E2E.md": ["授权规则", "授权目标", "步骤", "证据记录"]
     },
     "optional_sections": {"SECURITY.md": {"Host Component": "host_component", "Physical Effects": "device_mode"}},
     "capability_id_pattern": "^CAP-[0-9]{3}$",

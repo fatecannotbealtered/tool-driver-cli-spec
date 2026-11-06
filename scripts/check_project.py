@@ -48,7 +48,8 @@ ROOT_CONFIG = {"package-lock.json", "npm-shrinkwrap.json", "Pipfile", "go.mod", 
 ROOT_CONFIG_SUFFIXES = (".toml", ".cfg", ".ini", ".lock", ".yaml", ".yml")
 JUNK = {".DS_Store", "Thumbs.db", "desktop.ini"}
 FIXED = {"README.md": ["Install", "How It Works"], "AGENTS.md": ["Bare minimum to obey"],
-         "SECURITY.md": ["Write Confirmation", "State Directory", "Untrusted Content", "Supply Chain", "Self-update"]}
+         "SECURITY.md": ["Write Confirmation", "State Directory", "Untrusted Content", "Supply Chain", "Self-update"],
+         "docs/E2E.md": ["Authorization Rules"]}
 REGIONS = {
     "README.md": ["badges", "info-card", "command-map"],
     "SECURITY.md": ["risk"],
@@ -884,6 +885,7 @@ class Checker:
             self.pair(english, chinese, en, zh)
         self.readme_title()
         self.fixed_text()
+        self.targets_list()
         self.changelog()
 
     def pair(self, english: str, chinese: str, en: str, zh: str) -> None:
@@ -977,6 +979,28 @@ class Checker:
                         clause = "DREPO-054" if name == "Install" else f"DREPO-0{self.clause_of(english)}"
                         self.add(clause, lang_file, f"section {heading} must keep the template's fixed text; "
                                  "copy it from the template unchanged")
+
+    def targets_list(self) -> None:
+        """Authorized Targets holds only the list, so no rule from an older template stays beside
+        Authorization Rules (DREPO-017): in English one item per target, or the template's line for
+        none; in Chinese the template's line pointing to the English list."""
+        if self.facts.reference is None:
+            return
+        for name, heading in (("docs/E2E.md", "Authorized Targets"), ("docs/E2E_zh.md", "授权目标")):
+            text, template = self.text(name), template_text(name, self.facts)
+            have = section_body(text, heading) if text is not None else None
+            want = section_body(template, heading) if template is not None else None
+            if have is None or want is None:
+                continue
+            if name.endswith("_zh.md"):
+                stray = have != want
+            else:
+                stray = any(line.strip() and line.strip() != want and not re.match(r"^(\s*[-*]\s|\s{2,}\S)", line)
+                            for line in have.split("\n"))
+            if stray:
+                self.add("DREPO-017", name, f"section {heading} holds only the list of targets"
+                         + ("" if name == "docs/E2E.md" else ", which is in docs/E2E.md")
+                         + "; the rules are in Authorization Rules, so remove any other text, as in the template")
 
     def changelog(self) -> None:
         text = self.text("CHANGELOG.md")

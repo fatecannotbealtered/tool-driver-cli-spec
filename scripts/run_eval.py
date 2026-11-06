@@ -33,6 +33,7 @@ import datetime
 import importlib.util
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -51,6 +52,8 @@ NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 CALL_TIMEOUT_S = 100  # below the 120 s an Agent's shell waits for one command
 TURN_TIMEOUT_S = 900
 PLATFORMS = {"win32": "windows", "darwin": "macos"}
+# The version line of a Skill's front matter, read the way the tool's doctor reads it.
+SKILL_VERSION = re.compile(r"^\s+version:\s*['\"]?([^'\"\s]+)", re.MULTILINE)
 HOME_VARIABLES = ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
                   "XDG_CACHE_HOME")
 SHELLS = ("Bash", "PowerShell")
@@ -550,17 +553,36 @@ def claude_skills(project: Path) -> list[str]:
     return [rule for name in skill_names(project) for rule in (f"Skill({name})", f"Skill({name} *)")]
 
 
-def shadowing_skills(project: Path) -> list[Path]:
-    """Personal Skills of Claude Code that it would load in place of the tool's Skills of the same
-    name, because a personal Skill wins over a project one, when their files differ."""
+def shadowing_skills(project: Path, facts: check_project.Facts, real: bool) -> list[tuple[Path, str]]:
+    """Copies of the tool's Skills outside the project that would change the evaluation, each with
+    the reason: a personal Skill of Claude Code whose files differ, because Claude Code loads it in
+    place of the project's Skill of that name; and on the real application, where the tool keeps the
+    person's home, a copy at another version in an Agent's Skill folder, because the tool's doctor
+    reports it and tells the Agent to run update (DSKL-031)."""
+    names = skill_names(project)
     personal = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "skills"
 
     def files(folder: Path) -> dict[str, str]:
         return {f.relative_to(folder).as_posix(): check_project.digest(f) for f in folder.rglob("*")
                 if f.is_file() and f.name not in check_project.JUNK and "__pycache__" not in f.parts}
 
-    return [personal / name for name in skill_names(project)
-            if (personal / name).is_dir() and files(personal / name) != files(project / "skills" / name)]
+    found = [(personal / name, "Claude Code loads it in place of the tool's Skill of that name")
+             for name in names if (personal / name).is_dir() and files(personal / name) != files(project / "skills" / name)]
+    if not real:
+        return found
+    home = Path(os.environ.get("USERPROFILE" if os.name == "nt" else "HOME") or os.environ.get("HOME") or Path.home())
+    for entry in facts.contract["update"]["skill_dirs"]:
+        folder = home / entry[2:] if entry.startswith("~/") else Path(entry)
+        for name in names:
+            skill = folder / name / "SKILL.md"
+            if not skill.is_file() or any(path == skill.parent for path, _ in found):
+                continue
+            match = SKILL_VERSION.search(skill.read_text(encoding="utf-8", errors="replace"))
+            version = match.group(1) if match else None
+            if version != facts.version:
+                found.append((skill.parent, f"it is at version {version}, not {facts.version}, so the tool's doctor "
+                                            "reports it and tells the Agent to run update"))
+    return found
 
 
 class ClaudeAgent:
@@ -791,10 +813,11 @@ def main(argv: list[str] | None = None) -> int:
         report = Path(args.report).resolve() if args.report else None
         if report is None and not args.fake_host and not args.only:
             report = default_report(project)
-        stale = shadowing_skills(project)
+        stale = shadowing_skills(project, facts, not args.fake_host)
         if stale:
-            raise EvalError(f"Claude Code would load {', '.join(map(str, stale))} in place of the tool's Skill of that name, "
-                            "and its files differ; move it out of that folder for the evaluation, then run again")
+            raise EvalError("these copies of the tool's Skills would change the evaluation: "
+                            + "; ".join(f"{path} ({why})" for path, why in stale)
+                            + ". Move them out of those folders for the evaluation, then run again")
         return evaluate(project, facts, questions, ClaudeAgent(args.model), args.fake_host, root, args.keep, report)
     except EvalError as exc:
         print(f"run_eval: {exc}", file=sys.stderr)

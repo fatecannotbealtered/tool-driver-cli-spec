@@ -5,6 +5,8 @@ copies it, breaks one rule, and expects check_project to name the clause.
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import shutil
@@ -13,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -138,7 +141,9 @@ class ProjectTest(unittest.TestCase):
         cases = [("README.md", "## How It Works\n", "## How It Works\n\nAlso this.\n", "DREPO-011"),
                  ("README_zh.md", "npm install -g @tool-driver/demo-cli", "npm i -g @tool-driver/demo-cli", "DREPO-054"),
                  ("AGENTS.md", "## Bare minimum to obey\n", "## Bare minimum to obey\n\nOr not.\n", "DREPO-012"),
-                 ("SECURITY_zh.md", "## 自更新\n", "## 自更新\n\n改过。\n", "DREPO-013")]
+                 ("SECURITY_zh.md", "## 自更新\n", "## 自更新\n\n改过。\n", "DREPO-013"),
+                 ("docs/E2E.md", "Only a person adds a target", "Anyone adds a target", "DREPO-017"),
+                 ("docs/E2E_zh.md", "## 授权规则\n", "## 授权规则\n\n谁都可以加目标。\n", "DREPO-017")]
         for name, old, new, clause in cases:
             with self.subTest(name=name):
                 self.setUp()
@@ -146,6 +151,24 @@ class ProjectTest(unittest.TestCase):
                 self.expect(clause)
                 self.fix()
                 self.assertNotIn(clause, self.clauses(), "generate restores the fixed text")
+
+    def test_authorized_targets_hold_only_the_list(self):
+        self.edit("docs/E2E.md", "No target is authorized yet.", "- `file:///D:/tests/`: copies made for testing\n"
+                  "  of the sample project")
+        self.assertNotIn("DREPO-017", self.clauses())
+        # An older project keeps its rules paragraph in Authorized Targets; generate cannot tell it apart.
+        self.edit("docs/E2E.md", "- `file:///", "Only a person adds a target to it.\n\n- `file:///")
+        self.expect("DREPO-017")
+        self.fix()
+        self.expect("DREPO-017")
+        self.setUp()
+        self.edit("docs/E2E_zh.md", "清单以 `docs/E2E.md` 为准，本节不另列目标。", "- `file:///D:/tests/`：测试用的副本")
+        self.expect("DREPO-017")
+        self.setUp()
+        text = (self.project / "docs" / "E2E.md").read_text(encoding="utf-8")
+        start, end = text.index("## Authorization Rules"), text.index("## Authorized Targets")
+        (self.project / "docs" / "E2E.md").write_text(text[:start] + text[end:], encoding="utf-8")
+        self.expect("DREPO-017")  # the structure before Authorization Rules
 
     def test_changelog(self):
         self.edit("CHANGELOG.md", "### Added", "### 新增")
@@ -265,6 +288,52 @@ class ProjectTest(unittest.TestCase):
             self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
             self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded
         self.assertEqual(sync_spec.template_changes(self.project, check_project.bundle_version()), [])
+
+    def test_sync_downloads_the_release_pinned_before(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        (self.project / ".agent" / "SPEC_SHA256").write_text("ab" * 32 + "\n", encoding="utf-8")
+        asked = []
+
+        def download(version, pin):
+            asked.append((version, pin))
+            old = cache / "tool-driver-cli-spec" / version / f"tool-driver-cli-spec-{version}" / "template"
+            shutil.copytree(REPO / "template", old)
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", download):
+            self.assertIsNone(sync_spec.fetch_old(self.project, "0.9.0"))
+            self.assertEqual(asked, [("0.9.0", "ab" * 32)])  # checked against the pinned SHA-256
+            self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), [])
+            self.assertIsNone(sync_spec.fetch_old(self.project, "0.9.0"))
+            self.assertEqual(len(asked), 1)  # in the cache now
+
+        def offline(version, pin):
+            raise SystemExit("cannot download the release: offline")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", offline):
+            self.assertIn("offline", sync_spec.fetch_old(self.project, "0.8.0"))
+
+        def broken(version, pin):
+            raise OSError("disk full")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", broken):
+            self.assertIn("disk full", sync_spec.fetch_old(self.project, "0.8.0"))  # never stops the sync
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), \
+                mock.patch.object(sync_spec, "download", lambda version, pin: None):
+            self.assertIn("no template/", sync_spec.fetch_old(self.project, "0.8.0"))
+
+    def test_the_download_of_spec_py_fills_the_cache(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("tool-driver-cli-spec-0.9.0/VERSION", "0.9.0\n")
+        data = payload.getvalue()
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), \
+                mock.patch("urllib.request.urlopen", side_effect=lambda url, timeout: io.BytesIO(data)):
+            with self.assertRaises(SystemExit):
+                sync_spec.download("0.9.0", "00" * 32)  # another SHA-256: nothing is unpacked
+            self.assertFalse((cache / "tool-driver-cli-spec" / "0.9.0").exists())
+            sync_spec.download("0.9.0", hashlib.sha256(data).hexdigest())
+        self.assertTrue((cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
 
     # -------------------------------------------------------------- versions, platforms and the survey
 
