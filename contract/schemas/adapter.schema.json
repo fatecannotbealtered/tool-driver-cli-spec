@@ -251,7 +251,7 @@
           "type": "object",
           "required": ["result"],
           "additionalProperties": false,
-          "properties": {"result": true}
+          "properties": {"result": true, "notices": {"$ref": "#/$defs/notices"}}
         },
         "preview": {
           "description": "What the change would do. `after` is the value the application will actually store; changes list the direct effects the adapter can foresee, such as two nets joined, as well as the fields set. For a batch, targets lists one target per selected object, in the order of the selection. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
@@ -374,7 +374,21 @@
         "change": {"$ref": "receipt.schema.json#/$defs/outcome/properties/change"},
         "delivery": {"$ref": "receipt.schema.json#/$defs/outcome/properties/delivery"},
         "persistence": {"$ref": "receipt.schema.json#/$defs/outcome/properties/persistence"},
-        "native_message": {"type": "string"}
+        "native_message": {"type": "string"},
+        "notices": {"$ref": "#/$defs/notices"}
+      }
+    },
+    "notices": {
+      "description": "Notices for the Agent, such as that a file-only tool made an export from the file on disk while an instance may hold unsaved changes (DCLI-201). The runtime puts them in meta.notices with the type application, their text marked untrusted (DCLI-004).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "severity": {"enum": ["info", "warning"]},
+          "message": {"type": "string", "minLength": 1}
+        }
       }
     },
     "files": {

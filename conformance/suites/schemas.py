@@ -43,8 +43,8 @@ def errors(instance: Any, schema: str, pointer: str = "") -> list[str]:
 
 def naming(value: Any, path: str = "$", data_map: bool = False) -> list[str]:
     """Keys that name fields are snake_case and times end in Z (DCLI-005). The keys of
-    ``observed`` are target keys, values in their own right; an ``output_schema`` is a JSON
-    Schema in its own vocabulary."""
+    ``observed`` are target keys, values in their own right; an ``output_schema``, and the
+    ``schema`` of a ``json`` flag, is a JSON Schema in its own vocabulary."""
     problems = []
     if isinstance(value, dict):
         for key, item in value.items():
@@ -53,8 +53,8 @@ def naming(value: Any, path: str = "$", data_map: bool = False) -> list[str]:
                 problems.append(f"{here}: the key is not snake_case")
             if isinstance(key, str) and key.endswith("_at") and item is not None and not (isinstance(item, str) and UTC.match(item)):
                 problems.append(f"{here}: a time is UTC ending in Z")
-            if key == "output_schema":
-                continue  # a JSON Schema, written in its own vocabulary ($ref, properties ...)
+            if key in ("output_schema", "schema") and isinstance(item, dict):
+                continue  # a JSON Schema, written in its own vocabulary ($ref, additionalProperties ...)
             problems += naming(item, here, data_map=key in ("observed",) and not data_map)
     elif isinstance(value, list):
         for i, item in enumerate(value):

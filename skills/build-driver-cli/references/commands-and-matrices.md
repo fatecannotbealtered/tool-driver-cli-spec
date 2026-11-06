@@ -65,7 +65,7 @@ Every domain command, and every standard command whose adapter capabilities the 
 
 ## Live runs
 
-Follow the procedure of the project's `docs/E2E.md`. A person lists the targets under Authorized Targets, writes the scope file for them and gives you its path; set `<PREFIX>_SCOPE_FILE` to it and `<PREFIX>_STATE_DIR` to a separate directory for live runs. With a host component, install it first with that state directory ([host-component.md](host-component.md)). Then, with one `--set` per placeholder the matrix uses:
+Follow the procedure of the project's `docs/E2E.md`. A person lists the targets under Authorized Targets, writes the scope file for them and gives you its path; when the person asks you in their own message to write them, show the content and write it once they agree; set `<PREFIX>_SCOPE_FILE` to it and `<PREFIX>_STATE_DIR` to a separate directory for live runs. With a host component, install it first with that state directory ([host-component.md](host-component.md)). Then, with one `--set` per placeholder the matrix uses:
 
 ```bash
 python scripts/spec.py matrix --command "footprint move" --set session=<instance> --set doc=<authorized file>

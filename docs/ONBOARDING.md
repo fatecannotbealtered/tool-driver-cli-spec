@@ -72,7 +72,7 @@ Tests on the real application make real changes. They use only the targets you l
   ```
 
 - Instances of the application are not listed, because they have no lasting ID. Start an instance yourself for the run, and open in it only files from the list.
-- Write the scope file yourself. The tool, not the Agent, reads it: from the path in the environment variable `<PREFIX>_SCOPE_FILE`, where `<PREFIX>` is the tool name in capitals with `_` for `-`, such as `KICAD_CLI_SCOPE_FILE`. Give the Agent its path. A minimal scope file that allows changes and saves under the folder above until a set time:
+- Write the scope file yourself, or ask your Agent explicitly to write it: it shows you the content and writes it once you agree. The tool, not the Agent, reads it: from the path in the environment variable `<PREFIX>_SCOPE_FILE`, where `<PREFIX>` is the tool name in capitals with `_` for `-`, such as `KICAD_CLI_SCOPE_FILE`. Give the Agent its path. A minimal scope file that allows changes and saves under the folder above until a set time:
 
   ```json
   {

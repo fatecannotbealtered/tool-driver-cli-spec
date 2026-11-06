@@ -36,6 +36,12 @@ COMMANDS = [
         "related_knowledge": [], "flags": [{"name": "--to", "type": "path", "output": True}],
     },
     {
+        "path": "footprint create", "summary": "Makes a footprint file in the library.", "effects": ["change", "artifact"],
+        "modes": ["session"], "target_kind": "footprint", "untrusted_fields": [],
+        "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
+        "related_knowledge": [], "flags": [{"name": "--name", "type": "string"}],
+    },
+    {
         "path": "axis move", "summary": "Moves an axis.", "effects": ["physical"], "modes": ["device"],
         "target_kind": "axis", "untrusted_fields": [],
         "irreversible": False, "halt": False, "tolerances": {}, "default_fields": [],
@@ -168,6 +174,35 @@ class MainAddressTest(HostTestCase):
         self.assertTrue(Path(out).is_file())
         self.assertEqual(applied["files"][0]["bytes"], Path(out).stat().st_size)
         self.assertEqual(c.call("preview", call)["changes"][0]["before"], True)
+
+    def test_an_artifact_without_an_output_flag_still_makes_a_file(self):
+        c = self.client()
+        call = {"command": "footprint create", "inputs": {"id": "U1", "name": "SOIC-8"}, "session": "fake-1", "document": "doc-1"}
+        applied = self.valid("apply", c.call("apply", {**call, "operation_id": "op_1"}))
+        self.assertEqual(applied["change"], "applied")
+        self.assertEqual(len(applied["files"]), 1)
+        self.assertTrue(Path(applied["files"][0]["path"]).is_file())
+        again = self.valid("apply", c.call("apply", {**call, "operation_id": "op_2"}))
+        self.assertEqual(again["files"][0]["path"], applied["files"][0]["path"], "the same call names the same file")
+
+    def test_a_file_of_the_real_application_opens_empty(self):
+        c = self.client()
+        part = Path(self.tmp.name) / "disc.prt"
+        part.write_bytes(b"#UGC:2 PART 1 binary \x00\xff data")
+        opened = self.valid("open_doc", c.call("open_doc", {"session": "fake-1", "path": str(part), "operation_id": "op_1"}))
+        self.assertEqual(opened["document"]["path"], str(part))
+
+    def test_documents_take_the_kind_a_test_sets(self):
+        c = self.client()
+        c.control("set_kind", kind="part")
+        docs = c.call("documents", {"session": "fake-1"})["items"]
+        self.assertEqual({d["kind"] for d in docs}, {"part"})
+
+    def test_an_edit_of_a_list_field_stores_a_list(self):
+        c = self.client()
+        c.control("edit", document="doc-1", object="R1", field="lines[*]", value="text")
+        read = c.call("read", {"command": "footprint move", "inputs": {"id": "R1"}, "session": "fake-1", "document": "doc-1"})
+        self.assertEqual(read["result"]["items"][0]["lines"], ["text"])
 
     def test_one_item_of_a_batch_fails(self):
         c = self.client()

@@ -516,6 +516,113 @@ class ReviewFixes102(unittest.TestCase):
             self.assertIs(done.data["receipt"]["document"]["dirty"], False, done.stdout[:600])
 
 
+class Fixes103(unittest.TestCase):
+    """What the tools found when they synced to 1.0.2."""
+
+    MOVE_R1 = ["part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "1mm", "--y", "2mm"]
+
+    def test_a_conflict_inside_the_application_has_its_own_value(self):
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "plate.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            case.control("fault", rule={"method": "open_doc", "action": "error",
+                                        "error": {"code": "E_CONFLICT", "conflict": "application_state",
+                                                  "message": "another model named plate is open"}})
+            out = case.run("doc", "open", "--session", "fake-1", "--doc", path)
+            self.assertEqual(out.code, "E_CONFLICT", out.stdout[:400])
+            self.assertEqual(out.details.get("conflict"), "application_state", out.stdout[:400])
+            self.assertEqual(out.details.get("dispatch_state"), "not_started", out.stdout[:400])
+
+    def test_a_notice_from_the_adapter_reaches_meta_marked_untrusted(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "read", "command": "part list", "action": "result",
+                                        "result": {"notices": [{"severity": "warning", "message": "used the file on disk"}]}})
+            out = case.run("part", "list", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(out.ok, out.stdout[:400])
+            meta = out.envelope.get("meta", {})
+            self.assertIn({"type": "application", "severity": "warning", "message": "used the file on disk"}, meta.get("notices", []))
+            self.assertIn("$.meta.notices[0].message", meta.get("untrusted", []), out.stdout[:400])
+
+    def test_a_notice_from_a_write_reaches_meta(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result",
+                                        "result": {"notices": [{"severity": "info", "message": "snapped to the grid"}]}})
+            out = case.run(*self.MOVE_R1)
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertIn("snapped to the grid", [n["message"] for n in out.envelope.get("meta", {}).get("notices", [])])
+
+    def test_a_list_without_items_is_refused(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "read", "command": "part list", "action": "result",
+                                        "result": {"result": {"items": None, "lines": ["R1", "R2"]}}})
+            out = case.run("part", "list", "--session", "fake-1", "--doc", "doc-1")
+            self.assertEqual(out.code, "E_PROTOCOL", out.stdout[:400])
+
+    def test_a_job_the_runtime_runs_shows_blocked_behind_a_dialog(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "hang"})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            wait_for(case, "apply")
+            case.control("set_session", session="fake-1", state="blocked", title="Save changes?", knowledge=["save-dialog"])
+            seen = case.run("job", "get", "--job", job)
+            self.assertEqual(seen.data["state"], "blocked", seen.stdout[:600])
+            self.assertEqual(seen.data["action"], "dismiss_dialog", seen.stdout[:600])
+            self.assertEqual(seen.data.get("knowledge"), ["save-dialog"], seen.stdout[:600])
+            self.assertIn("poll_after_ms", seen.data)
+            case.control("set_session", session="fake-1", state="ready")
+            again = case.run("job", "get", "--job", job)
+            self.assertEqual(again.data["state"], "running", again.stdout[:600])
+
+    def test_a_wait_ends_when_a_dialog_blocks_the_job(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "hang"})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            wait_for(case, "apply")
+            case.control("set_session", session="fake-1", state="blocked", title="Save changes?")
+            started = time.monotonic()
+            seen = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertLess(time.monotonic() - started, 30, "the wait did not end at the dialog")
+            self.assertEqual(seen.data["state"], "blocked", seen.stdout[:600])
+
+    def test_a_notice_from_a_long_job_reaches_job_get(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "result",
+                                        "result": {"notices": [{"severity": "warning", "message": "used the file on disk"}]}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertIn("used the file on disk", [n["message"] for n in done.envelope.get("meta", {}).get("notices", [])])
+
+    def test_job_list_shows_a_blocked_job(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "hang"})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            wait_for(case, "apply")
+            case.control("set_session", session="fake-1", state="blocked", title="Save changes?", action="not-an-action")
+            listed = case.run("job", "list", "--state", "blocked")
+            self.assertEqual([j["id"] for j in listed.data["items"]], [out.data["result"]["job"]["id"]], listed.stdout[:600])
+            self.assertEqual(listed.data["items"][0]["action"], "other")
+
+    def test_the_same_notice_from_every_item_of_a_batch_comes_once(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result", "times": 0,
+                                        "result": {"notices": [{"severity": "info", "message": "snapped to the grid"}]}})
+            out = case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--ids", "R1,R2,R3", "--x", "1mm", "--y", "2mm")
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual([n["message"] for n in out.envelope["meta"]["notices"] if n["type"] == "application"],
+                             ["snapped to the grid"])
+
+    def test_documents_take_the_kind_a_test_sets(self):
+        env = {"SAMPLE_CLI_DOC_KINDS": "part"}
+        with Case(subject()) as case:
+            refused = case.run(*self.MOVE_R1, env=env)
+            self.assertEqual(refused.code, "E_VALIDATION", refused.stdout[:400])
+            case.control("set_kind", kind="part")
+            self.assertTrue(case.run(*self.MOVE_R1, env=env).ok)
+
+
 class ManyFiles(unittest.TestCase):
     """A receipt past receipt.listed_files files gives their count and the full record command (DCLI-061)."""
 

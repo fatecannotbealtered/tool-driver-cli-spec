@@ -124,6 +124,7 @@
         "ok": {"description": "In a final state: whether the receipt derives a success (DCLI-062).", "type": "boolean"},
         "code": {"description": "The error code the receipt derives when ok is false.", "$ref": "error.schema.json#/properties/code"},
         "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+        "knowledge": {"description": "A blocked job: the knowledge entries about the dialog that holds it (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
         "poll_after_ms": {"type": "integer", "minimum": 0},
         "message": {"description": "A read job that failed: what went wrong.", "type": "string"}
       },

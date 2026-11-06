@@ -184,6 +184,7 @@ class World:
             self.internal_errors: list[str] = []
             self.pending_jobs: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
             self.counter = 0
+            self.kind = "board"
             for spec in cfg["instances"]:
                 inst = self._add_instance(spec.get("id"), owned=False)
                 for doc in spec.get("documents", []):
@@ -209,7 +210,8 @@ class World:
     def _add_document(self, spec: dict[str, Any], session: str | None, write: bool = True) -> Document:
         doc_id = spec.get("id") or self._next("doc")
         path = None if spec.get("untitled") else spec.get("path") or str(self.workdir / spec.get("name", f"{doc_id}.fake"))
-        doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})))
+        doc = Document(id=doc_id, path=path, session=session, objects=copy.deepcopy(spec.get("objects", {})),
+                       kind=spec.get("kind") or self.kind)
         if path is None:
             inst = self.instances[session]
             inst.untitled += 1
@@ -574,7 +576,14 @@ class World:
     def _do_apply(self, params: dict[str, Any], plan: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
         doc, op = plan["doc"], params["operation_id"]
         outputs = {}
-        for path in plan["outputs"]:
+        made = list(plan["outputs"])
+        if plan["artifact"] and not made:
+            # The application names the file itself, such as a footprint file in the library the
+            # document is: the same call makes the same file.
+            seed = json.dumps({"command": plan["command"], "doc": doc.key() if doc is not None else None,
+                               "inputs": params.get("inputs")}, sort_keys=True).encode()
+            made.append(str(self.workdir / "made" / f"{plan['command'].replace(' ', '-')}-{hashlib.sha256(seed).hexdigest()[:12]}.out"))
+        for path in made:
             outputs[path] = json.dumps({"command": plan["command"], "inputs": params.get("inputs")}, sort_keys=True).encode()
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).write_bytes(outputs[path])
@@ -598,19 +607,23 @@ class World:
             "operation_id": op, "command": plan["command"],
             "targets": [t["key"] for t in plan["targets"]] + [file_key(p) for p in plan["outputs"]],
         })
-        if plan["artifact"]:
-            files = [{"path": p, "bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()} for p, b in outputs.items()]
+        files = [{"path": p, "bytes": len(b), "sha256": hashlib.sha256(b).hexdigest()} for p, b in outputs.items()]
+        changes_doc = doc is not None and "change" in plan["reg"].get("effects", [])
+        if plan["artifact"] and not changes_doc:
             return {"dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
                     "persistence": "saved", "files": files}
+        made_files = {"files": files} if files else {}
         if doc is not None:
             doc.history.append({"operation_id": op, "undo": undo})
             doc.revision += 1
             doc.tool_changes.extend({"operation_id": op, **c} for c in changes)
             if doc.session is None:
                 doc.tool_changes.clear()
-                return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
+                return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved",
+                        **made_files}
             doc.dirty = True
-            return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged"}
+            return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged",
+                    **made_files}
         if plan["device"] is not None:
             return {"dispatch_state": "dispatched", "change": "applied", "delivery": "delivered", "persistence": "not_applicable"}
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "unchanged"}
@@ -763,9 +776,11 @@ class World:
         if not Path(path).is_file():
             raise HostError("E_NOT_FOUND", f"no file {path}")
         try:
-            return json.loads(Path(path).read_text(encoding="utf-8")).get("objects", {})
-        except ValueError as exc:
-            raise HostError("E_VALIDATION", f"cannot read {path}", native_message=str(exc)) from exc
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except ValueError:
+            return {}  # a file of the real application, such as an evaluation's part: an empty document
+        objects = data.get("objects", {}) if isinstance(data, dict) else {}
+        return objects if isinstance(objects, dict) else {}
 
     def cap_save_doc(self, params: dict[str, Any]) -> dict[str, Any]:
         self._gate(params)
@@ -898,12 +913,22 @@ class World:
         with self.lock:
             doc = self._document({"document": document})
             assert doc is not None
+            if name.endswith("[*]"):
+                name, value = name[:-3], [value]  # a field that holds a list of texts
             values = doc.objects.setdefault(obj or "", {})
             before = values.get(name)
             values[name] = value
             doc.dirty = True
             doc.revision += 1
             doc.external_changes.append({"target": doc.key(obj), "field": name, "before": before, "after": value, "origin": "external"})
+
+    def set_kind(self, kind: str) -> None:
+        """Every document, open now or later, is of this kind: a test of a command registered
+        with doc_kinds sets one of them (DCLI-210)."""
+        with self.lock:
+            self.kind = kind
+            for doc in self.documents.values():
+                doc.kind = kind
 
     def set_disk(self, document: str, disk: str) -> None:
         with self.lock:

@@ -1,0 +1,45 @@
+{
+  "kind": "live",
+  "tool": "kicad-cli",
+  "tool_version": "1.2.1",
+  "commit": "8a41c07",
+  "application": {
+    "name": "KiCad",
+    "version": "10.0.1"
+  },
+  "os": "Windows 11 23H2 x64",
+  "platform": "windows",
+  "recorded_at": "2026-11-03T09:10:00Z",
+  "targets": [
+    "file:///D:/authorized/demo-board/"
+  ],
+  "runs": [
+    {
+      "command": "doc get",
+      "arguments": [
+        "--doc",
+        "D:/authorized/demo-board/board.kicad_pcb"
+      ],
+      "exit": 0,
+      "result": "pass",
+      "mode": "file",
+      "matrix_row": "normal",
+      "envelope": {
+        "ok": true,
+        "schema_version": "1.0",
+        "data": {
+          "id": "doc_1",
+          "path": "D:/authorized/demo-board/board.kicad_pcb",
+          "revision": "r1",
+          "dirty": false,
+          "readonly": false,
+          "disk": "in_sync"
+        },
+        "meta": {
+          "duration_ms": 41
+        }
+      },
+      "envelope_sha256": "9f2c4be1a07d55e3c8b6f1d2a4e9c0b7d3f5a8e1c2b4d6f8a0e2c4b6d8f0a2c4"
+    }
+  ]
+}

@@ -283,6 +283,8 @@ class Case:
             path, args = long[0], subject.samples[long[0]]
             check(not any("{job}" in a for a in args), f"the sample of {path} itself uses {{job}}")
             modes = subject.registrations[path]["modes"]
+            if subject.registrations[path].get("doc_kinds"):
+                self.control("set_kind", kind=subject.registrations[path]["doc_kinds"][0])
             argv = self.fill(args, "{session}" not in args and "file" in modes)
             out = self.run(*path.split(" "), *argv)
             if out.code == "E_CONFIRMATION_REQUIRED":

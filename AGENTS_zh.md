@@ -140,6 +140,7 @@ cd conformance && python -m suites --project ../tests/sample -- python -m sample
 
 - 在分支上开发，通过 PR 合并。发布、打标签和推送需要维护者明确同意。
 - 每次发布的变化都形成新版本，打带注释的标签，写进 CHANGELOG。一个版本号只对应一份内容。
+- 补丁版本绝不让工具已有的真实软件记录或评测报告失效：从它们的 Schema 里删掉的字段继续接受，记录里的信封保持写下时的样子。
 - 每次发布之前，运行 `python tests/eval_template.py --agent claude --report <file>`。用真实的 Agent 跑时每道题都必须通过，报告附在发布上。
 - 不得提交密钥、真实许可数据，或无权分享的工程文件。
 - 对真实软件的测试只在已授权的目标和工作区里进行。本仓库的检查从不需要真实软件。
