@@ -926,11 +926,10 @@ class World:
             doc.external_changes.append({"target": doc.key(obj), "field": name, "before": before, "after": value, "origin": "external"})
 
     def set_kind(self, kind: str) -> None:
-        """Every document, open now or later, is of this kind: a test of a command registered
-        with doc_kinds sets one of them (DCLI-210)."""
+        """Every open document, and every later one without a kind of its own, is of this kind:
+        a test of a command registered with doc_kinds sets one of them (DCLI-210)."""
         with self.lock:
             self.kind = kind
-            self.kinds = {}
             for doc in self.documents.values():
                 doc.kind = kind
 

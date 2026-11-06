@@ -1107,7 +1107,8 @@ class Engine:
             receipt["session"] = spec.session_ref()
         doc = spec.where.document
         if doc is not None:
-            receipt["document"] = (self._fresh_document(spec) if fresh else None) or                 {"id": doc["id"], "revision": doc["revision"], "dirty": doc["dirty"]}
+            receipt["document"] = (self._fresh_document(spec) if fresh else None) or (
+                {"id": doc["id"], "revision": doc["revision"], "dirty": doc["dirty"]})
         if self.run.fake or (spec.where.device or {}).get("simulated"):
             receipt["simulated"] = True
 

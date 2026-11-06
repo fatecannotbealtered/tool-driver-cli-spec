@@ -106,10 +106,11 @@ class Tool:
             note = f"The application did not answer {cap} within {deadline_ms} ms, so the read-back could not finish."
             try:
                 settled = settle(note)
-                env_out = self.envelopes.success(settled, run.notices) if settled is not None else                     self.envelopes.failure(DriverError("E_VERIFY_INCOMPLETE", note), run.notices)
+                env_out = self.envelopes.success(settled, run.notices) if settled is not None else (
+                    self.envelopes.failure(DriverError("E_VERIFY_INCOMPLETE", note), run.notices))
             except DriverError as exc:
                 env_out = self.envelopes.failure(exc, run.notices)
-            except Exception:  # noqa: BLE001 - the record could not be settled; report the hang as before
+            except Exception:  # noqa: BLE001 - the record could not be settled; report the hang
                 env_out = None
         if env_out is None:
             env_out = self.envelopes.failure(_hang_error(run, cap, deadline_ms), run.notices)

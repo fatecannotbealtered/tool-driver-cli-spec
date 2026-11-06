@@ -1097,7 +1097,7 @@ class Checker:
                 elif any(mark in line for mark in marks) and (line.lstrip().startswith("|") or "COMPATIBILITY" not in rel):
                     self.add("DREPO-022", rel, "compatibility labels appear only in the generated support matrix", number)
 
-    # -------------------------------------------------------------- pinned copies (DREPO-030 to DREPO-034)
+    # -------------------------------------------------------------- pinned copies (DREPO-030 to DREPO-035)
 
     def pinned(self) -> None:
         release = bundle_version()

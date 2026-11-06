@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     template = template_changes(project, before)
     if template is None:
         print(f"Release {before} is not in the download cache, so the template files that changed since then are not "
-              f"listed; the CHANGELOG of {bundle_version()} names them.")
+              "listed; compare the project's copies with template/ of this release.")
     elif template:
         print(f"The template changed these files since {before}; compare the project's copies with template/ of this "
               "release and carry over what applies:")

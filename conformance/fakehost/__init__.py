@@ -38,7 +38,8 @@ Control methods, called as ``fake.<name>`` on the main address:
 ``edit``                        ``document``, ``object``, ``field``, ``value``: a person edits;
                                 a ``field`` ending in ``[*]`` holds a list
 ``set_disk``                    ``document``, ``disk`` (in_sync, changed, missing)
-``set_kind``                    ``kind``: every document, open now or later, is of this kind
+``set_kind``                    ``kind``: every open document, and every later one without a kind
+                                of its own, is of this kind
 ``set_missing``                 ``document``, ``objects``: these object IDs do not exist
 ``set_job``                     ``job``, ``state``, ``action``
 ``configure``                   ``protocol_version``, ``plugin``

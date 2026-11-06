@@ -419,7 +419,7 @@ Each evaluation question MUST be one Python file named after the question's ID: 
 | `TURNS` | yes | What the user says, one text per turn |
 | `SCOPE` | no | Scope file fields that replace the defaults below, or `None` for no scope file |
 | `FILES` | no | A folder next to the question; its files are the question's documents |
-| `FAKE_HOST` | no | The fake host's world, for a run with the fake host, with `kinds` giving the document kind of each file extension, such as `{".prj": "project"}`. `None` for a question that runs only on the real application, such as one whose answer comes from what the application reads in a real file; the fake host skips it |
+| `FAKE_HOST` | no | The fake host's world, for a run with the fake host, with `kinds` giving the document kind of each file extension, such as `{".prj": "project"}`. `None` for a question that runs only on the real application, such as one whose answer comes from what the application reads in a real file; `run_eval --fake-host` skips it |
 | `before` | no | `before(run, turn)` prepares the application before a turn, such as a dialog a person then closes |
 | `after` | no | `after(run)` puts the application back after the question, even when it failed |
 | `grade` | yes | `grade(run)` decides the result; each failed `run.check` records a failure, and a question without failures passed |

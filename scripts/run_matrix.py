@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     filled = []
     for row in rows:
         # The normal row may give its own arguments for a kind whose objects differ (DVER-030).
-        given = row.get("kind_arguments", {}).get(args.kind) if row["row"] == "normal" and args.kind else None
+        given = row.get("kind_arguments", {}).get(args.kind) if args.kind else None
         arguments = [_fill(a, values) for a in (given or row["arguments"])]
         _check_row(row["row"], command, arguments, authorized, inputs, needs_job)
         filled.append((row, arguments, mode_of(command, arguments, args.mode)))

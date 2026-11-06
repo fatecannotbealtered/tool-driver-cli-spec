@@ -25,7 +25,7 @@ This specification applies to every driver tool project, whatever the applicatio
 - the files and directories of the project
 - the sections of the project's documents, in English and Chinese
 - the badge row, the info card and the status labels
-- the pinned copies of the specification, the contract and the driver runtime
+- the pinned copies of the specification, the contract, the driver runtime and the shared scripts
 - versions, CI and releases
 - distribution through npm
 - the capability survey and the steps that bring a new application on board
@@ -41,7 +41,7 @@ Command behavior, security, Skills and verification have their own clauses. This
 | driver tool | A command-line tool that lets an AI Agent operate a professional desktop application or a device |
 | tool project | The repository of one driver tool |
 | template | The project template that comes with this specification. It generates a new tool project |
-| pinned copy | A file copied unchanged from one specification release: the specification, the contract, the driver runtime and their licenses |
+| pinned copy | A file copied unchanged from one specification release: the specification, the contract, the driver runtime, their licenses and the scripts every tool shares |
 | sync script | `sync_spec`, the script that copies the pinned copies into a tool project and replaces them on upgrade |
 | project check | `check_project`, the script that checks a tool project against this specification |
 | driver runtime | The shared code in `<pkg>/_driver/` that implements the built-in and standard commands, the write flow and self-update |
@@ -69,7 +69,7 @@ Command behavior, security, Skills and verification have their own clauses. This
 | Area | The template, the sync script and the checks provide | The tool author does |
 |---|---|---|
 | Project skeleton | Every required file and directory, with all fixed headings in both languages and the fixed text: How It Works, Bare minimum to obey, the install block and the five fixed SECURITY sections | Fills in the tool's own sections and removes every placeholder |
-| Pinned copies | `sync_spec` copies the specification, the contract, the runtime and the licenses, and replaces them as a whole on upgrade | Runs `sync_spec` to upgrade and never edits a pinned copy |
+| Pinned copies | `sync_spec` copies the specification, the contract, the runtime, the licenses and the shared scripts, and replaces them as a whole on upgrade | Runs `sync_spec` to upgrade and never edits a pinned copy |
 | Generated content | Scripts that generate `contract/commands.json`, the command map, the badge row, the info card and the support matrix from data | Registers commands and keeps the evidence and the other sections of `docs/COMPATIBILITY.md` true |
 | Checks | `check_project`: layout, root files, sections, language pairs, placeholders, hashes, badges, labels and capability tracing | Fixes everything `check_project` reports |
 | CI and release | The workflows `ci.yml` and `release.yml` with the merge gate, platform delivery and publishing with provenance | Keeps both workflows passing and picks the key operation for platform delivery |
