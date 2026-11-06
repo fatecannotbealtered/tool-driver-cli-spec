@@ -140,6 +140,7 @@ A table that repeats contract values is marked with a comment on the line before
 
 - Work on a branch and merge through a pull request. Publishing, tagging and pushing need the maintainer's explicit approval.
 - Every released change gets a new version, an annotated tag and a CHANGELOG entry. One version number has one content.
+- A patch release never makes a tool's existing live records or eval reports invalid: a field removed from their schemas stays accepted, and a record keeps the envelope it was written with.
 - Before each release, run `python tests/eval_template.py --agent claude --report <file>`. Every question must pass with the real Agent, and the report is attached to the release.
 - Never commit secrets, real license data or project files you are not allowed to share.
 - Tests against real applications run only on authorized targets and workspaces. The checks in this repository never need a real application.

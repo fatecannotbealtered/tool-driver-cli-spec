@@ -16,7 +16,8 @@ its own with ``--row`` after the person has prepared it.
 it, and its ``normal`` row must pass on every kind (DVER-030). The ``read_back_mismatch`` row
 makes the tool wait before its read-back for up to ``--pause`` seconds: during the wait a
 person changes what was just written in the application, or ``--tamper`` runs a command that
-does, with ``TOOL_DRIVER_PAUSE_FILE`` naming the tool's ``pause.json``. The run is marked
+does, with ``TOOL_DRIVER_PAUSE_FILE`` naming the tool's ``pause.json`` and ``{python}`` in the
+command standing for the interpreter run_matrix runs on. The run is marked
 ``tampered``. The ``normal`` row of a command registered with ``verify_after_save`` is followed
 by ``doc save`` on the same document, and passes only when that save verified the change.
 
@@ -38,6 +39,7 @@ import os
 import platform
 import re
 import signal
+import shlex
 import subprocess
 import sys
 import threading
@@ -85,6 +87,12 @@ def mode_of(command: dict[str, Any], arguments: list[str], chosen: str | None) -
     raise SystemExit(f"cannot tell the mode of a row of `{command['path']}` from its arguments; pass --mode")
 
 
+def tamper_command(text: str) -> str:
+    """``{python}`` in a --tamper command is this interpreter, not the first python on PATH."""
+    exe = subprocess.list2cmdline([sys.executable]) if os.name == "nt" else shlex.quote(sys.executable)
+    return text.replace("{python}", exe)
+
+
 def simulated(value: Any) -> bool:
     if isinstance(value, dict):
         return value.get("simulated") is True or any(simulated(v) for v in value.values())
@@ -114,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=["file", "session", "device"])
     parser.add_argument("--kind", help="the kind of the document, for a command that lists doc_kinds")
     parser.add_argument("--pause", type=int, default=120, help="seconds the tool waits before the read-back in read_back_mismatch")
-    parser.add_argument("--tamper", help="a command that changes the written result while the tool waits")
+    parser.add_argument("--tamper", help="a command that changes the written result while the tool waits; "
+                                         "{python} in it is the interpreter run_matrix runs on")
     parser.add_argument("--job-from", help="the long command whose normal row starts the job that fills {job}")
     parser.add_argument("--application-version", help="default: the version context reports")
     args = parser.parse_args(argv)
@@ -390,7 +399,7 @@ class _Watcher(threading.Thread):
         except (OSError, ValueError):
             info = {}
         if self.args.tamper:
-            done = subprocess.run(self.args.tamper, shell=True, cwd=self.root,
+            done = subprocess.run(tamper_command(self.args.tamper), shell=True, cwd=self.root,
                                   env={**self.env, "TOOL_DRIVER_PAUSE_FILE": str(self.pause)}, creationflags=NO_WINDOW)
             self.notes.append(f"--tamper exited {done.returncode}")
         else:

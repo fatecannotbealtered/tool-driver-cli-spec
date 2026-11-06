@@ -73,7 +73,8 @@ class Envelopes:
         """``{"meta": {...}}`` with what is not empty, or nothing (DCLI-004)."""
         meta: dict[str, Any] = {}
         if notices:
-            meta["notices"] = notices
+            meta["notices"] = [{k: v for k, v in n.items() if k != "_untrusted"} for n in notices]
+            untrusted = untrusted + [f"$.meta.notices[{i}].message" for i, n in enumerate(notices) if n.get("_untrusted")]
         if untrusted:
             meta["untrusted"] = sorted(set(untrusted))
         return {"meta": meta} if meta else {}

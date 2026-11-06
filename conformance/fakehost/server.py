@@ -262,6 +262,7 @@ class FakeHost:
             "set_device": lambda: w.set_device(p["device"], p["state"]),
             "edit": lambda: w.edit(p["document"], p.get("object"), p["field"], p["value"]),
             "set_disk": lambda: w.set_disk(p["document"], p["disk"]),
+            "set_kind": lambda: w.set_kind(p["kind"]),
             "set_missing": lambda: w.set_missing(p["document"], p["objects"]),
             "set_job": lambda: w.set_job(p["job"], p["state"], p.get("action")),
             "configure": lambda: w.configure(p.get("protocol_version"), p.get("plugin")),

@@ -66,7 +66,10 @@ def main(argv: list[str] | None = None) -> int:
               if entry["status"] != "pass" else ""), flush=True)
     report = {"tool": subject.name, "spec_version": contract["version"], "simulated": True, "results": results}
     if options.report:
-        options.report.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        options.report.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+    # A cut log keeps its end: the failures again, each with its reason.
+    for entry in (e for e in results if e["status"] == "fail"):
+        print(f"FAILED {entry['id']} {entry['title']}: {entry['reason']}", flush=True)
     print(f"{len(results) - failed} of {len(results)} passed or not applicable; {failed} failed.")
     return 1 if failed else 0
 

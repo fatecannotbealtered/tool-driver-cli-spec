@@ -546,6 +546,22 @@ class ProjectTest(unittest.TestCase):
         self.edit("knowledge/demo-basics.md", "\ntags: [basics]", "\ntags:")
         self.expect("DSKL-120")
 
+    def test_a_record_keeps_the_envelope_it_was_written_with(self):
+        self.authorize("file:///D:/e2e/demo/")
+        old = {"ok": True, "schema_version": "1.0", "data": {"id": "R1"}, "meta": {"duration_ms": 40}}
+        self.record("2026-11-01-earlier-patch.json",
+                    runs=[{"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass",
+                           "mode": "session", "matrix_row": "normal", "envelope": old, "envelope_sha256": "0" * 64}])
+        self.fix()
+        self.assertNotIn("DVER-042", self.clauses())
+
+    def test_a_tool_that_cannot_report_itself_gets_only_the_root_cause(self):
+        commands = self.project / "demo_cli" / "commands" / "__init__.py"
+        commands.write_text("raise RuntimeError('an unknown field in a registration')\n", encoding="utf-8")
+        found = self.problems()
+        self.assertIn("DREPO-031", {p.clause for p in found}, [p.text() for p in found])
+        self.assertNotIn("DREPO-013", {p.clause for p in found}, [p.text() for p in found])
+
     def test_evidence_records_validate(self):
         (self.project / "docs" / "evidence" / "2026-11-01-bad.json").write_text(json.dumps({"kind": "live"}), encoding="utf-8")
         self.expect("DVER-042")
@@ -600,6 +616,13 @@ class ProjectTest(unittest.TestCase):
     def test_run_matrix_masks_secrets_and_never_passes_simulated_results(self):
         self.assertTrue(run_matrix.simulated({"data": {"receipt": {"simulated": True}}}))
         self.assertEqual(run_matrix.pairs(["--token=abc", "--id", "R1", "--dry-run"]), [("--token", "abc"), ("--id", "R1")])
+
+
+class TamperCommand(unittest.TestCase):
+    def test_python_stands_for_the_interpreter_of_run_matrix(self):
+        line = run_matrix.tamper_command("{python} tamper.py")
+        self.assertIn(sys.executable, line)
+        self.assertTrue(line.endswith(" tamper.py"))
 
 
 class RunMatrixTest(unittest.TestCase):

@@ -48,7 +48,7 @@
         "parameter": {"type": "string"},
         "candidates": {"type": "array", "minItems": 2},
         "conflict": {
-          "enum": ["token_invalid", "token_expired", "token_used", "token_mismatch", "scope_changed", "target_locked", "session_changed", "document_changed", "plugin_changed", "preview_changed", "blocked", "file_changed_on_disk", "file_missing", "unsaved_changes", "file_open_in_session"]
+          "enum": ["token_invalid", "token_expired", "token_used", "token_mismatch", "scope_changed", "target_locked", "session_changed", "document_changed", "plugin_changed", "preview_changed", "blocked", "file_changed_on_disk", "file_missing", "unsaved_changes", "file_open_in_session", "application_state"]
         },
         "scope": {"$ref": "#/$defs/scope_refusal"},
         "lookup": {"type": "string", "minLength": 1},

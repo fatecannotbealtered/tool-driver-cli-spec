@@ -28,12 +28,14 @@ Control methods, called as ``fake.<name>`` on the main address:
 ``fault``                       ``rule``: inject a fault, see below
 ``clear_faults``
 ``set_session``                 ``session``, ``state`` (ready, busy, blocked, unresponsive, lost,
-                                closed), ``title``, ``action``
+                                unreachable, closed), ``title``, ``action``, ``knowledge``
 ``restart_session``             ``session``: the generation goes up by one
 ``add_session``                 ``session``: one more instance, with one document
 ``set_device``                  ``device``, ``state``
-``edit``                        ``document``, ``object``, ``field``, ``value``: a person edits
+``edit``                        ``document``, ``object``, ``field``, ``value``: a person edits;
+                                a ``field`` ending in ``[*]`` holds a list
 ``set_disk``                    ``document``, ``disk`` (in_sync, changed, missing)
+``set_kind``                    ``kind``: every document, open now or later, is of this kind
 ``set_missing``                 ``document``, ``objects``: these object IDs do not exist
 ``set_job``                     ``job``, ``state``, ``action``
 ``configure``                   ``protocol_version``, ``plugin``

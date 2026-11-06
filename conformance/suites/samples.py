@@ -29,7 +29,16 @@ class Sample:
         return self.argv(case)
 
     def argv(self, case: Case) -> list[str]:
+        """The arguments; a command registered with doc_kinds gets documents of its first kind (DCLI-210)."""
+        set_kind(case, self.path)
         return case.fill(self.args, self.file_mode)
+
+
+def set_kind(case: Case, path: str) -> None:
+    """The fake host's documents are of a kind the command works on (DCLI-210)."""
+    kinds = case.subject.registrations.get(path, {}).get("doc_kinds")
+    if kinds:
+        case.control("set_kind", kind=kinds[0])
 
 
 def mode_of(subject: Subject, path: str, args: list[str]) -> str:
@@ -132,6 +141,22 @@ def through(case: Case, sample: Sample, argv: list[str]) -> Outcome:
         dangerous = out.details["preview"]["tier"] == "dangerous"
         out = confirm(case, sample, argv, out.details["confirm_token"], dangerous)
     return out
+
+
+def finish(case: Case, out: Outcome) -> Outcome:
+    """A write that returned a long job, followed to its end: the outcome as the write itself
+    would give it, with the job's receipt (DCLI-065). Any other outcome is returned as it is."""
+    job = ((out.data or {}).get("result") or {}).get("job") if out.ok else None
+    if not job:
+        return out
+    done = case.run("job", "get", "--job", job["id"], "--wait", "60s")
+    data = done.data or {}
+    if data.get("ok"):
+        envelope = {"ok": True, "data": {"operation_id": data.get("operation_id"), "receipt": data.get("receipt"),
+                                         "result": data.get("result")}}
+    else:
+        envelope = {"ok": False, "error": {"code": data.get("code") or "E_UNKNOWN", "details": {"receipt": data.get("receipt")}}}
+    return Outcome(done.args, done.exit, done.stdout, done.stderr, done.seconds, envelope)
 
 
 def effects_of(subject: Subject, sample: Sample) -> list[str]:

@@ -213,6 +213,10 @@ def domain_read(run: Run, command: Command) -> Result:
         out = {"id": job["id"], "state": job["state"], "poll": run.cmd("job get", [("--job", job["id"]), ("--wait", "60s")])}
         return Result({"job": out}, [])
     result = run.capability("read", request).get("result")
+    if command.verb == "list" and not (isinstance(result, dict) and isinstance(result.get("items"), list)):
+        # --limit and --offset page the items; a list without them could not be paged (DCLI-006).
+        raise DriverError("E_PROTOCOL", f"{command.path} is a list, but the adapter returned no items list; "
+                                        "a list returns its entries in items.")
     offset = None
     if isinstance(result, dict) and isinstance(result.get("items"), list) and "count" not in result:
         # The runtime pages a list the adapter returns whole (DCLI-006).
@@ -584,6 +588,49 @@ def job_list(run: Run) -> Result:
     return _page(run, items, [])
 
 
+def _session_blocker(run: Run, session_id: str | None) -> dict[str, Any] | None:
+    """The blocker of a session a dialog holds, such as a dialog that opened while a job the
+    runtime runs was working in it; None when the session is not blocked (DCLI-220)."""
+    if not session_id or not run.backend.has("sessions"):
+        return None
+    try:
+        items = run.capability("sessions", {}, SESSION_DEADLINE_MS).get("items", [])
+    except DriverError:
+        return None
+    for session in items if isinstance(items, list) else []:
+        if isinstance(session, dict) and session.get("id") == session_id and session.get("state") == "blocked":
+            return session.get("blocker") if isinstance(session.get("blocker"), dict) else {}
+    return None
+
+
+def _wait_job(run: Run, end: float, session_id: str | None, step: Any, final: Any) -> dict[str, Any] | None:
+    """Wait until ``final()`` holds, the time is up, or a dialog blocks the job's session;
+    ``step()`` refreshes the job. Returns the blocker, if a dialog was found."""
+    look = 0.0
+    while True:
+        if step() is False or final():
+            return None
+        if session_id and time.monotonic() >= look:
+            look = time.monotonic() + 5
+            blocker = _session_blocker(run, session_id)
+            if blocker is not None:
+                return blocker
+        if time.monotonic() >= end:
+            return None
+        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+
+
+def _show_blocked(view: dict[str, Any], blocker: dict[str, Any] | None) -> None:
+    """A running job whose session a dialog holds waits for the person: it shows as blocked
+    with what the person does, and runs on once they have (DCLI-066, DCLI-220)."""
+    if blocker is None or view["state"] != "running":
+        return
+    view["state"] = "blocked"
+    view["action"] = blocker.get("action") or "other"
+    if blocker.get("knowledge"):
+        view["knowledge"] = list(blocker["knowledge"])
+
+
 def job_get(run: Run) -> Result:
     from .jobs import FINAL, ReadJobs, read_view, run_read, settle_dead_read, worker_of
 
@@ -598,12 +645,16 @@ def job_get(run: Run) -> Result:
             run_read(run, read_job)  # this process is the job's worker (DCLI-065)
             return Result({"id": job_id, "state": "completed"}, [])
         end = time.monotonic() + wait
-        while True:
-            read_job = settle_dead_read(run, ReadJobs(run).load(job_id) or read_job)
-            if read_job["state"] in FINAL or time.monotonic() >= end:
-                break
-            time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+        holder = {"job": read_job}
+
+        def refresh_read() -> None:
+            holder["job"] = settle_dead_read(run, ReadJobs(run).load(job_id) or holder["job"])
+
+        blocker = _wait_job(run, end, (read_job.get("_request") or {}).get("session"), refresh_read,
+                            lambda: holder["job"]["state"] in FINAL)
+        read_job = holder["job"]
         view = read_view(read_job)
+        _show_blocked(view, blocker)
         if view["state"] not in FINAL:
             view["poll_after_ms"] = POLL_AFTER_MS
         return Result(view, [".message"] + [".result" + p for p in read_job.get("_untrusted", [])])
@@ -619,18 +670,26 @@ def job_get(run: Run) -> Result:
             run_write_job(run, latest)  # this process is the job's worker; a job runs once (DCLI-065)
         return Result({"id": job_id, "state": "completed"}, [])
     end = time.monotonic() + wait
-    while True:
+    held = {"record": record}
+
+    def refresh_write() -> bool:
         try:
-            record = poll_job(run, record)
+            held["record"] = poll_job(run, held["record"])
         except DriverError as exc:
             # An observe command reports the state as data (DCLI-204): the last known one.
             run.notices.append({"type": "job_unanswered", "severity": "warning",
-                                "message": f"The application did not report job {record['_job']['id']} ({exc.code}); this is its last known state."})
-            break
-        if record["_job"]["state"] in FINAL_JOB_STATES or time.monotonic() >= end:
-            break
-        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+                                "message": f"The application did not report job {held['record']['_job']['id']} ({exc.code}); "
+                                           "this is its last known state."})
+            return False
+        return True
+
+    # A job the application runs reports blocked itself; one the runtime runs is blocked when
+    # a dialog holds its session.
+    session_id = (record.get("_call") or {}).get("session") if record["_job"].get("worker") else None
+    blocker = _wait_job(run, end, session_id, refresh_write, lambda: held["record"]["_job"]["state"] in FINAL_JOB_STATES)
+    record = held["record"]
     view = job_view(record, run)
+    _show_blocked(view, blocker)
     if view["state"] not in FINAL_JOB_STATES:
         view["poll_after_ms"] = POLL_AFTER_MS
     return Result(view, [".receipt.notes", ".receipt.target.label", ".receipt.observed", ".result"])

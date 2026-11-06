@@ -32,7 +32,13 @@
           "matrix_row": {"enum": ["normal", "empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog", "disconnect", "unsaved", "read_back_mismatch"]},
           "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "tampered": {"const": true},
-          "envelope": {"$ref": "envelope.schema.json"},
+          "envelope": {
+            "description": "The envelope the tool printed, kept as it was written. It is not checked against the current envelope schema: a record stays valid for every release with the same major and minor version (DVER-041).",
+            "type": "object",
+            "required": ["ok"],
+            "properties": {"ok": {"type": "boolean"}}
+          },
+          "envelope_sha256": {"description": "Not used; accepted so that records which carry it stay valid.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
           "notes": {"type": "string"}
         }
       }

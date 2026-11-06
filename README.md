@@ -3,7 +3,7 @@
 A specification for driver tools: command-line tools that let AI Agents operate professional desktop applications and devices.
 
 [![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
-![Spec](https://img.shields.io/badge/spec-1.0.2-blue)
+![Spec](https://img.shields.io/badge/spec-1.0.3-blue)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
@@ -39,7 +39,7 @@ Every value a tool or a test can read as data lives in [`contract/driver-contrac
 
 ## Status
 
-Version 1.0.2 is released: the specifications, the driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide are complete, and tools can adopt it now.
+Version 1.0.3 is released: the specifications, the driver runtime, the conformance suites, the project template, the evaluation suite, the development Skill and the onboarding guide are complete, and tools can adopt it now.
 
 | Phase | Content | State |
 |---|---|---|

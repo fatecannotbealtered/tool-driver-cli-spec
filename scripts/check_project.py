@@ -892,12 +892,18 @@ class Checker:
         wanted_zh = list(project["sections_zh"].get(english, []))
         optional = project.get("optional_sections", {}).get(english, {})
         conditions = {"host_component": self.facts.host_component, "device_mode": "device" in self.facts.modes}
+        unknown = self.facts.reference is None  # the tool did not report itself: DREPO-031 says why
+        skipped_en, skipped_zh = set(), set()
         for name, condition in optional.items():
-            if self.facts.reference is not None and not conditions[condition]:
+            if unknown or not conditions[condition]:
                 index = wanted_en.index(name)
                 wanted_en.pop(index)
+                if unknown:
+                    skipped_en.add(name)
+                    skipped_zh.add(wanted_zh[index])
                 wanted_zh.pop(index)
-        got_en, got_zh = sections(en), sections(zh)
+        got_en = [s for s in sections(en) if s[0] not in skipped_en]
+        got_zh = [s for s in sections(zh) if s[0] not in skipped_zh]
         if wanted_en:
             self.order(english, [h for h, _, _ in got_en], wanted_en)
             self.order(chinese, [h for h, _, _ in got_zh], wanted_zh)
@@ -1341,7 +1347,7 @@ class Checker:
                     for line in body.split("\n") if re.match(r"^#{2,4} ", line)}
         for playbook in self.contract["skill"]["driver_playbooks"]:
             if playbook == "physical_effects" and "device" not in self.facts.modes:
-                if playbook in headings:
+                if playbook in headings and self.facts.reference is not None:
                     self.add("DSKL-009", rel, "only a tool with device mode includes the physical_effects playbook")
                 continue
             if playbook not in headings:

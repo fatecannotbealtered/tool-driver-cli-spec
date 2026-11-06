@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from .harness import Case, NotApplicable, Outcome, Recorder, Subject, check
-from .samples import Sample, as_batch, batchable, call, confirm, mode_of, own_samples, standard_samples, through, token_for
+from .samples import Sample, as_batch, batchable, call, confirm, finish, mode_of, own_samples, standard_samples, through, token_for
 
 
 # ------------------------------------------------------------------ choosing samples
@@ -196,9 +196,19 @@ def d04(subject: Subject) -> list[str]:
             argv = sample.prepare(case)
             token = token_for(case, sample, argv)
             case.control("fault", rule={"method": "save_doc", "action": "error", "error": {"code": "E_BUSY"}})
-            _busy(confirm(case, sample, argv, token), f"{sample.path} answered busy at dispatch")
             out = confirm(case, sample, argv, token)
-            check(out.ok, f"{sample.path}: the token did not stay usable after the application answered busy: {out.describe()}")
+            if (out.data or {}).get("result", {}).get("job"):
+                # A long doc save meets the busy application in its worker: the job ends with
+                # E_BUSY and saved nothing; the save runs again with a new preview (DCLI-065).
+                ended = finish(case, out)
+                check(ended.code == "E_BUSY", f"{sample.path} as a long job, answered busy at dispatch: {ended.describe()}")
+                check(not case.applied(), f"{sample.path}: a busy application saved the document")
+                out = finish(case, through(case, sample, argv))
+                check(out.ok, f"{sample.path} did not save once the application was free: {out.describe()}")
+            else:
+                _busy(out, f"{sample.path} answered busy at dispatch")
+                out = confirm(case, sample, argv, token)
+                check(out.ok, f"{sample.path}: the token did not stay usable after the application answered busy: {out.describe()}")
         for sample in _own(subject, "session")[:1]:
             with Case(subject) as case:
                 argv = sample.prepare(case)
@@ -320,10 +330,11 @@ def d08(subject: Subject) -> list[str]:
     for sample in [s for s in _own(subject) if "artifact" in subject.registrations[s.path]["effects"]][:1]:
         with Case(subject) as case:
             argv = sample.prepare(case)
-            output = next(a for a in argv if str(case.dir) in a)
-            missing = output + ".missing"
+            output = next((a for a in argv if str(case.dir) in a), None)
+            missing = str(case.dir / "conformance-missing.out")
+            made = ([{"path": output}] if output else []) + [{"path": missing}]
             case.control("fault", rule={"method": "apply", "command": sample.path, "action": "result",
-                                        "result": {"files": [{"path": output}, {"path": missing}]}})
+                                        "result": {"files": made}})
             out = through(case, sample, argv)
             mismatched = out.details.get("receipt", {}).get("mismatched", [])
             check(out.code == "E_VERIFY_FAILED" and any(m.startswith("exists@") for m in mismatched),
@@ -370,7 +381,7 @@ def d09(subject: Subject) -> None:
         check(receipt["outcome"]["persistence"] == "unchanged", f"a session-mode change reports persistence {receipt['outcome']['persistence']}")
         doc = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-1")
         check(doc.ok and doc.data["dirty"] is True, f"the document is not dirty after the change: {doc.describe()}")
-        save = through(case, _std(subject, "doc save"), ["--session", "fake-1", "--doc", "doc-1"])
+        save = finish(case, through(case, _std(subject, "doc save"), ["--session", "fake-1", "--doc", "doc-1"]))
         check(save.ok and save.data["receipt"]["outcome"]["persistence"] == "saved", f"doc save: {save.describe()}")
 
 
@@ -757,9 +768,14 @@ def d26(subject: Subject) -> list[str]:
                 if not writes:
                     case.revoke()
                 if mismatch:
-                    fields = _fields_of(case, sample, argv)
-                    case.control("fault", rule={"method": "apply", "command": path, "action": "store",
-                                                "values": {f: "conformance-other-value" for f in fields}})
+                    fields = [f for f in _fields_of(case, sample, argv) if f != "exists"]
+                    if fields:
+                        case.control("fault", rule={"method": "apply", "command": path, "action": "store",
+                                                    "values": {f: "conformance-other-value" for f in fields}})
+                    else:
+                        # It only makes files: the worker reports one that is not there (DCLI-057).
+                        case.control("fault", rule={"method": "apply", "command": path, "action": "result",
+                                                    "result": {"files": [{"path": str(case.dir / "conformance-missing.out")}]}})
                 out = through(case, sample, argv)
                 job = (out.data or {}).get("result", {}).get("job") if writes else (out.data or {}).get("job")
                 check(out.ok and job and job.get("poll"), f"{path} did not return a long job at once: {out.describe()}")

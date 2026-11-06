@@ -132,7 +132,7 @@ class Run:
         if not self.backend.has(cap, session):
             raise DriverError("E_UNSUPPORTED", f"This tool's adapter has no {cap} capability, so it cannot do this.")
         try:
-            return self.backend.call(cap, request, deadline_ms or self.read_deadline_ms)
+            reply = self.backend.call(cap, request, deadline_ms or self.read_deadline_ms)
         except CapabilityError as exc:
             raise self.host_error(exc, "not_started") from None
         except BadReply as exc:
@@ -148,6 +148,18 @@ class Run:
             raise DriverError("E_BACKEND_UNAVAILABLE", f"{exc}; the session is lost.") from None
         except BadProtocol as exc:
             raise DriverError("E_PROTOCOL", f"The host component cannot be used: {exc}. Nothing was sent.") from None
+        self.take_notices(reply)
+        return reply
+
+    def take_notices(self, reply: Any) -> None:
+        """Notices the adapter adds to a reply go to ``meta.notices``, their text marked
+        untrusted because it may quote the application (DCLI-004, DCLI-260)."""
+        notices = reply.get("notices") if isinstance(reply, dict) else None
+        for notice in notices if isinstance(notices, list) else []:
+            if isinstance(notice, dict) and notice.get("severity") in ("info", "warning") \
+                    and isinstance(notice.get("message"), str) and notice["message"]:
+                self.notices.append({"type": "application", "severity": notice["severity"], "message": notice["message"],
+                                     "_untrusted": True})
 
     def host_error(self, exc: CapabilityError, dispatch_state: str, write: bool = False) -> DriverError:
         """Turn an error the adapter or a host reported into the runtime's error (DCLI-279)."""
