@@ -652,6 +652,15 @@ class Fixes104(unittest.TestCase):
 
     MOVE_R1 = ["part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "1mm", "--y", "2mm"]
 
+    def test_a_blocked_preview_reads_as_one_sentence(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "preview", "command": "part move", "action": "result",
+                                        "result": {"can_apply": False, "blocked_by": ["The board has no outline."]}})
+            out = case.run(*self.MOVE_R1)
+            self.assertEqual(out.code, "E_CONFLICT", out.stdout[:400])
+            message = out.envelope["error"]["message"]
+            self.assertTrue(message.endswith("The board has no outline."), message)
+
     def test_a_call_that_made_no_file_is_verified_by_its_changes(self):
         from unittest import mock
 

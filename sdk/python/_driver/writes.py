@@ -327,6 +327,11 @@ def pause_before_read_back(run: Run, operation_id: str, command: str, facts: dic
     return f"The tool waited up to {seconds:g} s before the read-back, as {name} asked."
 
 
+def reasons(pv: dict[str, Any]) -> str:
+    """The preview's blocked_by as one clause, without the reasons' own final periods."""
+    return "; ".join(str(r).rstrip(" .") for r in pv.get("blocked_by", []))
+
+
 def is_file_target(key: str) -> bool:
     """A ``file:`` key that names a whole file, not an object inside it."""
     return key.startswith("file:///") and "#" not in key
@@ -478,7 +483,7 @@ class Engine:
                 pv = {**pv, "can_apply": False,
                       "blocked_by": list(pv.get("blocked_by", [])) + [f"The target is locked by operation {busy[0]['operation_id']}."]}
         if not pv.get("can_apply", True) and not call.dry_run and not call.confirm:
-            raise DriverError("E_CONFLICT", f"The change cannot be applied: {'; '.join(pv.get('blocked_by', []))}.",
+            raise DriverError("E_CONFLICT", f"The change cannot be applied: {reasons(pv)}.",
                               conflict="blocked", untrusted=["message"], **self.blocked_help(pv, "Resolve what blocks it, then run the command again."))
         spec.pending_changes = changes
         binds = self.binds(spec, keys)
@@ -805,7 +810,7 @@ class Engine:
                            "Run the command again without --confirm to preview it again.")
         if not pv.get("can_apply", True):
             help_ = self.blocked_help(pv, "Resolve what blocks it, then run the command again without --confirm.")
-            raise conflict("blocked", f"The change can no longer be applied: {'; '.join(pv.get('blocked_by', []))}.",
+            raise conflict("blocked", f"The change can no longer be applied: {reasons(pv)}.",
                            help_.pop("next_action"), untrusted=["message"], **help_)
 
     def blocked_help(self, pv: dict[str, Any], then: str) -> dict[str, Any]:

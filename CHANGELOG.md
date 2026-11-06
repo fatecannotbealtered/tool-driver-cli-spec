@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Fixed
+
+- The error for a preview that cannot be applied no longer ends with two periods when a reason in `blocked_by` ends with one.
+
 ## [1.0.5] - 2026-11-06
 
 A fix from syncing the Xpedition tool to 1.0.4.
