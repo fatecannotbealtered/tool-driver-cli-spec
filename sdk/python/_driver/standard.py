@@ -412,12 +412,13 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any], made: 
 
 def _job_verification(run: Run, record: dict[str, Any], status: dict[str, Any]) -> Verification:
     """A job's outputs: the files it made and the fields it changed, both when it did both (DCLI-057)."""
-    from .writes import combine, is_file_target
+    from .writes import combine, file_checks, is_file_target
 
     command = run.tool.commands.get(record.get("command", ""))
     if command is not None and command.verify_after_save and (record.get("_call") or {}).get("mode") == "session":
         return Verification("deferred", notes=["The application shows this change correctly only after a save; doc save verifies it."])
     changes = record.get("_changes", [c for c in record["preview"].get("changes", []) if c.get("origin", "tool") == "tool"])
+    changes = changes + file_checks(record, changes)  # the files the call named (DCLI-051)
     files = [c for c in changes if c.get("field") == "exists" and is_file_target(c["target"])]
     fields = [c for c in changes if c not in files]
     parts = []

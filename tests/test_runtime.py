@@ -322,6 +322,9 @@ class SampleAdapter(Adapter):
         path = request.get("path")
         if not path or not os.path.isfile(path):
             return {"items": []}
+        if SampleAdapter.slow_documents and SampleAdapter.hang is not None:
+            SampleAdapter.hang.wait(10)  # the state read after a verified write does not answer
+            raise Ended()
         data = Path(path).read_bytes()
         import hashlib
 
@@ -359,6 +362,8 @@ class SampleAdapter(Adapter):
                                action="dismiss_dialog", knowledge=["license-dialog"])
         data.setdefault(inputs["id"], {}).update({k: v for k, v in inputs.items() if k != "id"})
         Path(request["document"]).write_text(json.dumps(data), encoding="utf-8")
+        if inputs.get("value") == "slowdoc":
+            SampleAdapter.slow_documents = True
         return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved"}
 
     def read_back(self, request):
@@ -369,6 +374,7 @@ class SampleAdapter(Adapter):
         return {"observed": {file_key(request["document"], "/" + inputs["id"]): data.get(inputs["id"], {})}}
 
     hang = None
+    slow_documents = False
 
 
 class Ended(BaseException):
@@ -398,6 +404,16 @@ class BatchAdapter(SampleAdapter):
             SampleAdapter.hang.wait(10)
             raise Ended()
         return {"observed": {file_key(request["document"], "/" + i): data.get(i, {}) for i in ids}}
+
+
+class LibraryAdapter(SampleAdapter):
+    """Its preview names a new library file that the apply does not make."""
+
+    def preview(self, request):
+        out = super().preview(request)
+        library = file_key(str(Path(request["document"]).parent / "new.lib"))
+        out["targets"].append({"key": library, "kind": "file"})
+        return out
 
 
 class InProcess(unittest.TestCase):
@@ -477,6 +493,49 @@ class InProcess(unittest.TestCase):
         out = io.StringIO()
         tool.run(["part", "update", "--doc", str(self.doc), "--ids", "R2", "--value", "6k"], env=self.env, stdout=out)
         self.assertEqual(json.loads(out.getvalue())["error"]["code"], "E_CONFIRMATION_REQUIRED")
+
+    def test_a_file_the_preview_names_is_checked(self):
+        reg = registration(path="part update", modes=["file"], effects=["change", "artifact"], flags=[
+            {"name": "--id", "type": "string", "required": True}, {"name": "--value", "type": "string"}], tolerances={})
+        tool = Tool(root=SAMPLE, adapter=LibraryAdapter, commands=[reg], application="Files", versions="any",
+                    modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        scope = json.loads((self.tmp / "scope.json").read_text(encoding="utf-8"))
+        (self.tmp / "scope.json").write_text(json.dumps({**scope, "effects": ["change", "artifact"]}), encoding="utf-8")
+        args = ["part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "2k"]
+        out = io.StringIO()
+        tool.run(args, env=self.env, stdout=out)
+        out2 = io.StringIO()
+        tool.run([*args, "--confirm", json.loads(out.getvalue())["error"]["details"]["confirm_token"]], env=self.env, stdout=out2)
+        env = json.loads(out2.getvalue())
+        self.assertEqual(env["error"]["code"], "E_VERIFY_FAILED", env)  # new.lib was never made
+        self.assertIn("exists@" + file_key(str(self.tmp / "new.lib")), env["error"]["details"]["receipt"]["mismatched"])
+
+    def test_a_read_after_a_verified_write_that_hangs_keeps_the_outcome(self):
+        import threading
+        from unittest import mock
+
+        args = ("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "slowdoc")
+        _, env = self.run_tool(*args)
+        token = env["error"]["details"]["confirm_token"]
+        exits = []
+        SampleAdapter.hang = threading.Event()
+
+        def end(code):
+            exits.append(code)
+            SampleAdapter.hang.set()
+
+        out = io.StringIO()
+        try:
+            with mock.patch("_driver.tool.os._exit", end):  # the state read waits 2 s at most
+                with self.assertRaises(Ended):
+                    self.tool.run([*args, "--confirm", token], env=self.env, stdout=out)
+        finally:
+            SampleAdapter.hang, SampleAdapter.slow_documents = None, False
+        env = json.loads(out.getvalue())
+        self.assertEqual((exits, env["ok"]), ([0], True), env)
+        self.assertEqual(env["data"]["receipt"]["outcome"]["verification"], "passed")
+        _, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "R1", "--value", "3k")
+        self.assertEqual(env["error"]["code"], "E_CONFIRMATION_REQUIRED")  # not locked
 
     def test_a_read_may_report_a_conflict_inside_the_application(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "reopen", "--value", "x")

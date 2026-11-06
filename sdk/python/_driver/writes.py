@@ -208,9 +208,8 @@ class DomainWrite(WriteSpec):
         parts = []
         # A call that made no file, of a command that makes one only in some calls, is verified
         # by its other changes alone (DCLI-057).
-        if facts.get("files") or file_changes or self.outputs():
-            parts.append(verify_files(facts, file_changes + [{"target": file_key(p), "field": "exists"}
-                                                             for p in self.outputs()]))
+        if facts.get("files") or file_changes:
+            parts.append(verify_files(facts, file_changes))
         if other:
             # A command that makes files and also changes the document verifies both (DCLI-057).
             inputs = self.child_inputs(child) if child is not None else None
@@ -331,6 +330,19 @@ def pause_before_read_back(run: Run, operation_id: str, command: str, facts: dic
 def is_file_target(key: str) -> bool:
     """A ``file:`` key that names a whole file, not an object inside it."""
     return key.startswith("file:///") and "#" not in key
+
+
+def named_files(outputs: list[str], targets: list[dict[str, Any]]) -> list[str]:
+    """The files a call names: those of its output flags and the file targets of its preview (DCLI-051)."""
+    keys = {file_key(p) for p in outputs}
+    keys |= {t["key"] for t in targets if t.get("kind") == "file" and is_file_target(str(t.get("key", "")))}
+    return sorted(keys)
+
+
+def file_checks(record: dict[str, Any], changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The named files no change already checks, as changes that expect them to exist (DCLI-057)."""
+    have = {c["target"] for c in changes if c.get("field") == "exists"}
+    return [{"target": key, "field": "exists", "origin": "tool"} for key in record.get("_files", []) if key not in have]
 
 
 def combine(parts: list[Verification]) -> Verification:
@@ -679,6 +691,9 @@ class Engine:
             record["_argv"] = worker_argv(self.run)  # its worker runs the same call (DCLI-065)
         record["_changes"] = self.mask(spec, [copy.deepcopy(c) for c in self._all_changes
                                               if c.get("origin", "tool") == "tool"])
+        files = named_files(spec.outputs(), targets)
+        if files:
+            record["_files"] = files
         return record
 
     def binds(self, spec: WriteSpec, keys: list[str]) -> dict[str, Any]:
@@ -907,7 +922,7 @@ class Engine:
                 self.run.settle_hang = settle
             try:
                 paused = self.pause_before_read_back(spec, operation_id, facts, changes, child)
-                verification = spec.verify(operation_id, facts, changes, child)
+                verification = spec.verify(operation_id, facts, changes + file_checks(record, changes), child)
             except Exception as exc:  # noqa: BLE001 - after dispatch, a failure to verify is not a known outcome
                 verification = Verification("incomplete", notes=[f"The read-back could not be done: {type(exc).__name__}: {exc}"])
             finally:
@@ -980,7 +995,14 @@ class Engine:
         run = self.run
         operation_id = record["operation_id"]
         receipt = out["receipt"]
-        self._decorate(spec, receipt, fresh=not hung)
+        if not hung:
+            # The outcome is known; a read that hangs from here on leaves it as it is (DCLI-278).
+            run.settle_hang = lambda note: self.finish_single(spec, record, out, hung=True)
+        try:
+            self._decorate(spec, receipt, fresh=not hung)
+        finally:
+            if not hung:
+                run.settle_hang = None
         error: DriverError | None = out["error"]
         if out["unspend"]:
             # Refused before anything was sent: a token stays usable (DCLI-055).
@@ -1160,7 +1182,13 @@ class Engine:
             nonlocal first_error, stop_error, stopped, human
             child_id = child["operation_id"]
             receipt = out["receipt"]
-            self._decorate(spec, receipt, fresh=not hung)
+            if not hung:
+                run.settle_hang = lambda note: hung_batch(index, target, child, child_keys, out)
+            try:
+                self._decorate(spec, receipt, fresh=not hung)
+            finally:
+                if not hung:
+                    run.settle_hang = None
             child["receipt"] = receipt
             error = out["error"]
             if out["job"]:
@@ -1193,7 +1221,8 @@ class Engine:
             elif not ok and not keep_going:
                 stopped = True
 
-        def hung(index: int, target: dict[str, Any], child: dict[str, Any], child_keys: set[str], out: dict[str, Any]) -> Result:
+        def hung_batch(index: int, target: dict[str, Any], child: dict[str, Any], child_keys: set[str],
+                       out: dict[str, Any]) -> Result:
             # The process ends with the hang, so the objects after this one are not sent.
             nonlocal stopped, stop_error
             settle(index, target, child, child_keys, out, hung=True)
@@ -1225,9 +1254,11 @@ class Engine:
             child["preview"].pop("changes_truncated", None)
             child_keys = _keys([target], child_changes)
             child["_keys"] = sorted(child_keys)  # stored before dispatch, so a crash leaves them locked
+            if named_files([], [target]):
+                child["_files"] = named_files([], [target])
             run.records.save(child)
             out = self.one(spec, child, target, child_changes, index,
-                           on_hung=lambda out, i=index, t=target, c=child, k=child_keys: hung(i, t, c, k, out))
+                           on_hung=lambda out, i=index, t=target, c=child, k=child_keys: hung_batch(i, t, c, k, out))
             settle(index, target, child, child_keys, out)
         return self.end_batch(spec, record, items, children, unknown_children, unfinished, first_error, stop_error, human)
 

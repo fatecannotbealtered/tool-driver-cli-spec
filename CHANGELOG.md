@@ -18,7 +18,7 @@ Changes from syncing the KiCad, Creo and Xpedition tools to 1.0.3.
 
 ### Changed
 
-- A call of a command that makes a file only in some calls, and declares `artifact`, is verified by its other changes when it made no file: no file in `files`, in its preview or in an `output` flag. A file an `output` flag names is checked even when the adapter does not report it (DCLI-051, DCLI-057).
+- A call of a command that makes a file only in some calls, and declares `artifact`, is verified by its other changes when it made no file: no file in `files`, in its preview or in an `output` flag. A file that an `output` flag or a file target of the preview names is checked even when the adapter does not report it, in a long job too (DCLI-051, DCLI-057).
 - When `apply` has replied and only a read after it, such as the read-back, passes its deadline in the CLI's process, the runtime records the change with verification `incomplete` before the watchdog ends the process, for an item of a batch, whose later items are then skipped, and in a long job's worker too; the target is not left locked as outcome unknown (DCLI-278).
 - An adapter looks for dialogs on every `sessions` call, also while the application answers its automation interface; a dialog the tool's own running work answers itself leaves the session `busy`. An adapter in the CLI's process keeps the session read limits itself (DCLI-204, DCLI-205).
 - A read may report `E_CONFLICT` with `application_state` when the application's state stands in its way (DCLI-012). The runtime no longer turns a read's `E_CONFLICT` or `E_AMBIGUOUS` without `dispatch_state` into `E_PROTOCOL`: a read sends no change.
