@@ -4,6 +4,14 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-11-06
+
+A fix from syncing the Xpedition tool to 1.0.4.
+
+### Fixed
+
+- An `output` flag may name a folder that the command writes its files into, such as a set of fabrication files. Since 1.0.4 the runtime checked such a folder as a file and reported `E_VERIFY_FAILED` although every file was written. A folder counts as made when it holds a file or folder, the files in it are checked from `files`, and an empty folder does not raise the tier to two-step (DCLI-029, DCLI-051, DCLI-057).
+
 ## [1.0.4] - 2026-11-06
 
 Changes from syncing the KiCad, Creo and Xpedition tools to 1.0.3.

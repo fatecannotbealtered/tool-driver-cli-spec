@@ -603,6 +603,30 @@ class InProcess(unittest.TestCase):
         self.assertEqual(env["data"]["entries"][0]["changes"]["added"][0][:10], "The sample")
 
 
+class FolderOutputs(unittest.TestCase):
+    """An output flag that names a folder the command writes its files into (DCLI-051)."""
+
+    def test_a_folder_with_files_is_made_and_its_files_are_checked(self):
+        from _driver.writes import made, verify_files
+
+        tmp = Path(tempfile.mkdtemp(prefix="fab-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
+        folder = tmp / "fab"
+        named = [{"target": file_key(str(folder)), "field": "exists"}]
+        self.assertFalse(made(str(folder)))  # not there yet: the export is direct
+        folder.mkdir()
+        self.assertFalse(made(str(folder)))  # an empty folder holds nothing to overwrite
+        self.assertEqual(verify_files({}, named).status, "failed")  # nothing was written into it
+        (folder / "top.gbr").write_text("G04*", encoding="utf-8")
+        self.assertTrue(made(str(folder)))
+        result = verify_files({"files": [{"path": str(folder / "top.gbr")}]}, named)
+        self.assertEqual(result.status, "passed", result.mismatched)
+        self.assertTrue(result.observed[file_key(str(folder))]["folder"])
+        self.assertEqual(result.observed[file_key(str(folder / "top.gbr"))]["bytes"], 4)
+        missing = verify_files({"files": [{"path": str(folder / "bottom.gbr")}]}, named)
+        self.assertEqual(missing.mismatched, ["exists@" + file_key(str(folder / "bottom.gbr"))])
+
+
 class UpdateNotice(unittest.TestCase):
     def test_once_a_day_from_the_cache(self):
         tool = build()
