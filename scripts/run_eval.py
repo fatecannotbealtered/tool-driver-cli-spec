@@ -22,7 +22,9 @@ and `sleep` in its shell, and read and edit files only inside the workspace.
 
 On the real application the workspace root and every scope target must be listed under
 Authorized Targets in docs/E2E.md (DVER-050), and the tool keeps the person's environment, so
-it finds the running application. A full run on the real application writes its report to
+it finds the running application. Before the Agent runs, the scripted `right` agent of each
+question that has one runs once on the fake host; a question whose right answer fails stops the
+run, so no model credits go to it. A full run on the real application writes its report to
 docs/evidence/eval-<date>.json unless --report names another file; a run with --only writes
 one only to --report.
 """
@@ -711,6 +713,23 @@ def check_graders(project: Path, facts: check_project.Facts, questions: list[Que
     return 1 if failed else 0
 
 
+def broken_questions(project: Path, facts: check_project.Facts, questions: list[Question]) -> list[str]:
+    """The scripted ``right`` agent of each question that has one, run on the fake host before the
+    Agent spends model credits: a question whose own right answer fails would grade the Agent
+    against a broken question. A question with ``FAKE_HOST = None`` cannot run there."""
+    broken = []
+    for question in questions:
+        if question.right is None or question.fake_host is None:
+            continue
+        try:
+            problems, error, _ = attempt(project, facts, question, ScriptedAgent(question.right), True, None, False)
+        except EvalError as exc:
+            problems, error = [], str(exc)
+        if problems or error:
+            broken.append(f"{question.id} ({error or '; '.join(problems)})")
+    return broken
+
+
 def evaluate(project: Path, facts: check_project.Facts, questions: list[Question], agent: Any, fake_host: bool,
              root: Path | None, keep: bool, report: Path | None) -> int:
     results: list[dict[str, Any]] = []
@@ -818,6 +837,10 @@ def main(argv: list[str] | None = None) -> int:
             raise EvalError("these copies of the tool's Skills would change the evaluation: "
                             + "; ".join(f"{path} ({why})" for path, why in stale)
                             + ". Move them out of those folders for the evaluation, then run again")
+        broken = broken_questions(project, facts, questions)
+        if broken:
+            raise EvalError("the scripted right answer fails these questions, so nothing was asked of the Agent: "
+                            + "; ".join(broken) + ". Fix the questions; --check shows each grader")
         return evaluate(project, facts, questions, ClaudeAgent(args.model), args.fake_host, root, args.keep, report)
     except EvalError as exc:
         print(f"run_eval: {exc}", file=sys.stderr)

@@ -591,6 +591,8 @@ Every command MUST declare its effects. The effect sets the default confirmation
 - A command that creates a new file as well as changing a document, such as one that adds a board to a project, declares `artifact` with its other effects. So does a command that creates a file only in some calls, such as one that defines a symbol in a new library only when the library does not exist yet.
 - An `output` flag MAY name a folder that the command writes its files into, such as a set of fabrication files. The folder exists, for the tier of `artifact`, when it holds a file or folder; the apply reports each file in `files` (DCLI-260).
 - An `artifact` command whose file the application names itself has no `output` flag; its preview MUST name as a target the file or the document it goes into, so the scope covers it, and its apply reports the file in `files` (DCLI-260).
+- The runtime finds an existing file of an `output` flag itself. When an `artifact` command would overwrite a file that no `output` flag names, such as a new document named by `--doc`, its preview MUST name `target_exists` in `tier_raises` (DCLI-052); the runtime registers that condition for every `artifact` command.
+- A command whose change the application writes to the file at once, in session mode too, such as rules written straight into the project database, declares `persist` with `change` (DCLI-058).
 - Whatever the effect, these operations MUST be dangerous: an irreversible change, discarding unsaved changes, and closing an instance the tool did not start. A change is irreversible when no command of the application or of the tool can set the earlier state back: a delete without undo is irreversible, in file mode too, while a move or a field change, which another call can set back, is not. Such a command MUST declare `irreversible: true` in its registration (DCLI-029); the runtime then makes it dangerous and never guesses.
 - Halt commands declare `lifecycle` and are always direct (DSEC-018).
 
@@ -736,7 +738,9 @@ Check: 🤖 Driver conformance tests D04, D07 and D08.
 
 ### DCLI-058 Save is the commit point
 
-In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`. Only `doc save`, writes in file mode (DCLI-201) and writes that create files report `saved`.
+In session mode a change is not a save. After a change in session mode, the receipt's `persistence` MUST be `unchanged` and the document's `dirty` MUST be `true`, except for a command that declares `persist`. Only `doc save`, writes in file mode (DCLI-201), writes that create files and changes of a command that declares `persist` report `saved`.
+
+A command declares `persist` with `change` when the application writes its change to the file at once (DCLI-051). Its receipt MUST report `persistence: saved`, and the change leaves `dirty` as the document's other changes make it. The host component, or the adapter when there is none, MUST NOT list it among the changes since the last save, so the next `doc save` preview does not show it. It is verified as DCLI-057 sets.
 
 A write with the `artifact` effect, such as `doc save-as`, `export` or `render`, creates files. Its receipt MUST report `change: not_applicable` and `persistence: saved`, and it is verified as DCLI-057 sets.
 

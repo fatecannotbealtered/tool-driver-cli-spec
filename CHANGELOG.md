@@ -4,6 +4,11 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Added
+
+- A command whose change the application writes to the file at once, in session mode too, such as rules written straight into a project database, declares `persist` with `change`: it is two-step, its receipt reports `persistence: saved`, and the next save does not list it. The fake host writes such a change to the file at once, and the entry Skill says that a session change is unsaved while its receipt says `persistence: unchanged` (DCLI-051, DCLI-058, DSKL-009).
+- Before the Agent's first question, `run_eval` runs on the fake host the scripted `right` agent of each question that has one and stops, naming the question, when that right answer fails, so no model credits go to a broken question (DSKL-044).
+
 ### Changed
 
 - `docs/E2E.md` has a new first section, Authorization Rules, with fixed text from the template: who adds a target to Authorized Targets, how a target is written, and who writes the scope files for live runs and for evaluations on the real application. `check_project` compares it with the template and `generate` keeps it in step, so a change to these rules reaches every tool. Authorized Targets now holds only the list, one item per target, and `check_project` reports any other text there: copy the new section from the template and remove the old rules paragraph from Authorized Targets (DREPO-017).
@@ -14,6 +19,7 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ### Fixed
 
+- An `artifact` command that would overwrite a file no `output` flag names, such as a new document named by `--doc`, can be made two-step: the runtime registers `target_exists` for every `artifact` command, and the preview names it in `tier_raises` when the file exists. Before, such a preview was refused with `E_PROTOCOL`, and only output flags were checked (DCLI-051).
 - A long job is read back on the same terms as a call: also when its reply reports no lasting effect but its preview or the files it names expect one. A host that reported an export with `persistence: unchanged` had its job end `completed` with verification `not_applicable`, even with the file missing (DCLI-057, DCLI-058).
 - The error for a preview that cannot be applied no longer ends with two periods when a reason in `blocked_by` ends with one.
 - On the real application, `run_eval` also stops when an Agent's Skill folder in the person's home, such as `~/.agents/skills`, holds a copy of the tool's Skill at another version: the tool keeps the person's home there, and its doctor would report the copy and tell the Agent to run `update` (DSKL-044).

@@ -657,6 +657,21 @@ class World:
         if doc is not None:
             doc.history.append({"operation_id": op, "undo": undo})
             doc.revision += 1
+            if doc.session is not None and doc.path is not None and "persist" in plan["reg"].get("effects", []):
+                # The application writes this change, and only this one, to the file at once; the
+                # next save has nothing of it to list (DCLI-058).
+                path = Path(doc.path)
+                try:
+                    on_disk = json.loads(path.read_text(encoding="utf-8")).get("objects", {}) if path.exists() else {}
+                except (OSError, ValueError, AttributeError):
+                    on_disk = None  # a file of the real application, which the fake host reads as empty and never writes
+                if on_disk is not None:
+                    for target in plan["targets"]:
+                        obj = target["object"] or ""
+                        on_disk.setdefault(obj, {}).update({k: doc.objects[obj][k] for k in self._fields(plan, target)})
+                    path.write_bytes(json.dumps({"objects": on_disk}, sort_keys=True).encode("utf-8"))
+                return {"dispatch_state": "dispatched", "change": "applied", "delivery": "not_applicable", "persistence": "saved",
+                        **made_files}
             doc.tool_changes.extend({"operation_id": op, **c} for c in changes)
             if doc.session is None:
                 doc.tool_changes.clear()

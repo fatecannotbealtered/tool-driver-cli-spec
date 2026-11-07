@@ -193,6 +193,24 @@ class MainAddressTest(HostTestCase):
         opened = self.valid("open_doc", c.call("open_doc", {"session": "fake-1", "path": str(part), "operation_id": "op_1"}))
         self.assertEqual(opened["document"]["path"], str(part))
 
+    def test_a_change_the_application_saves_at_once(self):
+        c = self.client()
+        persist = {**COMMANDS[0], "effects": ["change", "persist"]}
+        c.control("reset", commands=[persist] + COMMANDS[1:])
+        applied = self.valid("apply", c.call("apply", {**MOVE, "operation_id": "op_1"}))
+        self.assertEqual((applied["change"], applied["persistence"]), ("applied", "saved"))
+        doc = next(d for d in self.state()["documents"] if d["id"] == "doc-1")
+        self.assertFalse(doc["dirty"])
+        on_disk = json.loads(Path(doc["path"]).read_text(encoding="utf-8"))["objects"]["R1"]
+        self.assertEqual((on_disk["x_mm"], on_disk["y_mm"]), (12.5, 30.0))
+        # A file of the real application is read as empty and never written.
+        part = Path(self.tmp.name) / "disc.prt"
+        part.write_bytes(b"#UGC:2 PART 1 binary \x00\xff data")
+        opened = c.call("open_doc", {"session": "fake-1", "path": str(part), "operation_id": "op_2"})
+        applied = c.call("apply", {**MOVE, "document": opened["document"]["id"], "operation_id": "op_3"})
+        self.assertEqual(applied["persistence"], "saved")
+        self.assertEqual(part.read_bytes(), b"#UGC:2 PART 1 binary \x00\xff data")
+
     def test_documents_take_the_kind_a_test_sets(self):
         c = self.client()
         c.control("set_kind", kind="part")

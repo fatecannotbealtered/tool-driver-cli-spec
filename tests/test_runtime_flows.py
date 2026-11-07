@@ -744,6 +744,40 @@ class Fixes106(unittest.TestCase):
             self.assertEqual(done.data["state"], "completed", done.stdout[:600])
             self.assertEqual(len(case.applied()), 1)
 
+    def test_the_preview_reports_an_existing_file_no_output_flag_names(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"SAMPLE_CLI_PART_FILE": "1"}):
+            sub = Subject([sys.executable, "-m", "sample_cli"], REPO / "tests" / "sample")
+            sub.registrations["part move"]["effects"] = ["change", "artifact"]
+            with Case(sub) as case:
+                case.control("fault", rule={"method": "preview", "command": "part move", "action": "result",
+                                            "result": {"tier_raises": ["target_exists"]}})
+                out = case.run(*Fixes104.MOVE_R1)
+                self.assertEqual(out.code, "E_CONFIRMATION_REQUIRED", out.stdout[:400])
+                self.assertEqual(case.applied(), [])
+
+    def test_a_change_the_application_saves_at_once_reports_saved(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"SAMPLE_CLI_PERSIST": "1"}):
+            sub = Subject([sys.executable, "-m", "sample_cli"], REPO / "tests" / "sample")
+            sub.registrations["part move"]["effects"] = ["change", "persist"]
+            with Case(sub) as case:
+                first = case.run(*Fixes104.MOVE_R1)
+                self.assertEqual(first.code, "E_CONFIRMATION_REQUIRED", first.stdout[:400])  # persist is two-step
+                out = case.run(*Fixes104.MOVE_R1, "--confirm", first.details["confirm_token"])
+                self.assertTrue(out.ok, out.stdout[:600])
+                outcome = out.data["receipt"]["outcome"]
+                self.assertEqual((outcome["persistence"], outcome["verification"]), ("saved", "passed"), out.stdout[:600])
+                doc = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-1")
+                self.assertFalse(doc.data["dirty"], doc.stdout[:400])
+                on_disk = json.loads(Path(case.doc_path("doc-1")).read_text(encoding="utf-8"))["objects"]["R1"]
+                self.assertEqual((on_disk["x_mm"], on_disk["y_mm"]), (1.0, 2.0))
+                save = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+                listed = (save.details.get("preview") or {}).get("changes", []) if not save.ok else []
+                self.assertEqual([c for c in listed if c.get("origin") == "tool"], [], save.stdout[:600])
+
     def test_a_busy_answer_after_the_dispatch_is_never_sent_again(self):
         with Case(subject()) as case:
             case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,

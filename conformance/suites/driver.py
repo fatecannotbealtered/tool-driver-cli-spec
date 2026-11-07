@@ -34,9 +34,11 @@ def _std(subject: Subject, path: str) -> Sample:
 
 
 def _session_changes(subject: Subject) -> list[Sample]:
-    found = _own(subject, "session", "change")
+    """Session-mode changes the application holds until a save: those that declare `persist`
+    are saved at once (DCLI-058)."""
+    found = [s for s in _own(subject, "session", "change") if "persist" not in subject.registrations[s.path]["effects"]]
     if not found:
-        raise NotApplicable("the registration has no session-mode command with the change effect")
+        raise NotApplicable("the registration has no session-mode command with the change effect that waits for a save")
     return sorted(found, key=lambda s: subject.tier(s.path, s.mode) != "direct")
 
 
@@ -372,7 +374,18 @@ def d08(subject: Subject) -> list[str]:
 
 
 def d09(subject: Subject) -> None:
-    sample = _session_changes(subject)[0]
+    for sample in _own(subject, "session", "persist")[:1]:
+        # The application writes this change to the file at once (DCLI-058).
+        with Case(subject) as case:
+            out = through(case, sample, sample.prepare(case))
+            check(out.ok and out.data["receipt"]["outcome"]["persistence"] == "saved",
+                  f"{sample.path} declares persist, so its change is saved at once: {out.describe()}")
+    try:
+        sample = _session_changes(subject)[0]
+    except NotApplicable:
+        if _own(subject, "session", "persist"):
+            return
+        raise
     with Case(subject) as case:
         out = through(case, sample, sample.prepare(case))
         check(out.ok, f"{sample.path}: {out.describe()}")
