@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -245,6 +246,34 @@ class MainAddressTest(HostTestCase):
         session = self.valid("sessions", c.call("sessions"))["items"][0]
         self.assertEqual(session["blocker"], {"action": "dismiss_dialog", "title": "Board Setup"})
         self.assertEqual(self.state()["applied"], [])
+
+    def test_one_call_at_a_time_on_the_main_thread(self):
+        wait_ms = CONTRACT["host_protocol"]["busy_wait_ms"]
+        first, second = self.client(), self.client()
+        # A short call before it is waited for; a long one gives E_BUSY once the wait is over.
+        for n, (slow_ms, code) in enumerate(((wait_ms // 3, None), (wait_ms * 2, "E_BUSY"))):
+            first.control("fault", rule={"method": "apply", "action": "slow", "ms": slow_ms})
+            worker = threading.Thread(target=first.call, args=("apply", {**MOVE, "operation_id": f"op_{n}"}))
+            worker.start()
+            end = time.monotonic() + 10
+            while self.state()["faults"]:  # the apply takes its fault once it has the main thread
+                self.assertLess(time.monotonic(), end, "the slow apply never started")
+                time.sleep(0.02)
+            started = time.monotonic()
+            self.valid("sessions", second.call("sessions"))  # the CLI side never waits for the main thread
+            with self.assertRaises(HostCallError) as ctx:  # nor does cancel (DSEC-018)
+                second.call("cancel", {"session": "fake-1", "operation_id": "op_x", "job": "job-none"})
+            self.assertEqual(ctx.exception.code, "E_NOT_FOUND")
+            self.assertLess(time.monotonic() - started, 0.5)
+            try:
+                second.call("preview", MOVE)
+                got = None
+            except HostCallError as exc:
+                got = exc.code
+                self.assertGreaterEqual(time.monotonic() - started, wait_ms / 1000 - 0.1)
+            worker.join()
+            self.assertEqual(got, code, f"after a call of {slow_ms} ms")
+        self.assertEqual(len(self.state()["applied"]), 2)
 
     def test_halt_passes_a_busy_device(self):
         c = self.client()

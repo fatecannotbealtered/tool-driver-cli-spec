@@ -678,5 +678,82 @@ class Fixes104(unittest.TestCase):
                 self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed", out.stdout[:600])
 
 
+class Fixes106(unittest.TestCase):
+    """What the tools found on 1.0.5."""
+
+    def test_a_long_export_that_reports_no_save_still_checks_its_file(self):
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "drawing.pdf")
+            env = {"SAMPLE_CLI_LONG_EXPORT": "1", f"{case.subject.prefix}_TEST_PAUSE_BEFORE_READ_BACK": "30"}
+            # The host breaks DCLI-058: it made the file, but says nothing was saved.
+            case.control("fault", rule={"method": "apply", "command": "drawing export", "action": "result",
+                                        "result": {"persistence": "unchanged"}})
+            out = case.run("drawing", "export", "--session", "fake-1", "--doc", "doc-1", "--output", path, env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]
+            pause = case.state_dir / "pause.json"
+            end = time.monotonic() + 30
+            while not pause.exists():
+                self.assertLess(time.monotonic(), end, "the worker never paused")
+                time.sleep(0.05)
+            os.remove(path)
+            done = case.run("job", "get", "--job", job["id"], "--wait", "60s", env=env)
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "failed", done.stdout[:600])
+            self.assertFalse(done.data["ok"], done.stdout[:600])
+
+    def test_session_list_reads_the_hosts_while_the_adapter_answers(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"SAMPLE_CLI_VARIANT": "host"}):
+            sub = Subject([sys.executable, "-m", "sample_cli"], REPO / "tests" / "sample")
+            with Case(sub) as case:
+                case.control("add_session", session="fake-2")
+                case.control("set_session", session="fake-2", state="unresponsive")
+                started = time.monotonic()
+                case.run("--version")
+                startup = time.monotonic() - started
+                case.control("fault", rule={"method": "sessions", "action": "slow", "ms": 2000})
+                started = time.monotonic()
+                out = case.run("session", "list")
+                took = time.monotonic() - started - startup
+                self.assertTrue(out.ok, out.stdout[:400])
+                self.assertEqual({s["id"]: s["state"] for s in out.data["items"]}, {"fake-1": "ready", "fake-2": "unresponsive"})
+                # The adapter's 2 s and the 2 s of the host that does not answer overlap.
+                self.assertLess(took, 3.5, f"session list took {took:.1f} s")
+
+    def test_a_long_job_waits_while_the_instance_is_busy(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error",
+                                        "error": {"code": "E_BUSY"}, "times": 2})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(len(case.applied()), 1)
+            self.assertEqual([c.get("outcome") for c in case.calls("apply")], ["error", "error", "result"])
+
+    def test_a_long_job_reads_the_instance_again_after_it_was_busy(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            case.control("set_session", session="fake-1", state="busy")  # before the worker has started
+            wait_for(case, "sessions", len(case.calls("sessions")) + 1)  # the worker found it busy
+            case.control("set_session", session="fake-1", state="ready")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertEqual(len(case.applied()), 1)
+
+    def test_a_busy_answer_after_the_dispatch_is_never_sent_again(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,
+                                        "error": {"code": "E_BUSY"}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "unknown", done.stdout[:600])
+            self.assertEqual(len(case.calls("apply")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

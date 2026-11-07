@@ -198,13 +198,12 @@ def d04(subject: Subject) -> list[str]:
             case.control("fault", rule={"method": "save_doc", "action": "error", "error": {"code": "E_BUSY"}})
             out = confirm(case, sample, argv, token)
             if (out.data or {}).get("result", {}).get("job"):
-                # A long doc save meets the busy application in its worker: the job ends with
-                # E_BUSY and saved nothing; the save runs again with a new preview (DCLI-065).
+                # A long doc save meets the busy application in its worker: nothing began, so the
+                # worker tries again once the application is free (DCLI-065).
                 ended = finish(case, out)
-                check(ended.code == "E_BUSY", f"{sample.path} as a long job, answered busy at dispatch: {ended.describe()}")
-                check(not case.applied(), f"{sample.path}: a busy application saved the document")
-                out = finish(case, through(case, sample, argv))
-                check(out.ok, f"{sample.path} did not save once the application was free: {out.describe()}")
+                check(ended.ok, f"{sample.path} as a long job did not save after one busy answer at dispatch: {ended.describe()}")
+                check(len([c for c in case.calls("save_doc") if c.get("outcome") == "result"]) == 1,
+                      f"{sample.path}: the worker did not save exactly once after the busy answer")
             else:
                 _busy(out, f"{sample.path} answered busy at dispatch")
                 out = confirm(case, sample, argv, token)

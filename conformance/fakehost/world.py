@@ -12,12 +12,14 @@ refused and recorded in ``violations``; a fault in the fake host itself is recor
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
 import os
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +30,7 @@ _DEFAULT = json.loads(CONTRACT.read_text(encoding="utf-8"))
 PROTOCOL_VERSION: str = _DEFAULT["host_protocol"]["version"]
 
 SELECT = ("id", "ids", "items")
-FAULT_ACTIONS = {"error", "hang", "close", "result", "store", "unreadable", "job"}
+FAULT_ACTIONS = {"error", "hang", "close", "result", "store", "unreadable", "job", "slow"}
 FAULT_METHODS = {"store": "apply", "job": "apply", "unreadable": "read_back"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -158,6 +160,10 @@ class World:
         self.instance_side = [c["name"] for c in data["adapter_capabilities"] if c["side"] == "instance"]
         self.write_methods = set(data["host_protocol"]["write_methods"]) | {"open_session", "plugin_install", "plugin_remove"}
         self.host_error_codes = set(data["host_protocol"]["allowed_error_codes"])
+        self.busy_wait = data["host_protocol"]["busy_wait_ms"] / 1000
+        # Each instance runs one instance-side call at a time, as on the main thread of the
+        # application (DCLI-276).
+        self.main_threads: dict[str, threading.Lock] = {}
         self.required = _required_keys(adapter)
         self.reset(config, commands)
 
@@ -272,38 +278,71 @@ class World:
 
     def handle(self, method: str, params: dict[str, Any], endpoint: str | None = None) -> Any:
         """Run one call, with the faults that match it. ``endpoint`` is the instance a host
-        component connection belongs to, or ``None`` for the fake host's main address."""
+        component connection belongs to, or ``None`` for the fake host's main address. An
+        instance-side call waits up to ``host_protocol.busy_wait_ms`` for the call before it on
+        the instance's main thread, and never past its own deadline, then gets E_BUSY (DCLI-276)."""
         with self.lock:
             entry: dict[str, Any] = {"seq": len(self.calls) + 1, "endpoint": endpoint or "main", "method": method, "params": params}
             self.calls.append(entry)
-            try:
+            with self._outcome(entry, method):
                 handler, params = self._route(method, params, endpoint)
                 if method != "hello":
                     self._reachable(params)
-                rule = self._take_fault(method, params)
+            main = self._main_thread(method, params)
+        if main is not None:
+            # A call that waited past its deadline would run after its caller gave up.
+            if not main.acquire(timeout=min(self.busy_wait, max(0.0, params["deadline_ms"] / 1000 - 0.1))):
+                with self.lock:
+                    entry.update(outcome="error", error="E_BUSY")
+                raise HostError("E_BUSY", "the main thread still runs another call", retry_after_ms=500)
+        try:
+            with self.lock:
+                rule = self._take_fault(method, params)  # the call that runs takes the fault, not one that waited
+            if rule is not None and rule["action"] == "slow":
+                time.sleep(float(rule.get("ms", 1000)) / 1000)
+            with self.lock, self._outcome(entry, method):
                 result = self._run(handler, params, rule)
-            except Refused as exc:
-                self.violations.append(f"{method}: {exc}")
-                entry.update(outcome="error", error="E_VALIDATION")
-                raise HostError("E_VALIDATION", str(exc)) from exc
-            except HostError as exc:
-                entry.update(outcome="error", error=exc.data["code"])
-                raise
-            except Hang:
-                entry["outcome"] = "hang"
-                raise
-            except Close:
-                entry["outcome"] = "close"
-                raise
-            except OSError as exc:
-                entry.update(outcome="error", error="E_NATIVE_FAILURE")
-                raise HostError("E_NATIVE_FAILURE", "the application could not write a file", native_message=str(exc)) from exc
-            except Exception as exc:  # noqa: BLE001 - a fault of the fake host itself
-                self.internal_errors.append(f"{method}: {type(exc).__name__}: {exc}")
-                entry.update(outcome="error", error="E_NATIVE_FAILURE")
-                raise HostError("E_NATIVE_FAILURE", f"fake host internal error: {exc}") from exc
-            entry["outcome"] = "result"
-            return result
+                entry["outcome"] = "result"
+                return result
+        finally:
+            if main is not None:
+                main.release()
+
+    def _main_thread(self, method: str, params: dict[str, Any]) -> threading.Lock | None:
+        """The lock of the instance's main thread, for an instance-side call. ``hello``,
+        ``cancel`` and the apply of a halt command never wait for it (DCLI-276, DSEC-018)."""
+        if method not in self.instance_side or method == "cancel" or not params.get("session"):
+            return None
+        command = params.get("command")
+        if method == "apply" and isinstance(command, str) and (self.commands.get(command) or {}).get("halt"):
+            return None
+        return self.main_threads.setdefault(params["session"], threading.Lock())
+
+    @contextlib.contextmanager
+    def _outcome(self, entry: dict[str, Any], method: str) -> Any:
+        """Record how a call ended, and turn a refusal or a fault of the fake host into a host error."""
+        try:
+            yield
+        except Refused as exc:
+            self.violations.append(f"{method}: {exc}")
+            entry.update(outcome="error", error="E_VALIDATION")
+            raise HostError("E_VALIDATION", str(exc)) from exc
+        except HostError as exc:
+            entry.update(outcome="error", error=exc.data["code"])
+            raise
+        except Hang:
+            entry["outcome"] = "hang"
+            raise
+        except Close:
+            entry["outcome"] = "close"
+            raise
+        except OSError as exc:
+            entry.update(outcome="error", error="E_NATIVE_FAILURE")
+            raise HostError("E_NATIVE_FAILURE", "the application could not write a file", native_message=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - a fault of the fake host itself
+            self.internal_errors.append(f"{method}: {type(exc).__name__}: {exc}")
+            entry.update(outcome="error", error="E_NATIVE_FAILURE")
+            raise HostError("E_NATIVE_FAILURE", f"fake host internal error: {exc}") from exc
 
     def _route(self, method: str, params: Any, endpoint: str | None) -> tuple[Any, dict[str, Any]]:
         """Check the request and pick its handler."""
