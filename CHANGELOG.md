@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-11-07
+
+Changes from the live runs and releases of the Creo, KiCad and Xpedition tools on 1.0.4 and 1.0.5. After syncing, check that the adapter's `sessions` returns within 2.5 seconds with one instance hung, and that a host component queues the tool's own requests for up to 1.5 seconds.
+
 ### Added
 
 - A command whose change the application writes to the file at once, in session mode too, such as rules written straight into a project database, declares `persist` with `change`: it is two-step, its receipt reports `persistence: saved`, and the next save does not list it. The fake host writes such a change to the file at once, and the entry Skill says that a session change is unsaved while its receipt says `persistence: unchanged` (DCLI-051, DCLI-058, DSKL-009).
