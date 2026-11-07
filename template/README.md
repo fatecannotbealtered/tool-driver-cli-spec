@@ -85,7 +85,7 @@ Every command of {{tool}}, generated from its command registration; `(dangerous)
 `--dry-run` shows the preview of any write and changes nothing. A confirm token works once, within 10 minutes, and only for the change it previewed. When the scope file sets `"confirm": "always"`, every write except stopping work is two-step, so that a person can approve each preview.
 {{#session}}
 
-**Saving in session mode.** A change is not a save. After a change, the receipt reports `persistence: unchanged` and the document stays dirty; only `{{tool}} doc save` writes the document's file. Its preview lists every change since the last save, including changes a person made in {{application}} (`origin: external`) and writes whose outcome is still unknown.
+**Saving in session mode.** A change is not a save. After a change, the receipt reports `persistence: unchanged` and the document stays dirty; only `{{tool}} doc save` writes the document's file. Its preview lists every change since the last save, including changes a person made in {{application}} (`origin: external`) and writes whose outcome is still unknown. A command that {{application}} itself saves at once is two-step and reports `persistence: saved`.
 {{/session}}
 {{#file}}
 

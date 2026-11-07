@@ -299,6 +299,21 @@ class RunTest(unittest.TestCase):
                                               "commands": ["part get"], "ran": ["part get"]}])
         self.assertEqual(loaded.sha256, check_project.digest(self.questions / "read_r1.py"))
 
+    def test_a_question_whose_right_answer_fails_stops_the_run_before_the_agent(self):
+        # The question's own data is wrong: the grader wants 10k, the document holds 1k.
+        self.load(read_r1=QUESTION, mismatched=QUESTION.replace('{"value": "10k"}', '{"value": "1k"}'))
+        asked: list = []
+        env = {"CLAUDE_CONFIG_DIR": str(self.tmp / "claude-home")}
+        with mock.patch.dict(os.environ, env), mock.patch.object(run_eval, "ClaudeAgent", side_effect=asked.append), \
+                mock.patch.object(run_eval.check_project, "gather", return_value=self.facts), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            code = run_eval.main([str(SAMPLE), "--fake-host", "--questions", str(self.questions),
+                                  "--workspace-root", str(self.tmp / "work")])
+        self.assertEqual(code, 2, err.getvalue())
+        self.assertIn("mismatched (the answer does not give 10k)", err.getvalue())
+        self.assertNotIn("read_r1", err.getvalue())
+        self.assertEqual(asked, [], "the Agent was started")
+
     def test_a_broken_scripted_agent_fails_the_check(self):
         broken = QUESTION.replace('agent.say("R1 has the value 4k7.")', 'raise KeyError("confirm_token")')
         questions = self.load(broken=broken)

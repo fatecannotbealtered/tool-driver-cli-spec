@@ -44,6 +44,11 @@ class SuiteVariants(unittest.TestCase):
             regs["drawing export"]["long"] = True
         run({"SAMPLE_CLI_LONG_EXPORT": "1"}, long_export, ["D26"])
 
+    def test_a_change_the_application_saves_at_once(self):
+        def persist(regs: dict[str, Any]) -> None:
+            regs["part move"]["effects"] = ["change", "persist"]
+        run({"SAMPLE_CLI_PERSIST": "1"}, persist, ["G01", "G04", "D09"])
+
 
 if __name__ == "__main__":
     unittest.main()
