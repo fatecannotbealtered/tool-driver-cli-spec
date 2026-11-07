@@ -404,6 +404,7 @@
     "max_call_seconds": 60,
     "max_wait_seconds": 600,
     "worker_max_seconds": 21600,
+    "busy_retry_seconds": 10,
     "worker_env": "<PREFIX>_JOB_WORKER",
     "standard_long": ["session open", "session close", "doc create", "doc open", "doc save", "doc save-as", "doc close"],
     "states": ["planned", "running", "blocked", "completed", "failed", "partial", "unknown", "cancelled"],
@@ -439,6 +440,7 @@
     "commands": ["session list", "session get", "doc list", "doc get"],
     "total_ms": 5000,
     "per_instance_ms": 2000,
+    "adapter_sessions_ms": 2500,
     "unresponsive_state": "unresponsive"
   },
   "device_states": [
@@ -730,6 +732,7 @@
       "cancel"
     ],
     "request_keys": ["deadline_ms"],
+    "busy_wait_ms": 1500,
     "write_methods": ["close_session", "create_doc", "open_doc", "save_doc", "save_doc_as", "close_doc", "undo", "apply", "cancel"],
     "rpc_error_code": -32000,
     "allowed_error_codes": ["E_BUSY", "E_NATIVE_FAILURE", "E_HUMAN_REQUIRED", "E_NOT_FOUND", "E_AMBIGUOUS", "E_VALIDATION", "E_CONFLICT", "E_UNSUPPORTED", "E_BACKEND_UNAVAILABLE", "E_TIMEOUT"],

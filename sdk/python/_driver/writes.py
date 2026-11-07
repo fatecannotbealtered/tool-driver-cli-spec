@@ -350,6 +350,14 @@ def file_checks(record: dict[str, Any], changes: list[dict[str, Any]]) -> list[d
     return [{"target": key, "field": "exists", "origin": "tool"} for key in record.get("_files", []) if key not in have]
 
 
+def to_read_back(change: str, delivery: str, persistence: str, expected: list[dict[str, Any]]) -> bool:
+    """A completed write is read back when its reply reports a lasting effect, and also when its
+    preview or the files it names expect one, whatever the reply says (DCLI-057). A call and a
+    long job decide it alike."""
+    return (change in ("applied", "partial") or delivery == "delivered" or persistence in ("saved", "partial")
+            or any(c.get("origin", "tool") == "tool" for c in expected))
+
+
 def combine(parts: list[Verification]) -> Verification:
     """One verification from several: passed only when every part passed (DCLI-057)."""
     if len(parts) == 1:
@@ -924,11 +932,9 @@ class Engine:
         missing = "unknown" if spec.strict_facts else "not_applicable"
         change, delivery, persistence = (missing if d not in facts else facts[d] if facts[d] in dims[d] else "unknown"
                                          for d in ("change", "delivery", "persistence"))
-        lasting = change == "applied" or delivery == "delivered" or persistence == "saved"
         verification = Verification("not_applicable")
-        expects = any(c.get("origin", "tool") == "tool" for c in changes)
         paused = None
-        if execution == "completed" and (lasting or change == "partial" or persistence == "partial" or expects):
+        if execution == "completed" and to_read_back(change, delivery, persistence, changes + file_checks(record, changes)):
             if child is None or on_hung is not None:
                 def settle(note: str) -> Result:
                     # apply replied, so a read after it that hangs leaves the outcome known (DCLI-278).

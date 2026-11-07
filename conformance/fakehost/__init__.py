@@ -56,9 +56,16 @@ A fault rule matches the next call of ``method``, optionally only for one ``comm
 ``store``       apply: the application stores ``values`` instead of the requested ones
 ``unreadable``  read_back: ``fields`` cannot be read back
 ``job``         apply: the work continues as a long job of ``steps`` polls
+``slow``        take ``ms`` milliseconds (default 1000) before the call runs, as a slow
+                application does
 
 With ``apply_first: true``, ``error``, ``hang`` and ``close`` happen after the change was
 applied, as when a dialog appears or the connection drops after dispatch.
+
+Each instance runs one instance-side call at a time, as on the application's main thread. A call
+that finds the main thread running another call waits for it up to ``host_protocol.busy_wait_ms``
+of the contract and never past its own deadline, then gets ``E_BUSY`` (DCLI-276); a ``slow`` call
+holds the main thread meanwhile. ``hello``, ``cancel`` and the apply of a halt command never wait.
 """
 from .client import Client, ConnectionClosed, HostCallError, ProtocolMismatch
 from .server import FakeHost
