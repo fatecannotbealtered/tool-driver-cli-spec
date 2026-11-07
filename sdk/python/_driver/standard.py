@@ -169,7 +169,9 @@ def add_target_flags(tool: Tool, command: Command) -> None:
     command.flags = extra + command.flags
     if command.writes and "--output" not in names:
         command.flags.append(Flag("--output", "path", "Write the full preview, with every change, to this file.", runtime=True))
-    if "artifact" in command.effects and any(f.output for f in command.flags):
+    if "artifact" in command.effects:
+        # The runtime finds an existing file of an output flag itself; for a file no output flag
+        # names, such as a new document named by --doc, the preview reports it (DCLI-051).
         command.tier_when = [{"when": "target_exists", "tier": "two_step"}] + command.tier_when
     tiers = tool.tiers
     if command.writes and not command.halt and any(tiers.base(command, m) == "direct" for m in command.modes):

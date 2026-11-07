@@ -85,7 +85,7 @@
 `--dry-run` 显示任何写操作的预览，什么都不改。确认令牌只能用一次，10 分钟内有效，而且只对它预览过的那次修改有效。授权范围文件设了 `"confirm": "always"` 时，除停止工作外的所有写操作都改为两步确认，人可以逐个批准预览。
 {{#session}}
 
-**会话模式下的保存。** 修改不等于保存。修改之后，回执报告 `persistence: unchanged`，文档仍有未保存的修改；只有 `{{tool}} doc save` 才写入文档的文件。保存的预览列出上次保存以来的所有修改，包括人在 {{application}} 里做的修改（`origin: external`），以及结果仍然未知的写操作。
+**会话模式下的保存。** 修改不等于保存。修改之后，回执报告 `persistence: unchanged`，文档仍有未保存的修改；只有 `{{tool}} doc save` 才写入文档的文件。保存的预览列出上次保存以来的所有修改，包括人在 {{application}} 里做的修改（`origin: external`），以及结果仍然未知的写操作。{{application}} 一改就自己存盘的命令按两步确认，回执报告 `persistence: saved`。
 {{/session}}
 {{#file}}
 
