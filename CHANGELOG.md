@@ -4,6 +4,19 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Added
+
+- A tool lists the kinds of document its application has in `Tool(doc_kinds=[...])`. `--kind` of `session open` and `doc create` then takes only those, `reference` shows them, and a wrong kind is refused with `E_USAGE` before anything starts. Before, `session open` started its long job first and failed with `E_VALIDATION` only when the job ran, so Agents read the exit code 0 as a started instance. A command's `doc_kinds` must be among the tool's (DCLI-029, DCLI-210).
+
+### Fixed
+
+- `operation resolve` settled a write only by reading changed fields back, so for a standard write with no such field, such as `session open`, `doc open`, `doc close` or `session close`, the `resume` and `lookup` it gave always failed once with `E_UNSUPPORTED`. A standard write is now settled by what it changes: `session open` and `doc create` in an instance by comparing the instances and documents with those there before it was sent, the others by the instances, documents, files, job or host component version now; a file the application wrote under a numbered name counts. `doc save`, which read back the fields it held and so found them whether or not the save happened, is now settled by whether the document is clean and its revision. An instance that is starting, busy or shows a dialog says so first. When the state does not tell the outcome, such as no new instance listed yet, resolve says so and never guesses (DCLI-035).
+- Before the Agent's first question, `run_eval` checked the scripted `right` answer only on the fake host, so a question with `FAKE_HOST = None` reached the Agent unchecked. In a run on the real application, such a question's `right` answer now runs there first (DSKL-044).
+- `run_eval --check` showed only the first failed check of each `wrong` run; it now shows all of them, so the author sees whether the run failed for the reason it was written for.
+- `run_matrix` asked for `--kind` even for a command with a single document kind; it now uses that kind (DVER-030).
+- The worked examples' `says_verified` accepted only a form of "verified", in English or Chinese, and failed reports that said the read-back matched in other words, such as "read-back confirmed all three changes" or "checked against the board". It now also accepts read-back agreement, and still fails its negations (DSKL-042).
+- The template's `CONTRIBUTING.md`, `run_eval`'s help and errors and the specification said the evaluation workspace root must be listed under Authorized Targets; a folder inside a listed folder is enough, as `run_eval` already checked (DSKL-044, DVER-050).
+
 ## [1.0.8] - 2026-11-08
 
 Changes from the live run of the Creo tool on 1.0.7 and from the release evaluation. After syncing, copy the entry Skill's new sentences from the template: the save sentences of the save playbook and the sentences on jobs that end with `E_HUMAN_REQUIRED`.

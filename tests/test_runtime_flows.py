@@ -15,6 +15,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "conformance"))
 
+from suites import schemas  # noqa: E402
 from suites.harness import FLAGS, Case, Subject  # noqa: E402
 
 SUBJECT = None
@@ -949,6 +950,102 @@ class DialogStopsLongJob(unittest.TestCase):
             self.assertEqual((done.data["state"], done.data["code"]), ("unknown", "E_HUMAN_REQUIRED"), done.stdout[:600])
             self.assertEqual(done.data["action"], "dismiss_dialog")
             self.assertIn("operation resolve --id", done.data["resume"])
+
+
+class ResolveStandardWrites(unittest.TestCase):
+    """operation resolve settles a standard write from the instances, documents and files it
+    changes, which no field read-back can tell (DCLI-035)."""
+
+    DIALOG = {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog", "title": "Fake dialog"}
+
+    def stopped(self, case: Case, method: str, *args: str):
+        """Run a write that a dialog stops after it was sent; return the resume command's result."""
+        case.control("fault", rule={"method": method, "action": "error", "apply_first": True, "error": self.DIALOG})
+        out = case.run(*args)
+        if out.code == "E_CONFIRMATION_REQUIRED":
+            out = case.run(*args, "--confirm", out.details["confirm_token"], *(["--dangerous"] if out.details["preview"]["tier"] == "dangerous" else []))
+        self.assertEqual(out.code, "E_HUMAN_REQUIRED", out.stdout[:600])
+        self.assertIn("operation resolve --id", out.details["resume"])
+        return out.details["resume"].split()[1:]
+
+    def settled(self, case: Case, resume: list[str], outcome: str = "applied"):
+        done = case.run(*resume)
+        self.assertTrue(done.ok, done.stdout[:600])
+        self.assertEqual(schemas.errors(done.data, "operation.schema.json"), [])
+        self.assertEqual((done.data["resolution"]["outcome"], done.data["resolution"]["resolved_by"]), (outcome, "read_back"))
+        return done.data["resolution"]["observed"]
+
+    def test_instances_open_and_close(self):
+        with Case(subject()) as case:
+            resume = self.stopped(case, "open_session", "session", "open")
+            new = [s["id"] for s in case.run("session", "list").data["items"] if s["id"] != "fake-1"]
+            self.assertEqual(len(new), 1)
+            case.control("set_session", session=new[0], state="blocked", title="License")
+            early = case.run(*resume)  # the new instance still shows its dialog
+            self.assertEqual(early.code, "E_HUMAN_REQUIRED", early.stdout[:600])
+            self.assertIn("operation resolve --id", early.details["resume"])
+            case.control("set_session", session=new[0], state="ready")
+            self.assertEqual(self.settled(case, resume)["session"]["id"], new[0])
+            resume = self.stopped(case, "close_session", "session", "close", "--session", new[0])
+            self.assertEqual(self.settled(case, resume)["session"], {"id": new[0], "state": "closed"})
+
+    def test_an_instance_not_listed_tells_nothing_yet(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "open_session", "action": "close"})
+            out = case.run("session", "open")
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:600])
+            lookup = out.details["lookup"].split()[1:]
+            later = case.run(*lookup)  # it may still be starting: never "not applied" from absence
+            self.assertEqual(later.code, "E_BUSY", later.stdout[:600])
+            self.assertIn("--outcome", later.details["next_action"])
+            done = case.run(*lookup, "--outcome", "not_applied", "--evidence", "no new instance appeared")
+            self.assertEqual(done.data["resolution"]["resolved_by"], "agent", done.stdout[:600])
+
+    def test_a_saved_file_under_another_name_and_a_save_still_waiting(self):
+        with Case(subject()) as case:
+            out_path = os.path.join(case.tmp, "copy.fake")
+            resume = self.stopped(case, "save_doc_as", "doc", "save-as", "--session", "fake-1", "--doc", "doc-1", "--output", out_path)
+            Path(out_path).unlink(missing_ok=True)
+            Path(out_path + ".1").write_text("{}", encoding="utf-8")  # as an application that numbers versions writes it
+            observed = self.settled(case, resume)
+            self.assertEqual([v.get("written") for k, v in observed.items() if k.endswith("copy.fake")], [["copy.fake.1"]])
+
+    def test_a_dirty_document_after_the_save_tells_nothing_once_it_changed(self):
+        with Case(subject()) as case:
+            self.assertTrue(case.run(*MOVE, "--id", "R1", "--x", "3mm", "--y", "4mm").ok)
+            case.control("fault", rule={"method": "save_doc", "action": "close"})
+            args = ["doc", "save", "--session", "fake-1", "--doc", "doc-1"]
+            token = case.run(*args).details["confirm_token"]
+            out = case.run(*args, "--confirm", token)
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:600])
+            lookup = out.details["lookup"].split()[1:]
+            case.control("edit", document="doc-1", object="R2", field="x_mm", value=9.0)  # a person edits on
+            unclear = case.run(*lookup)
+            self.assertEqual(unclear.code, "E_UNSUPPORTED", unclear.stdout[:600])
+            self.assertIn("changed since the save was sent", unclear.stdout)
+
+    def test_a_save_that_never_happened(self):
+        with Case(subject()) as case:
+            self.assertTrue(case.run(*MOVE, "--id", "R1", "--x", "3mm", "--y", "4mm").ok)
+            case.control("fault", rule={"method": "save_doc", "action": "close"})
+            args = ["doc", "save", "--session", "fake-1", "--doc", "doc-1"]
+            out = case.run(*args, "--confirm", case.run(*args).details["confirm_token"])
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:600])
+            self.assertIs(self.settled(case, out.details["lookup"].split()[1:], "not_applied")["document"]["dirty"], True)
+
+    def test_documents_open_save_and_close(self):
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "extra.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            resume = self.stopped(case, "open_doc", "doc", "open", "--session", "fake-1", "--doc", path)
+            self.assertEqual(list(self.settled(case, resume).values()), [{"open": True}])
+            self.assertTrue(case.run(*MOVE, "--id", "R1", "--x", "3mm", "--y", "4mm").ok)
+            resume = self.stopped(case, "save_doc", "doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            self.assertIs(self.settled(case, resume)["document"]["dirty"], False)
+            resume = self.stopped(case, "close_doc", "doc", "close", "--session", "fake-1", "--doc", path)
+            self.assertIs(self.settled(case, resume)["document"]["open"], False)
+            resume = self.stopped(case, "create_doc", "doc", "create", "--session", "fake-1")
+            self.assertIs(self.settled(case, resume)["document"]["exists"], True)
 
 
 if __name__ == "__main__":

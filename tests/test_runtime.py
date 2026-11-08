@@ -211,6 +211,28 @@ class Registration(unittest.TestCase):
         self.assertEqual(tiers.risk(physical), "T2")
         self.assertEqual(tiers.risk(move), "T1")
 
+    def test_the_tool_s_document_kinds(self):
+        def tool(kinds, reg=None):
+            return Tool(root=SAMPLE, adapter=SampleAdapter, commands=[reg or registration()], application="Files",
+                        versions="any", modes=MODES, contract=REPO / "contract" / "driver-contract.json", doc_kinds=kinds)
+
+        parser = Parser(CONTRACT, tool(["board", "schematic"]).commands, "sample-cli")
+        for argv in (["session", "open", "--kind", "board"], ["doc", "create", "--kind", "schematic", "--path", "a.fake"]):
+            self.assertEqual(parser.parse(argv).values["--kind"], argv[3])
+        for argv in (["session", "open", "--kind", "drawing"], ["doc", "create", "--kind", "drawing", "--path", "a.fake"]):
+            with self.assertRaises(DriverError) as ctx:
+                parser.parse(argv)  # refused before any job or dispatch starts
+            self.assertEqual(ctx.exception.code, "E_USAGE")
+            self.assertIn("board, schematic", ctx.exception.message)
+        # A tool that lists no kinds leaves the kind to its adapter.
+        self.assertEqual(Parser(CONTRACT, tool(None).commands, "sample-cli").parse(["session", "open", "--kind", "drawing"])
+                         .values["--kind"], "drawing")
+        with self.assertRaises(RegistrationError) as ctx:
+            tool(["board"], registration(doc_kinds=["schematic"]))
+        self.assertIn("not among the tool's doc_kinds", str(ctx.exception))
+        with self.assertRaises(RegistrationError):
+            tool(["Board"])
+
     def test_the_sample_registration_is_current(self):
         written = json.loads((SAMPLE / "contract" / "commands.json").read_text(encoding="utf-8"))
         self.assertEqual(written, build().registration())

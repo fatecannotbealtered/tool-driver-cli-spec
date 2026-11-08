@@ -21,10 +21,10 @@ and `sleep` in its shell, and read and edit files only inside the workspace.
              simulated report never supports a maturity level (DVER-021)
 
 On the real application the workspace root and every scope target must be listed under
-Authorized Targets in docs/E2E.md (DVER-050), and the tool keeps the person's environment, so
+Authorized Targets in docs/E2E.md, or lie inside a listed folder (DVER-050), and the tool keeps the person's environment, so
 it finds the running application. Before the Agent runs, the scripted `right` agent of each
-question that has one runs once on the fake host; a question whose right answer fails stops the
-run, so no model credits go to it. A full run on the real application writes its report to
+question that has one runs once on the fake host, or on the real application for a question with
+FAKE_HOST None; a question whose right answer fails stops the run, so no model credits go to it. A full run on the real application writes its report to
 docs/evidence/eval-<date>.json unless --report names another file; a run with --only writes
 one only to --report.
 """
@@ -705,7 +705,7 @@ def check_graders(project: Path, facts: check_project.Facts, questions: list[Que
         for name, script in question.wrong:
             problems, error, _ = attempt(project, facts, question, ScriptedAgent(script), fake_host, root, keep)
             bad |= bool(error) or not problems
-            lines.append(f"{name} " + ("BROKE: " + error if error else "failed: " + problems[0] if problems
+            lines.append(f"{name} " + ("BROKE: " + error if error else "failed: " + "; ".join(problems) if problems
                                        else "PASSED, the grader cannot tell it from right"))
         failed += bad
         print(f"{'FAIL' if bad else 'ok  '} {question.id} ({question.scenario}): " + " | ".join(lines), flush=True)
@@ -713,16 +713,20 @@ def check_graders(project: Path, facts: check_project.Facts, questions: list[Que
     return 1 if failed else 0
 
 
-def broken_questions(project: Path, facts: check_project.Facts, questions: list[Question]) -> list[str]:
-    """The scripted ``right`` agent of each question that has one, run on the fake host before the
-    Agent spends model credits: a question whose own right answer fails would grade the Agent
-    against a broken question. A question with ``FAKE_HOST = None`` cannot run there."""
+def broken_questions(project: Path, facts: check_project.Facts, questions: list[Question], fake_host: bool,
+                     root: Path | None) -> list[str]:
+    """The scripted ``right`` agent of each question that has one, run before the Agent spends
+    model credits: a question whose own right answer fails would grade the Agent against a broken
+    question. It runs on the fake host; a question with ``FAKE_HOST = None`` cannot, so in a run on
+    the real application its right answer runs there."""
     broken = []
     for question in questions:
-        if question.right is None or question.fake_host is None:
+        if question.right is None or (question.fake_host is None and fake_host):
             continue
+        on_fake = question.fake_host is not None
         try:
-            problems, error, _ = attempt(project, facts, question, ScriptedAgent(question.right), True, None, False)
+            problems, error, _ = attempt(project, facts, question, ScriptedAgent(question.right), on_fake,
+                                         None if on_fake else root, False)
         except EvalError as exc:
             problems, error = [], str(exc)
         if problems or error:
@@ -777,16 +781,16 @@ def authorize(project: Path, questions: list[Question], root: Path | None) -> No
     if not authorized:
         raise EvalError("docs/E2E.md lists no Authorized Targets; nothing runs on the real application")
     if root is None:
-        raise EvalError("name a workspace root listed under Authorized Targets with --workspace-root")
+        raise EvalError("name a workspace root with --workspace-root: a folder listed under Authorized Targets, or one inside it")
     key = file_key(root.resolve()) + "/"
     if not any(check_project.target_covered(key, a) for a in authorized):
-        raise EvalError(f"the workspace root {key} is not listed under Authorized Targets in docs/E2E.md")
+        raise EvalError(f"the workspace root {key} is not listed under Authorized Targets in docs/E2E.md, nor inside a listed folder")
     for question in questions:
         for target in (question.scope or {}).get("targets", []):
             if target.startswith("{documents}"):
                 continue
             if not any(check_project.target_covered(target, a) for a in authorized):
-                raise EvalError(f"{question.id}: the scope target {target} is not listed under Authorized Targets in docs/E2E.md")
+                raise EvalError(f"{question.id}: the scope target {target} is not listed under Authorized Targets in docs/E2E.md, nor inside a listed folder")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -803,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", help="the model the Agent uses")
     parser.add_argument("--check", action="store_true", help="run the scripted agents and check the graders")
     parser.add_argument("--fake-host", action="store_true", help="run on the fake host instead of the real application")
-    parser.add_argument("--workspace-root", help="where the workspaces are made; on the real application, an authorized folder")
+    parser.add_argument("--workspace-root", help="where the workspaces are made; on the real application, a folder listed under Authorized Targets or inside one")
     parser.add_argument("--report", help="where to write the evaluation report")
     parser.add_argument("--keep", action="store_true", help="keep each workspace")
     args = parser.parse_args(argv)
@@ -840,7 +844,7 @@ def main(argv: list[str] | None = None) -> int:
             raise EvalError("these copies of the tool's Skills would change the evaluation: "
                             + "; ".join(f"{path} ({why})" for path, why in stale)
                             + ". Move them out of those folders for the evaluation, then run again")
-        broken = broken_questions(project, facts, questions)
+        broken = broken_questions(project, facts, questions, args.fake_host, root)
         if broken:
             raise EvalError("the scripted right answer fails these questions, so nothing was asked of the Agent: "
                             + "; ".join(broken) + ". Fix the questions; --check shows each grader")
