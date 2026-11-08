@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-11-08
+
+Changes from the Xpedition tool's 1.0.8 release and the Creo tool's live run. After syncing, a tool whose application has several kinds of document lists them in `doc_kinds` of its `Tool` in `<pkg>/__init__.py`, where the template shows it. A tool that copied `_report.py` from the worked examples copies it again.
+
 ### Added
 
 - A tool lists the kinds of document its application has in `Tool(doc_kinds=[...])`. `--kind` of `session open` and `doc create` then takes only those, `reference` shows them, and a wrong kind is refused with `E_USAGE` before anything starts. Before, `session open` started its long job first and failed with `E_VALIDATION` only when the job ran, so Agents read the exit code 0 as a started instance. A command's `doc_kinds` must be among the tool's (DCLI-029, DCLI-210).
