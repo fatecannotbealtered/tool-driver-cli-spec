@@ -46,6 +46,20 @@ class BuildTest(unittest.TestCase):
                     self.assertEqual(hashlib.sha256(archive.read(prefix + name)).hexdigest(), digest, name)
 
 
+class LocalFilesTest(unittest.TestCase):
+    def test_a_file_git_does_not_track_never_ships(self):
+        cache = ROOT / "template" / ".ruff_cache-bundle-test"
+        cache.mkdir(exist_ok=True)
+        try:
+            (cache / "entry").write_text("local", encoding="utf-8")
+            names = {p.relative_to(ROOT).as_posix() for p in bundle.bundle_files()}
+            self.assertNotIn("template/.ruff_cache-bundle-test/entry", names)
+            self.assertIn("template/package.json", names)
+        finally:
+            (cache / "entry").unlink(missing_ok=True)
+            cache.rmdir()
+
+
 class NotesTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

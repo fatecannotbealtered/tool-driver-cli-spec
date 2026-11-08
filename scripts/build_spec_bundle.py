@@ -4,6 +4,8 @@
 Usage:
     python scripts/build_spec_bundle.py            # dist/tool-driver-cli-spec-<VERSION>.zip and .sha256
     python scripts/build_spec_bundle.py --notes    # the CHANGELOG section of VERSION, for the release
+
+The bundle holds the files git tracks, so caches and other local files never ship.
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ import argparse
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -19,7 +22,6 @@ ROOT = Path(__file__).resolve().parent.parent
 NAME = "tool-driver-cli-spec"
 TOP_FILES = ["README.md", "README_zh.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "VERSION"]
 TREES = ["spec", "contract", "sdk", "conformance", "template", "scripts", "skills"]
-SKIP = {"__pycache__"}
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)
 
 
@@ -28,10 +30,10 @@ def version() -> str:
 
 
 def bundle_files() -> list[Path]:
-    files = [ROOT / name for name in TOP_FILES]
-    for tree in TREES:
-        files.extend(p for p in (ROOT / tree).rglob("*")
-                     if p.is_file() and not SKIP & set(p.relative_to(ROOT).parts) and p.suffix != ".pyc")
+    """The top files and every file git tracks in the trees."""
+    listed = subprocess.run(["git", "ls-files", "-z", "--", *TREES], cwd=ROOT, capture_output=True, check=True,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.decode("utf-8")
+    files = [ROOT / name for name in TOP_FILES] + [ROOT / name for name in listed.split("\0") if name]
     missing = [p for p in files if not p.is_file()]
     if missing:
         raise SystemExit(f"missing files: {[p.relative_to(ROOT).as_posix() for p in missing]}")

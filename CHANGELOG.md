@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Fixed
+
+- The release bundle took every file in its folders, so the 1.0.9 bundle also held a local ruff cache, `template/.ruff_cache/`, and `sync_spec` listed its files as template changes. The bundle now holds only the files git tracks; tools ignore those cache files.
+
 ## [1.0.9] - 2026-11-08
 
 Changes from the Xpedition tool's 1.0.8 release and the Creo tool's live run. After syncing, a tool whose application has several kinds of document lists them in `doc_kinds` of its `Tool` in `<pkg>/__init__.py`, where the template shows it. A tool that copied `_report.py` from the worked examples copies it again.
