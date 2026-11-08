@@ -70,7 +70,7 @@ Check a change with its `result` and receipt, and with the read commands, which 
 ### Save
 {{#session}}
 
-A change in session mode whose receipt says `persistence: unchanged` is not saved until `{{tool}} doc save`; a change the application saves at once says `saved`. A receipt with verification `deferred` is verified by the next `doc save` of that document; it is not verified before. Before confirming a save, check its preview: it lists every change since the last save, including changes made outside {{tool}} (`origin: external`), and in `blocked_by` the operations whose outcome is still unknown. Settle those first.
+A change in session mode whose receipt says `persistence: unchanged` is not saved until `{{tool}} doc save`; a change the application saves at once says `saved`. Save only when the person asks for it; a grant to change a document is not a request to save it. Otherwise leave the change unsaved and say so in the report. A receipt with verification `deferred` is verified by the next `doc save` of that document; it is not verified before. Before confirming a save, check its preview: it lists every change since the last save, including changes made outside {{tool}} (`origin: external`), and in `blocked_by` the operations whose outcome is still unknown. Settle those first.
 {{/session}}
 {{#file}}
 

@@ -4,9 +4,17 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-11-08
+
+Changes from the live run of the Creo tool on 1.0.7 and from the release evaluation. After syncing, copy the entry Skill's new sentences from the template: the save sentences of the save playbook and the sentences on jobs that end with `E_HUMAN_REQUIRED`.
+
+### Changed
+
+- The save playbook says to save only when the person asks for it: a grant to change a document is not a request to save it. Otherwise the change stays unsaved and the report says so. Agents given a grant in chat saved the document as well, and widened their scope file to do it. The `granted_in_chat` question now also fails when the document was saved (DSKL-009, DSKL-040).
+
 ### Fixed
 
-- A long write job that a dialog stopped after dispatch ended with `E_OUTCOME_UNKNOWN` and lost the dialog, so the Agent was not told that a person had to act and the `dialog` row of a long command could not pass. The job now ends as the call would: `unknown`, with `code` `E_HUMAN_REQUIRED`, `action`, the dialog's `title`, `knowledge` and `resume`, the `operation resolve` command (DCLI-066, DCLI-220). `job list` marks the title and the receipt's text as untrusted, and driver test D05 follows a long command to its end. After syncing, copy the entry Skill's new sentences on jobs that end with `E_HUMAN_REQUIRED` from the template.
+- A long write job that a dialog stopped after dispatch ended with `E_OUTCOME_UNKNOWN` and lost the dialog, so the Agent was not told that a person had to act and the `dialog` row of a long command could not pass. The job now ends as the call would: `unknown`, with `code` `E_HUMAN_REQUIRED`, `action`, the dialog's `title`, `knowledge` and `resume`, the `operation resolve` command (DCLI-066, DCLI-220). `job list` marks the title and the receipt's text as untrusted, and driver test D05 follows a long command to its end.
 - `operation resolve` run while the dialog was still open answered `E_BUSY` and suggested recording the outcome by hand. It now returns `E_HUMAN_REQUIRED` with the dialog's `action` and `title`, and `resume` is the same `operation resolve` command (DCLI-066).
 
 ## [1.0.7] - 2026-11-08
