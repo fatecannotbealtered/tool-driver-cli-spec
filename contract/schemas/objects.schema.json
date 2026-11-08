@@ -126,6 +126,8 @@
         "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
         "knowledge": {"description": "A blocked job: the knowledge entries about the dialog that holds it (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
         "poll_after_ms": {"type": "integer", "minimum": 0},
+        "resume": {"description": "A write job a dialog stopped after dispatch: the operation resolve command to run once the person has acted (DCLI-066).", "type": "string", "minLength": 1},
+        "title": {"description": "The title of the dialog that stopped the job, when known; untrusted.", "type": "string"},
         "message": {"description": "A read job that failed: what went wrong.", "type": "string"}
       },
       "allOf": [
@@ -149,9 +151,14 @@
           "else": {"not": {"required": ["code"]}}
         },
         {
+          "description": "A blocked job, and a write job a dialog stopped after dispatch, say what the person must do (DCLI-066, DCLI-220).",
           "if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}},
           "then": {"required": ["action"]},
-          "else": {"not": {"required": ["action"]}}
+          "else": {
+            "if": {"required": ["state", "code"], "properties": {"state": {"const": "unknown"}, "code": {"const": "E_HUMAN_REQUIRED"}}},
+            "then": {"required": ["action", "resume"]},
+            "else": {"not": {"anyOf": [{"required": ["action"]}, {"required": ["resume"]}, {"required": ["title"]}]}}
+          }
         }
       ]
     },

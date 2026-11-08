@@ -887,5 +887,69 @@ class Fixes107(unittest.TestCase):
             self.assertTrue(case.run(*move).ok)
 
 
+class DialogStopsLongJob(unittest.TestCase):
+    """A long write job a dialog stops after dispatch ends as the call would (DCLI-066, DCLI-220)."""
+
+    def test_the_job_says_what_the_person_must_do_and_how_to_settle_it(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,
+                                        "error": {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog", "title": "Routing options"}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual((data["state"], data["ok"], data["code"]), ("unknown", False, "E_HUMAN_REQUIRED"), done.stdout[:600])
+            self.assertEqual(data["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", data["resume"])  # never the write again
+            self.assertEqual(data.get("title"), "Routing options")
+            self.assertIn("$.data.title", done.envelope["meta"]["untrusted"])
+            unknown = case.run("operation", "list", "--state", "unknown")
+            self.assertEqual(len(unknown.data["items"]), 1, unknown.stdout[:400])  # it stays locked until resolved
+            listed = case.run("job", "list")
+            self.assertEqual(listed.data["items"][0]["code"], "E_HUMAN_REQUIRED", listed.stdout[:600])
+            self.assertIn("$.data.items[*].title", listed.envelope["meta"]["untrusted"])
+
+    def test_resolving_while_the_dialog_is_open_asks_for_the_person_again(self):
+        with Case(subject()) as case:
+            dialog = {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog", "title": "Routing options"}
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,
+                                        "error": dialog})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            case.control("fault", rule={"method": "read_back", "action": "error", "error": dialog})
+            early = case.run("operation", "resolve", "--id", done.data["operation_id"])
+            self.assertEqual(early.code, "E_HUMAN_REQUIRED", early.stdout[:600])  # not E_BUSY
+            self.assertEqual(early.details["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", early.details["resume"])
+            self.assertEqual(len(case.run("operation", "list", "--state", "unknown").data["items"]), 1)
+            settled = case.run("operation", "resolve", "--id", done.data["operation_id"])
+            self.assertEqual(settled.data["state"], "completed", settled.stdout[:600])
+
+    def test_a_dialog_before_dispatch_fails_the_job_and_changes_nothing(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error",
+                                        "error": {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog"}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual((data["state"], data["code"]), ("failed", "E_HUMAN_REQUIRED"), done.stdout[:600])
+            self.assertEqual({"action", "resume", "title"} & set(data), set())  # nothing was sent: run the write again
+            self.assertEqual(case.run("operation", "list", "--state", "unknown").data["items"], [])
+
+    def test_a_long_standard_command_a_dialog_stops_says_the_same(self):
+        long = {"SAMPLE_CLI_LONG": "doc open"}
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "big.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            case.control("fault", rule={"method": "open_doc", "action": "error", "apply_first": True,
+                                        "error": {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog"}})
+            out = case.run("doc", "open", "--session", "fake-1", "--doc", path, env=long)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=long)
+            self.assertEqual((done.data["state"], done.data["code"]), ("unknown", "E_HUMAN_REQUIRED"), done.stdout[:600])
+            self.assertEqual(done.data["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", done.data["resume"])
+
+
 if __name__ == "__main__":
     unittest.main()

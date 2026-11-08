@@ -253,7 +253,7 @@ def d05(subject: Subject) -> None:
         if method == "apply":
             rule["command"] = target.path
         case.control("fault", rule=rule)
-        out = through(case, target, argv)
+        out = finish(case, through(case, target, argv))  # a long target ends in its job (DCLI-220)
         check(out.code == "E_HUMAN_REQUIRED", f"a dialog after dispatch: {out.describe()}")
         resume = out.details.get("resume", "")
         check("operation resolve" in resume, f"after dispatch, resume must settle the outcome, not write again: {resume!r}")
