@@ -7,6 +7,8 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 ### Fixed
 
 - The release bundle took every file in its folders, so the 1.0.9 bundle also held a local ruff cache, `template/.ruff_cache/`, and `sync_spec` listed its files as template changes. The bundle now holds only the files git tracks; tools ignore those cache files.
+- A long job that ended with `ok: false` gave only its error code, so the Agent learned that a write such as a save had failed, but not why or what to do next. Such a job, write or read, now carries the error the call would have returned: `code`, `message` and `details`, such as `conflict`, `native_message`, `knowledge` and `next_action`, with the parts from outside the tool listed in `meta.untrusted`, also in the result of `job cancel`. A write job that changed nothing has spent its token, so a command to run in its `details` is the write's first call, never the worker's own call. A job a dialog stopped after dispatch carries `action`, `title`, `knowledge` and `resume` in `details`, as the call's error does, no longer beside them (DCLI-220).
+- The receipt of a job noted the runtime's own words as "The application said: ...": a refusal the runtime made in the worker, a worker that ended without a result, and a job the runtime could no longer follow. Only the application's own words are noted that way now.
 
 ## [1.0.9] - 2026-11-08
 

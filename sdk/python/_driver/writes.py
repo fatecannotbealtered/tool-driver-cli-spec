@@ -1069,8 +1069,9 @@ class Engine:
         _mark_unread(record, read)
         if out["job"]:
             job = out["job"]
+            # ``again`` is the write's first call, for a job that ends having changed nothing (DCLI-220).
             record["_job"] = {"id": job["id"], "state": job.get("state", "running"), "started_at": utc_now(),
-                              "cancel_requested": False}
+                              "cancel_requested": False, "again": run.again()}
             run.records.save(record)
             run.dispatching = None
             run.locks.hold_as(operation_id, "job", record["_keys"])
@@ -1083,12 +1084,14 @@ class Engine:
                 try:
                     started = start_worker(run, job["id"], record["_job"]["worker"]["nonce"])
                 except OSError as exc:
-                    record["_job"].update(state="failed", ok=False, code="E_UNKNOWN", finished_at=utc_now())
+                    failure = DriverError("E_UNKNOWN", f"The worker of long job {job['id']} could not start: {exc}. Nothing was sent.")
+                    record["_job"].update(state="failed", ok=False, code=failure.code, message=failure.message,
+                                          details=failure.details, finished_at=utc_now())
                     receipt["outcome"] = _outcome("not_started", "not_applied")
                     record.update(state="failed", receipt=receipt, finished_at=utc_now())
                     run.records.save(record)
                     run.locks.release(operation_id)
-                    raise DriverError("E_UNKNOWN", f"The worker of long job {job['id']} could not start: {exc}. Nothing was sent.") from None
+                    raise failure from None
                 with run.mutex.hold():
                     latest = run.records.load(operation_id) or record
                     latest["_job"]["worker"] = {**latest["_job"].get("worker", {}), **started}

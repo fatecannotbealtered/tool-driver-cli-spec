@@ -126,9 +126,8 @@
         "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
         "knowledge": {"description": "A blocked job: the knowledge entries about the dialog that holds it (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
         "poll_after_ms": {"type": "integer", "minimum": 0},
-        "resume": {"description": "A write job a dialog stopped after dispatch: the operation resolve command to run once the person has acted (DCLI-066).", "type": "string", "minLength": 1},
-        "title": {"description": "The title of the dialog that stopped the job, when known; untrusted.", "type": "string"},
-        "message": {"description": "A read job that failed: what went wrong.", "type": "string"}
+        "message": {"description": "When ok is false: the message of the error the call would have returned (DCLI-220).", "type": "string", "minLength": 1},
+        "details": {"description": "When ok is false: the details of the error the call would have returned, such as conflict, native_message, knowledge and next_action, without a receipt; a command to run again in them is the job's own first call (DCLI-220).", "$ref": "error.schema.json#/$defs/details"}
       },
       "allOf": [
         {
@@ -146,19 +145,21 @@
           "then": {"not": {"anyOf": [{"required": ["finished_at"]}, {"required": ["receipt"]}, {"required": ["ok"]}, {"required": ["code"]}]}}
         },
         {
+          "description": "A job that ended with ok false carries the error the call would have returned (DCLI-220).",
           "if": {"required": ["ok"], "properties": {"ok": {"const": false}}},
-          "then": {"required": ["code"]},
-          "else": {"not": {"required": ["code"]}}
+          "then": {"required": ["code", "message", "details"]},
+          "else": {"not": {"anyOf": [{"required": ["code"]}, {"required": ["message"]}, {"required": ["details"]}]}}
         },
         {
-          "description": "A blocked job, and a write job a dialog stopped after dispatch, say what the person must do (DCLI-066, DCLI-220).",
+          "description": "A job that ended needing a person says what the person must do and what to run then (DCLI-066).",
+          "if": {"required": ["code"], "properties": {"code": {"const": "E_HUMAN_REQUIRED"}}},
+          "then": {"properties": {"details": {"required": ["action", "resume"]}}}
+        },
+        {
+          "description": "A blocked job says what the person must do before it can go on (DCLI-066, DCLI-220).",
           "if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}},
           "then": {"required": ["action"]},
-          "else": {
-            "if": {"required": ["state", "code"], "properties": {"state": {"const": "unknown"}, "code": {"const": "E_HUMAN_REQUIRED"}}},
-            "then": {"required": ["action", "resume"]},
-            "else": {"not": {"anyOf": [{"required": ["action"]}, {"required": ["resume"]}, {"required": ["title"]}]}}
-          }
+          "else": {"not": {"anyOf": [{"required": ["action"]}, {"required": ["knowledge"]}]}}
         }
       ]
     },

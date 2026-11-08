@@ -900,15 +900,17 @@ class DialogStopsLongJob(unittest.TestCase):
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
             data = done.data
             self.assertEqual((data["state"], data["ok"], data["code"]), ("unknown", False, "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual(data["action"], "dismiss_dialog")
-            self.assertIn("operation resolve --id", data["resume"])  # never the write again
-            self.assertEqual(data.get("title"), "Routing options")
-            self.assertIn("$.data.title", done.envelope["meta"]["untrusted"])
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual(data["details"]["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", data["details"]["resume"])  # never the write again
+            self.assertIn("operation resolve --id", data["details"]["next_action"])
+            self.assertEqual(data["details"].get("title"), "Routing options")
+            self.assertIn("$.data.details.title", done.envelope["meta"]["untrusted"])
             unknown = case.run("operation", "list", "--state", "unknown")
             self.assertEqual(len(unknown.data["items"]), 1, unknown.stdout[:400])  # it stays locked until resolved
             listed = case.run("job", "list")
             self.assertEqual(listed.data["items"][0]["code"], "E_HUMAN_REQUIRED", listed.stdout[:600])
-            self.assertIn("$.data.items[*].title", listed.envelope["meta"]["untrusted"])
+            self.assertIn("$.data.items[*].details.title", listed.envelope["meta"]["untrusted"])
 
     def test_resolving_while_the_dialog_is_open_asks_for_the_person_again(self):
         with Case(subject()) as case:
@@ -934,7 +936,12 @@ class DialogStopsLongJob(unittest.TestCase):
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
             data = done.data
             self.assertEqual((data["state"], data["code"]), ("failed", "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual({"action", "resume", "title"} & set(data), set())  # nothing was sent: run the write again
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            # Nothing was sent: once the person is done, the write starts again from its first call.
+            resume = data["details"]["resume"]
+            self.assertIn("route run --session fake-1 --doc doc-1 --net GND", resume)
+            self.assertNotIn("job get", resume)
+            self.assertNotIn("--confirm", resume)
             self.assertEqual(case.run("operation", "list", "--state", "unknown").data["items"], [])
 
     def test_a_long_standard_command_a_dialog_stops_says_the_same(self):
@@ -948,8 +955,91 @@ class DialogStopsLongJob(unittest.TestCase):
             self.assertTrue(out.ok, out.stdout[:400])
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=long)
             self.assertEqual((done.data["state"], done.data["code"]), ("unknown", "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual(done.data["action"], "dismiss_dialog")
-            self.assertIn("operation resolve --id", done.data["resume"])
+            self.assertEqual(done.data["details"]["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", done.data["details"]["resume"])
+
+
+class FailedJobs(unittest.TestCase):
+    """A job that ends with ok false carries the error the call would have returned (DCLI-220)."""
+
+    def test_a_write_job_the_application_refuses_says_why_and_how_to_start_again(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error",
+                                        "error": {"code": "E_CONFLICT", "conflict": "unsaved_changes",
+                                                  "message": "Save board.fake first.", "native_message": "board.fake has unsaved changes"}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["ok"], data["code"]), ("failed", False, "E_CONFLICT"), done.stdout[:600])
+            self.assertEqual(data["message"], "Save board.fake first.")
+            details = data["details"]
+            self.assertEqual((details["conflict"], details["dispatch_state"]), ("unsaved_changes", "not_started"))
+            self.assertEqual(details["native_message"], "board.fake has unsaved changes")
+            self.assertNotIn("receipt", details)  # the job carries its own
+            self.assertIn("route run --session fake-1 --doc doc-1 --net GND", details["next_action"])
+            self.assertNotIn("job get", details["next_action"])
+            for path in ("$.data.message", "$.data.details.native_message", "$.data.details.next_action"):
+                self.assertIn(path, done.envelope["meta"]["untrusted"])
+            notes = data["receipt"]["notes"]
+            self.assertEqual([n for n in notes if n.startswith("The application said:")],
+                             ["The application said: board.fake has unsaved changes"])
+            listed = case.run("job", "list").data["items"][0]
+            self.assertEqual((listed["message"], listed["details"]["conflict"]), ("Save board.fake first.", "unsaved_changes"))
+
+    def test_a_long_confirmed_save_the_application_refuses_leads_back_to_its_first_call(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            case.control("fault", rule={"method": "save_doc", "action": "error",
+                                        "error": {"code": "E_CONFLICT", "conflict": "unsaved_changes",
+                                                  "message": "Save the model board.fake refers to first."}})
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["code"], data["details"]["conflict"]), ("failed", "E_CONFLICT", "unsaved_changes"),
+                             done.stdout[:600])
+            self.assertEqual(data["message"], "Save the model board.fake refers to first.")
+            step = data["details"]["next_action"]
+            self.assertIn("doc save --session fake-1 --doc doc-1`", step)
+            self.assertNotIn("--confirm", step)  # the job spent the token
+            self.assertNotIn("same command", step)
+
+    def test_a_job_an_older_runtime_recorded_still_says_what_to_do(self):
+        dialog = {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog", "title": "Routing options"}
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,
+                                        "error": dialog})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            path = case.state_dir / "operations" / f"{done.data['operation_id']}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            for key in ("message", "details", "again"):
+                record["_job"].pop(key, None)
+            record["_job"]["human"] = {"action": "dismiss_dialog", "title": "Routing options"}  # as 1.0.9 kept it
+            path.write_text(json.dumps(record), encoding="utf-8")
+            old = case.run("job", "get", "--job", out.data["result"]["job"]["id"]).data
+            self.assertEqual(schemas.errors(old, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((old["details"]["action"], old["details"]["title"]), ("dismiss_dialog", "Routing options"))
+            self.assertIn("operation resolve --id", old["details"]["resume"])
+
+    def test_a_failed_long_read_says_why_and_how_to_run_it_again(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "read", "command": "design check", "action": "error",
+                                        "error": {"code": "E_NOT_FOUND", "message": "No rule set named strict."}})
+            out = case.run("design", "check", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["code"], data["message"]), ("failed", "E_NOT_FOUND", "No rule set named strict."),
+                             done.stdout[:600])
+            self.assertIn("design check --session fake-1 --doc doc-1", data["details"]["next_action"])
+            self.assertNotIn("job get", data["details"]["next_action"])
 
 
 class ResolveStandardWrites(unittest.TestCase):
