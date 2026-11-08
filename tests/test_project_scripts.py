@@ -142,7 +142,7 @@ class ProjectTest(unittest.TestCase):
                  ("README_zh.md", "npm install -g @tool-driver/demo-cli", "npm i -g @tool-driver/demo-cli", "DREPO-054"),
                  ("AGENTS.md", "## Bare minimum to obey\n", "## Bare minimum to obey\n\nOr not.\n", "DREPO-012"),
                  ("SECURITY_zh.md", "## 自更新\n", "## 自更新\n\n改过。\n", "DREPO-013"),
-                 ("docs/E2E.md", "Only a person adds a target", "Anyone adds a target", "DREPO-017"),
+                 ("docs/E2E.md", "A target is added only by a person", "Anyone adds a target", "DREPO-017"),
                  ("docs/E2E_zh.md", "## 授权规则\n", "## 授权规则\n\n谁都可以加目标。\n", "DREPO-017")]
         for name, old, new, clause in cases:
             with self.subTest(name=name):
@@ -699,6 +699,82 @@ class ProjectTest(unittest.TestCase):
         problems = [p.message for p in self.problems() if p.clause == "DVER-030"]
         self.assertTrue(any("row normal failed" in m for m in problems), problems)
 
+    def test_run_matrix_clears_a_row_a_crash_gives_no_result_and_tampers_without_pausing(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        mismatch = next(r for r in data["rows"] if r["row"] == "read_back_mismatch")
+        mismatch.clear()
+        mismatch.update(row="read_back_mismatch", applies=True, arguments=data["rows"][0]["arguments"],
+                        expected={"exit": 1, "code": "E_VERIFY_FAILED"}, actual={"exit": 1, "code": "E_VERIFY_FAILED"},
+                        evidence="live:docs/evidence/earlier.json#read_back_mismatch")  # an earlier run passed
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        self.authorize(target.resolve().as_uri() + "/")
+        argv = [str(self.project), "--command", "part move", "--row", "read_back_mismatch", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0", "--tamper", "echo"]
+        given: list[dict[str, str]] = []
+
+        class Watcher:
+            def __init__(self, pause, root, env, args, notes):
+                given.append(env)
+
+            def start(self):
+                pass
+
+            def join(self, timeout=None):
+                pass
+
+        # The tool crashed: it exited 1 and printed no envelope.
+        crashed = mock.Mock(return_value=(1, b"Traceback (most recent call last):"))
+        with mock.patch.object(run_matrix, "_Watcher", Watcher), mock.patch.object(run_matrix, "_confirmed", crashed), \
+                mock.patch.dict(os.environ, {"DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK": "999"}):
+            self.assertEqual(run_matrix.main(argv), 1)
+        self.assertEqual(crashed.call_args.args[2]["DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK"], "120")  # the row's call waits
+        self.assertNotIn("DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK", given[0])  # a tamper never does
+        row = next(r for r in json.loads(matrix.read_text(encoding="utf-8"))["rows"] if r["row"] == "read_back_mismatch")
+        self.assertEqual({"actual", "evidence"} & set(row), set())  # not run now, and the matrix stays valid
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-move.json")).read_text(encoding="utf-8"))
+        self.assertEqual(record["runs"][0]["result"], "fail")
+        self.assertIn("no error code", record["runs"][0]["notes"])
+
+    def test_run_matrix_writes_the_scope_of_each_run_and_runs_no_scope_with_none(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        row = next(r for r in data["rows"] if r["row"] == "no_scope")
+        row.clear()
+        row.update(row="no_scope", applies=True, arguments=data["rows"][0]["arguments"], expected={"exit": 4, "code": "E_FORBIDDEN"})
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        granted = target.resolve().as_uri() + "/"
+        self.authorize(granted)
+        argv = [str(self.project), "--command", "part move", "--row", "normal,no_scope", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0"]
+        seen: list[tuple[str, dict | None]] = []
+
+        def confirmed(call, root, env, expected_code, notes):
+            path = Path(env["DEMO_CLI_SCOPE_FILE"])
+            seen.append((str(path), json.loads(path.read_text(encoding="utf-8")) if path.exists() else None))
+            return 4, b'{"ok": false, "error": {"code": "E_FORBIDDEN"}}'
+
+        mine = self.work / "my-scope.json"  # a scope file in the runner's environment is not used
+        with mock.patch.object(run_matrix, "_confirmed", side_effect=confirmed), \
+                mock.patch.dict(os.environ, {"DEMO_CLI_SCOPE_FILE": str(mine)}):
+            run_matrix.main(argv)
+        (live_path, live), (_, none) = seen  # the normal row, then the no_scope row
+        effects = [e["effect"] for e in json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))["effects"]]
+        self.assertEqual(live["targets"], [granted, "untitled:s1/"])  # new documents of the named instance only
+        self.assertEqual(live["effects"], [e for e in effects if e != "observe"])
+        self.assertTrue(live["dangerous"])
+        self.assertNotEqual(live_path, str(mine))
+        self.assertIsNone(none)  # no scope file at all
+        self.assertFalse(Path(live_path).exists())  # removed when the run ended
+
     def test_covered(self):
         base = self.work / "e2e"
         targets = [(base / "demo").resolve().as_uri() + "/", (base / "one.fake").resolve().as_uri(), "device:cnc-01"]
@@ -726,6 +802,23 @@ class RunMatrixTest(unittest.TestCase):
         path = Path(tempfile.mkdtemp(prefix="run-matrix-"))
         self.addCleanup(shutil.rmtree, path, True)
         return path
+
+    def test_targets_with_spaces_and_non_ascii_names_match_the_runtime_keys(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.targets import covers, file_key
+
+        contract = json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))
+        folder = self.tmp() / "工作 区"
+        folder.mkdir()
+        board = folder / "板.fake"
+        self.assertEqual(run_matrix.target_of("doc", str(board)), file_key(str(board.resolve())))
+        for listed in (file_key(str(folder.resolve())) + "/", folder.resolve().as_uri() + "/"):  # raw or percent-encoded
+            self.assertEqual(run_matrix.covered(run_matrix.target_of("doc", str(board)), [listed]), listed)
+            scope = json.loads(run_matrix.live_scope(self.tmp(), [listed], "s1", contract).read_text(encoding="utf-8"))
+            self.assertTrue(covers(scope["targets"][0], file_key(str(board.resolve()))), scope["targets"])
+            self.assertEqual(scope["targets"][1:], ["untitled:s1/"])  # only the instance the run names
+        scope = json.loads(run_matrix.live_scope(self.tmp(), [listed], None, contract).read_text(encoding="utf-8"))
+        self.assertFalse(any(t.startswith("untitled:") for t in scope["targets"]))
 
     def test_a_call_that_does_not_answer_ends_with_every_process_it_started(self):
         # The child starts a grandchild that holds the output pipe and outlives the child.
@@ -774,6 +867,17 @@ class RunMatrixTest(unittest.TestCase):
         self.assertEqual(written["busy"]["evidence"], "live:docs/evidence/b.json#busy")
         self.assertEqual(written["normal"]["evidence"], "live:docs/evidence/a.json#normal")
         self.assertFalse((root / "part-move.json.lock").exists())
+
+    def test_a_job_get_that_fails_ends_the_row(self):
+        contract = json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))
+        started = {"ok": True, "data": {"result": {"job": {"id": "job-1"}}}}
+        answers = [b'{"ok":false,"error":{"code":"E_BUSY","details":{"retry_after_ms":10}}}',
+                   b'{"ok":false,"error":{"code":"E_NOT_FOUND"}}']
+        notes: list[str] = []
+        with mock.patch.object(run_matrix, "_run", side_effect=[(7, answers[0]), (3, answers[1])]) as calls:
+            code, out = run_matrix._job_end(["tool"], self.tmp(), {}, started, contract, notes)
+        self.assertEqual((code, out["error"]["code"], calls.call_count), (3, "E_NOT_FOUND", 2))  # busy, asked again
+        self.assertIn("failed: E_NOT_FOUND", notes[-1])
 
     def test_runs_started_in_the_same_second_write_their_own_records(self):
         folder = self.tmp() / "evidence"

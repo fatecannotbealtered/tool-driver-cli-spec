@@ -25,10 +25,10 @@ Read: DCLI-240, DCLI-262, DCLI-270 to DCLI-281, DSEC-050 to DSEC-053.
 
 ## Installing for live runs
 
-`plugin install` is a two-step write with the `configure` effect, so it needs a scope the person wrote that allows `configure` (DSEC-050). It writes the state directory into the host's configuration (DCLI-271), so run it with the same `<PREFIX>_STATE_DIR` that the live runs use:
+`plugin install` is a two-step write with the `configure` effect, so it needs a scope that allows `configure` (DSEC-050): write your own, granting only targets listed under Authorized Targets (DSEC-011). It writes the state directory into the host's configuration (DCLI-271), so run it with the same `<PREFIX>_STATE_DIR` that the live runs use:
 
 1. `python -m <pkg> plugin install`, then the same with `--confirm <token>`.
-2. Ask the person to start the application. The tool never restarts or reloads a person's instance to load the host (DSEC-052).
+2. Start the application for the run, or ask the person to. Never restart or reload an instance a person started, to load the host (DSEC-052).
 3. Run `python -m <pkg> session list` and confirm that the instance shows `plugin_loaded` with the version on disk.
 
-After a change in `plugin/`, run `generate`, install again and ask the person to restart the application; until then, writes to that instance are refused with `restart_application` (DSEC-053).
+After a change in `plugin/`, run `generate`, install again and restart the instance you started, or ask the person to restart theirs; until then, writes to that instance are refused with `restart_application` (DSEC-053).

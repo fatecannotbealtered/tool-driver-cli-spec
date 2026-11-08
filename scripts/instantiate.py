@@ -118,6 +118,9 @@ def copy_template(args: argparse.Namespace, root: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")  # the console code page may lack a character of the output
     args = parse(argv)
     root = args.directory.resolve()
     if root.exists() and any(root.iterdir()):

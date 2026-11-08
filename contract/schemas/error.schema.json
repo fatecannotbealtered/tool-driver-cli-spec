@@ -91,10 +91,14 @@
           "type": "object",
           "minProperties": 1,
           "additionalProperties": false,
+          "description": "A scope file that grants just the write; for a write without targets, or a halt command, only the effects or targets it needs (DSEC-015).",
           "properties": {
+            "scope_id": {"$ref": "scope.schema.json#/properties/scope_id"},
             "effects": {"$ref": "scope.schema.json#/properties/effects"},
             "targets": {"$ref": "scope.schema.json#/properties/targets"},
-            "dangerous": {"$ref": "scope.schema.json#/properties/dangerous"}
+            "dangerous": {"$ref": "scope.schema.json#/properties/dangerous"},
+            "expires_at": {"$ref": "scope.schema.json#/properties/expires_at"},
+            "confirm": {"$ref": "scope.schema.json#/properties/confirm"}
           }
         }
       }

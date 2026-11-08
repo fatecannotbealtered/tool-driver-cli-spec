@@ -886,6 +886,10 @@ class Checker:
         self.readme_title()
         self.fixed_text()
         self.targets_list()
+        for target in authorized_targets(self.root):
+            why = unfit_target(target)
+            if why:
+                self.add("DVER-050", "docs/E2E.md", f"Authorized Targets lists {target}: {why}")
         self.changelog()
 
     def pair(self, english: str, chinese: str, en: str, zh: str) -> None:
@@ -1744,9 +1748,31 @@ def authorized_targets(root: Path) -> list[str]:
     return [m.group(1) for line in body if (m := re.match(r"^\s*[-*]\s+`([^`]+)`", line))]
 
 
+def raw_key(target: str) -> str:
+    """A file URL as the runtime writes target keys: the path as it is, not percent-encoded (DCLI-028)."""
+    return urllib.parse.unquote(target) if target.startswith("file:") else target
+
+
+def unfit_target(target: str) -> str | None:
+    """Why a target may not be listed under Authorized Targets, or None (DVER-050)."""
+    if target.startswith("device:"):
+        return None if len(target) > len("device:") else "a device target names the device: device:<id>"
+    if not target.startswith("file:///"):
+        return "a target is the file:/// URL of a file or folder, or device:<id>"
+
+    def plain(path: str) -> str:
+        path = path.replace("\\", "/").strip("/")
+        return path.casefold() if os.name == "nt" else path
+
+    path, home = plain(raw_key(target)[len("file:///"):]), plain(str(Path.home()))
+    if not path or re.fullmatch(r"[A-Za-z]:", path) or home == path or home.startswith(path + "/"):
+        return "it covers a whole drive or the home folder; list only folders made for testing"
+    return None
+
+
 def target_covered(target: str, authorized: str) -> bool:
     """A file URL inside an authorized folder, or the same target."""
-    a, b = target.rstrip("/"), authorized.rstrip("/")
+    a, b = raw_key(target).rstrip("/"), raw_key(authorized).rstrip("/")
     if os.name == "nt" and a.startswith("file:"):
         a, b = a.lower(), b.lower()
     return a == b or (authorized.endswith("/") and a.startswith(b + "/"))
@@ -1828,8 +1854,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fix", action="store_true", help="write the generated content first")
     parser.add_argument("--json", action="store_true", help="print the problems as JSON")
     args = parser.parse_args(argv)
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")  # the console code page may lack a character of the output
     root = args.project.resolve()
     if args.fix:
         for path in fix(gather(root)):

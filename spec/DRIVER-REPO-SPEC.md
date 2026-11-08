@@ -364,7 +364,7 @@ Check: 🤖 `check_project` checks the sections, regenerates the support matrix 
 | Section | Content |
 |---|---|
 | `Authorization Rules` | Fixed text: who adds a target to Authorized Targets, how a target is written, and who writes the scope files for live runs and for evaluations on the real application (DVER-050) |
-| `Authorized Targets` | The only list of the application instances, files, folders and devices allowed for live runs, one list item per target, and no other text (DVER-050) |
+| `Authorized Targets` | The only list of the files, folders and devices allowed for live runs, one list item per target, and no other text (DVER-050) |
 | `Procedure` | The machines, operating systems, application versions and modes used for live runs, and how to prepare and run the behavior matrices on the real application (DVER-030, DVER-031) |
 | `Evidence Records` | An index of the live records in `docs/evidence/` (DVER-042) |
 

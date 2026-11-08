@@ -128,7 +128,10 @@ class Scope(unittest.TestCase):
         self.assertIsNone(scope.missing(["change"], False, ["file:///D:/proj/b.pcb#/R1"]))
         missing = scope.missing(["change", "persist"], True, ["file:///D:/other/b.pcb"])
         self.assertEqual(missing["missing"], {"effects": ["persist"], "targets": ["file:///D:/other/b.pcb"], "dangerous": True})
-        self.assertEqual(missing["snippet"], {"effects": ["persist"], "targets": ["file:///D:/other/b.pcb"], "dangerous": True})
+        snippet = dict(missing["snippet"])  # a scope file that grants just this write (DSEC-015)
+        self.assertTrue(snippet.pop("expires_at").endswith("Z"))
+        self.assertEqual(snippet, {"scope_id": "grant", "effects": ["change", "persist"], "targets": ["file:///D:/other/b.pcb"],
+                                   "dangerous": True})
         # A halt command needs only its targets (DSEC-018).
         self.assertIsNone(scope.missing(["lifecycle"], False, ["file:///D:/proj/b.pcb"], halt=True))
         self.assertIsNotNone(scope.missing(["lifecycle"], False, ["device:x"], halt=True))
@@ -625,6 +628,71 @@ class FolderOutputs(unittest.TestCase):
         self.assertEqual(result.observed[file_key(str(folder / "top.gbr"))]["bytes"], 4)
         missing = verify_files({"files": [{"path": str(folder / "bottom.gbr")}]}, named)
         self.assertEqual(missing.mismatched, ["exists@" + file_key(str(folder / "bottom.gbr"))])
+
+
+class RenamedFilesAndLongResults(unittest.TestCase):
+    """A file the application writes under another name (DCLI-057), and what a result too long can ask for (DCLI-008)."""
+
+    def test_a_file_written_under_another_name_counts_for_the_given_path(self):
+        from _driver.writes import verify_files
+
+        tmp = Path(tempfile.mkdtemp(prefix="numbered-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
+        asked, written = tmp / "cover.prt", tmp / "cover.prt.2"
+        written.write_text("x", encoding="utf-8")
+        named = [{"target": file_key(str(asked)), "field": "exists"}]
+        self.assertEqual(verify_files({"files": [{"path": str(written)}]}, named).status, "failed")  # cover.prt is not there
+        result = verify_files({"files": [{"path": str(written), "requested_path": str(asked)}]}, named)
+        self.assertEqual(result.status, "passed", result.mismatched)
+        self.assertEqual(result.observed[file_key(str(written))]["bytes"], 1)
+        lost = tmp / "cover.prt.3"
+        missing = verify_files({"files": [{"path": str(lost), "requested_path": str(asked)}]}, named)
+        self.assertEqual(missing.mismatched, ["exists@" + file_key(str(lost))])
+        if os.name == "nt":  # the application may write the given path in another case or with other separators
+            other = str(asked).upper().replace("\\", "/")
+            self.assertEqual(verify_files({"files": [{"path": str(written), "requested_path": other}]}, named).status, "passed")
+        odd = verify_files({"files": [{"path": str(written), "requested_path": ["not", "a", "path"]}]}, named)
+        self.assertEqual(odd.status, "failed")  # an odd value counts for nothing and breaks nothing
+
+    def test_a_result_too_long_names_only_what_the_command_offers(self):
+        from _driver.tool import too_long_hint
+
+        tool = build()
+        job = too_long_hint("demo", tool.commands["job get"], {"id": "7", "operation_id": "op_1", "state": "completed"})
+        self.assertNotIn("--limit", job)
+        self.assertIn("--fields", job)
+        self.assertIn("demo operation get --id op_1 --output", job)
+        listing = too_long_hint("demo", tool.commands["job list"], {"items": []})
+        self.assertEqual(listing, "Ask for fewer fields with --fields or a smaller page with --limit.")
+        record = too_long_hint("demo", tool.commands["operation get"], {"operation_id": "op_1"})
+        self.assertEqual(record, "Ask for fewer fields with --fields or the full result in a file with --output.")
+        ran = too_long_hint("demo", tool.commands["part move"], {"operation_id": "op_2", "receipt": {}, "result": {}})
+        self.assertIn("ran as operation op_2; do not send it again", ran)  # the write is done: never twice
+        self.assertNotIn("--fields", ran)  # --fields does not apply to writes
+        self.assertIn("fewer objects", too_long_hint("demo", tool.commands["part move"], {"preview": {}}))  # a dry run
+        batch = too_long_hint("demo", tool.commands["part move"], {"operation_id": "op_3", "items": [], "summary": {}})
+        self.assertIn("demo operation list --batch op_3", batch)
+        self.assertNotIn("--dry-run", too_long_hint("demo", tool.commands["doc save-as"], {"preview": {}}))  # never drop it
+        changes = [{"target": f"file:///D:/b.fake#/R{i}", "field": "x_mm", "before": 1, "after": "x" * 200} for i in range(60)]
+        env = Envelopes(tool.contract).success(Result({"preview": {"action": "Move.", "changes": changes}}), [], "unused")
+        self.assertTrue(env["data"]["preview"]["changes_truncated"])  # a dry run's preview is shortened first
+        self.assertLess(len(env["data"]["preview"]["changes"]), 60)
+        with self.assertRaises(DriverError) as caught:
+            Envelopes(tool.contract).success(Result({"text": "x" * 9000}), [], listing)
+        self.assertEqual(caught.exception.code, "E_USAGE")
+        self.assertEqual(caught.exception.details["next_action"], listing)
+
+    def test_a_listed_target_may_not_cover_a_drive_or_the_home_folder(self):
+        sys.path.insert(0, str(REPO / "scripts"))
+        import check_project
+
+        home = Path.home().resolve()
+        self.assertIsNotNone(check_project.unfit_target(file_key(str(home)) + "/"))
+        self.assertIsNotNone(check_project.unfit_target(file_key(str(home.parent)) + "/"))
+        self.assertIsNotNone(check_project.unfit_target(file_key(home.anchor) if os.name == "nt" else "file:///"))
+        self.assertIsNotNone(check_project.unfit_target("untitled:"))
+        self.assertIsNone(check_project.unfit_target(file_key(str(home / "e2e" / "demo")) + "/"))
+        self.assertIsNone(check_project.unfit_target("device:cnc-01"))
 
 
 class UpdateNotice(unittest.TestCase):

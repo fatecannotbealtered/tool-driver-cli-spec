@@ -402,7 +402,8 @@
         "properties": {
           "path": {"type": "string", "minLength": 1},
           "bytes": {"type": "integer", "minimum": 0},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "requested_path": {"description": "The path the call gave, when the application wrote this file under another name, such as a numbered version; the file counts for that path (DCLI-057).", "type": "string", "minLength": 1}
         }
       }
     }
