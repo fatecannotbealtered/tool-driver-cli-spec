@@ -314,6 +314,19 @@ class RunTest(unittest.TestCase):
         self.assertNotIn("read_r1", err.getvalue())
         self.assertEqual(asked, [], "the Agent was started")
 
+    def test_a_question_only_for_the_real_application_checks_its_right_answer_there_first(self):
+        questions = self.load(real_only=QUESTION.replace("FAKE_HOST =", "FAKE_HOST = None\nIGNORED ="), read_r1=QUESTION)
+        ran = []
+
+        def attempt(project, facts, question, agent, fake_host, root, keep):
+            ran.append((question.id, fake_host, root))
+            return (["the answer does not give 10k"] if question.id == "real_only" else []), None, None
+
+        with mock.patch.object(run_eval, "attempt", side_effect=attempt):
+            broken = run_eval.broken_questions(SAMPLE, self.facts, questions, False, self.tmp)
+        self.assertEqual(ran, [("read_r1", True, None), ("real_only", False, self.tmp)])
+        self.assertEqual(broken, ["real_only (the answer does not give 10k)"])
+
     def test_a_broken_scripted_agent_fails_the_check(self):
         broken = QUESTION.replace('agent.say("R1 has the value 4k7.")', 'raise KeyError("confirm_token")')
         questions = self.load(broken=broken)
@@ -382,6 +395,30 @@ class RunTest(unittest.TestCase):
         folder.mkdir(parents=True)
         first.write_text("{}", encoding="utf-8")
         self.assertNotEqual(run_eval.default_report(self.tmp), first)
+
+
+class ReportWords(unittest.TestCase):
+    """The worked examples judge a report by meaning: read-back agreement says verified too."""
+
+    def test_verified_in_the_agent_s_own_words(self):
+        sys.path.insert(0, str(ROOT / "conformance" / "eval"))
+        from _report import says_verified
+
+        for text in ["- **Verified:** Yes, read-back matched.", "Each step's read-back matched the requested values.",
+                     "Read-back confirmed all three changes.", "Each change was checked against the board after it ran.",
+                     "I read back the values and they match.", "已验证：读回一致。", "读回的数值与要求相符。",
+                     "The move is verified by read-back. Not saved: you have not confirmed a save.",
+                     "Verified. The DRC has not been checked.", "- Read-back matched\n- Saved: no, I did not save it",
+                     "| Verified | Yes, read-back matched |", "Verified with no differences.", "已验证，没有问题。"]:
+            self.assertTrue(says_verified(text), text)
+        for text in ["Done, R1 is at x 12.5 mm.", "Verified: no, the change waits for a save.", "The change is not verified yet.",
+                     "Read-back did not match: R1 is at 12.4 mm.", "The value could not be read back.", "未验证，等保存后再验证。",
+                     "读回不一致。", "It has not been checked.", "The read-back showed a mismatch on R5.",
+                     "The read-back shows the old value.", "Read-back matched neither the old nor the new value.",
+                     "Read-back: no match.", "The read-back was not a match.", "The read-back isn't confirmed.", "I could not verify it.",
+                     "Verification failed.", "验证失败。", "未能验证。", "无法核实。", "| Verified | No — waits for the save |",
+                     "Verification is deferred until the save."]:
+            self.assertFalse(says_verified(text), text)
 
 
 if __name__ == "__main__":

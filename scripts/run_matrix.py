@@ -12,8 +12,9 @@ one live record to ``docs/evidence/``. Each row then gets its actual result and 
 evidence reference. A row whose situation needs preparing, such as an open dialog, is run on
 its own with ``--row`` after the person has prepared it.
 
-``--kind`` names the kind of the document a run uses; a command that lists ``doc_kinds`` needs
-it, and its ``normal`` row must pass on every kind (DVER-030). The ``read_back_mismatch`` row
+``--kind`` names the kind of the document a run uses; a command that lists several ``doc_kinds``
+needs it, one that lists a single kind uses that one, and its ``normal`` row must pass on every
+kind (DVER-030). The ``read_back_mismatch`` row
 makes the tool wait before its read-back for up to ``--pause`` seconds: during the wait a
 person changes what was just written in the application, or ``--tamper`` runs a command that
 does, with ``TOOL_DRIVER_PAUSE_FILE`` naming the tool's ``pause.json`` and ``{python}`` in the
@@ -154,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
     if command is None:
         raise SystemExit(f"{args.command!r} is not a command of {facts.tool}")
     kinds = command.get("doc_kinds") or []
+    if len(kinds) == 1 and args.kind is None:
+        args.kind = kinds[0]  # the only kind needs no naming
     if kinds and args.kind not in kinds:
         raise SystemExit(f"`{args.command}` works on {', '.join(kinds)}; name the kind of the document with --kind")
     if args.kind and not kinds:

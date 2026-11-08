@@ -1502,7 +1502,7 @@ class Checker:
             if not problems and not data.get("simulated"):
                 for target in data["targets"]:
                     if not any(target_covered(target, t) for t in authorized):
-                        self.add("DVER-050", rel, f"target {target} is not listed under Authorized Targets in docs/E2E.md")
+                        self.add("DVER-050", rel, f"target {target} is not listed under Authorized Targets in docs/E2E.md, nor inside a listed folder")
         if self.facts.reference is None:
             return
         for command in self.facts.commands:
