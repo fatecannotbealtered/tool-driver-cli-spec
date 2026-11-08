@@ -4,6 +4,11 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Fixed
+
+- A long write job that a dialog stopped after dispatch ended with `E_OUTCOME_UNKNOWN` and lost the dialog, so the Agent was not told that a person had to act and the `dialog` row of a long command could not pass. The job now ends as the call would: `unknown`, with `code` `E_HUMAN_REQUIRED`, `action`, the dialog's `title`, `knowledge` and `resume`, the `operation resolve` command (DCLI-066, DCLI-220). `job list` marks the title and the receipt's text as untrusted, and driver test D05 follows a long command to its end. After syncing, copy the entry Skill's new sentences on jobs that end with `E_HUMAN_REQUIRED` from the template.
+- `operation resolve` run while the dialog was still open answered `E_BUSY` and suggested recording the outcome by hand. It now returns `E_HUMAN_REQUIRED` with the dialog's `action` and `title`, and `resume` is the same `operation resolve` command (DCLI-066).
+
 ## [1.0.7] - 2026-11-08
 
 Changes from the live runs of the Creo and Xpedition tools on 1.0.6, and authorization given once. After syncing, copy the template's new fixed texts: the Authorization Rules of `docs/E2E.md`, item 6 of `AGENTS.md`, the `scope.json` row of the State Directory table in `SECURITY.md`, and the two scope sentences of the entry Skill; the Procedure steps of `docs/E2E.md` and the Authorization section of `SECURITY.md` changed too. Delete the narrow scope files kept for `no_scope` rows, and any `actual` that `run_matrix` wrote for a crash. Check that the scope files for real work cover the documents that `session open --doc` opens and the documents open in an instance that `session close` closes. A tool with a host component runs `python scripts/spec.py generate`, which writes host protocol 1.3.0 into its manifest. An Authorized Targets entry that covers a whole drive or the home folder is now refused; replace it with the folders made for testing.

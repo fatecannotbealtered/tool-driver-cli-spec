@@ -157,7 +157,8 @@ def finish(case: Case, out: Outcome) -> Outcome:
         envelope = {"ok": True, "data": {"operation_id": data.get("operation_id"), "receipt": data.get("receipt"),
                                          "result": data.get("result")}}
     else:
-        envelope = {"ok": False, "error": {"code": data.get("code") or "E_UNKNOWN", "details": {"receipt": data.get("receipt")}}}
+        details = {"receipt": data.get("receipt"), **{k: data[k] for k in ("action", "resume", "title", "knowledge") if k in data}}
+        envelope = {"ok": False, "error": {"code": data.get("code") or "E_UNKNOWN", "details": details}}
     return Outcome(done.args, done.exit, done.stdout, done.stderr, done.seconds, envelope)
 
 
