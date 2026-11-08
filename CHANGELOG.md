@@ -4,7 +4,9 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
-After syncing, copy the template's new fixed texts: the Authorization Rules of `docs/E2E.md`, item 6 of `AGENTS.md`, the `scope.json` row of the State Directory table in `SECURITY.md`, and the two scope sentences of the entry Skill; the Procedure steps of `docs/E2E.md` and the Authorization section of `SECURITY.md` changed too. Delete the narrow scope files kept for `no_scope` rows, and any `actual` that `run_matrix` wrote for a crash. Check that the scope files for real work cover the documents that `session open --doc` opens and the documents open in an instance that `session close` closes. A tool with a host component runs `python scripts/spec.py generate`, which writes host protocol 1.3.0 into its manifest. An Authorized Targets entry that covers a whole drive or the home folder is now refused; replace it with the folders made for testing.
+## [1.0.7] - 2026-11-08
+
+Changes from the live runs of the Creo and Xpedition tools on 1.0.6, and authorization given once. After syncing, copy the template's new fixed texts: the Authorization Rules of `docs/E2E.md`, item 6 of `AGENTS.md`, the `scope.json` row of the State Directory table in `SECURITY.md`, and the two scope sentences of the entry Skill; the Procedure steps of `docs/E2E.md` and the Authorization section of `SECURITY.md` changed too. Delete the narrow scope files kept for `no_scope` rows, and any `actual` that `run_matrix` wrote for a crash. Check that the scope files for real work cover the documents that `session open --doc` opens and the documents open in an instance that `session close` closes. A tool with a host component runs `python scripts/spec.py generate`, which writes host protocol 1.3.0 into its manifest. An Authorized Targets entry that covers a whole drive or the home folder is now refused; replace it with the folders made for testing.
 
 ### Changed
 

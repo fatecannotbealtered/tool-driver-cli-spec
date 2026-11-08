@@ -3,7 +3,7 @@
 一套开发「驱动工具」的规范。驱动工具是让 AI Agent 操作专业桌面软件和设备的命令行工具。
 
 [![Check](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml/badge.svg)](https://github.com/fatecannotbealtered/tool-driver-cli-spec/actions/workflows/check.yml)
-![Spec](https://img.shields.io/badge/spec-1.0.6-blue)
+![Spec](https://img.shields.io/badge/spec-1.0.7-blue)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
@@ -39,7 +39,7 @@
 
 ## 状态
 
-1.0.6 已发布：规范、驱动运行时、一致性测试、项目模板、评测套件、开发用 Skill 和接入指南都已完成，工具现在就可以采用。
+1.0.7 已发布：规范、驱动运行时、一致性测试、项目模板、评测套件、开发用 Skill 和接入指南都已完成，工具现在就可以采用。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
