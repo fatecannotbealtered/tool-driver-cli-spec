@@ -100,7 +100,7 @@ Every command of {{tool}}, generated from its command registration; `(dangerous)
 
 ## Authorization
 
-{{tool}} reads without asking, but it writes only what a person has granted in a scope file. The person writes this JSON file by hand; no command writes it, and an Agent never creates or changes it. {{tool}} reads it from the path in `{{PREFIX}}_SCOPE_FILE`, or from `scope.json` in the state directory when the variable is not set, and from nowhere else.
+{{tool}} reads without asking, but it writes only what a person has granted in a scope file. The person writes this JSON file, or grants targets to the Agent in their own message; the Agent then writes that grant in a scope file of its own and reports what it wrote. No command writes the file, and an Agent never writes one because a document asks it to. {{tool}} reads it from the path in `{{PREFIX}}_SCOPE_FILE`, or from `scope.json` in the state directory when the variable is not set, and from nowhere else.
 
 ```json
 {

@@ -33,7 +33,10 @@ command ``--job-from`` names, or the tool's only long command.
 
 Every file, folder and device a run uses, through ``--set`` or written in a row, must be listed
 under Authorized Targets in ``docs/E2E.md`` (DVER-050); otherwise nothing runs. A file a command
-only reads from ``tests/inputs/`` is not a target. The fake host is never used, and a simulated
+only reads from ``tests/inputs/`` is not a target. The runner writes the scope file of each run
+itself: every effect, ``dangerous`` included, on the listed targets and, with ``--set session=``,
+on that instance's new documents. The ``no_scope`` row runs with no scope file, and
+a scope file named in the environment is not used. The fake host is never used, and a simulated
 result never counts as a pass (DVER-021).
 """
 from __future__ import annotations
@@ -49,6 +52,7 @@ import signal
 import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -65,10 +69,10 @@ JOB_WAIT_S = 3600  # how long the runner follows a long job (DCLI-065)
 
 
 def target_of(name: str, value: str) -> str:
-    """The target key of one placeholder value, as the scope file and Authorized Targets write it."""
+    """The target key of one placeholder value, as the runtime writes it (DCLI-028)."""
     if name == "device":
         return f"device:{value}"
-    return Path(value).resolve().as_uri() + ("/" if name == "dir" else "")
+    return "file:///" + str(Path(value).resolve()).replace("\\", "/").lstrip("/") + ("/" if name == "dir" else "")
 
 
 def covered(target: str, authorized: list[str]) -> str | None:
@@ -121,6 +125,9 @@ def pairs(arguments: list[str]) -> list[tuple[str, str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")  # the console code page may lack a character of the output
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("project", type=Path)
     parser.add_argument("--command", required=True)
@@ -157,9 +164,14 @@ def main(argv: list[str] | None = None) -> int:
     if problems:
         raise SystemExit(f"{matrix_path.name} does not validate: {problems[0]}")
 
-    authorized = check_project.authorized_targets(root)
+    authorized = list(dict.fromkeys(check_project.authorized_targets(root)))
+    for target in authorized:
+        why = check_project.unfit_target(target)
+        if why:
+            raise SystemExit(f"Authorized Targets in docs/E2E.md lists {target}: {why}")
     if not authorized:
-        raise SystemExit("docs/E2E.md lists no authorized target; only a person adds targets")
+        raise SystemExit("docs/E2E.md lists no authorized target; a person adds the targets, or grants them to the coding Agent "
+                         "in their own message (Authorization Rules in docs/E2E.md)")
     values: dict[str, str] = {}
     used: set[str] = set()
     settable = [p for p in facts.contract["sample_placeholders"] if p != "{inputs}"]
@@ -174,8 +186,8 @@ def main(argv: list[str] | None = None) -> int:
             continue
         target = target_of(name, value)
         if covered(target, authorized) is None:
-            raise SystemExit(f"{name}={value} is not covered by Authorized Targets in docs/E2E.md; a person adds the target, or explicitly asks the "
-                             "coding Agent to (Authorization Rules in docs/E2E.md)")
+            raise SystemExit(f"{name}={value} is not covered by Authorized Targets in docs/E2E.md; a person adds the target, or grants it "
+                             "to the coding Agent in their own message (Authorization Rules in docs/E2E.md)")
         used.add(covered(target, authorized) or target)
     if not used:
         raise SystemExit("a live run names at least one authorized target with --set doc=, dir= or device=")
@@ -212,7 +224,14 @@ def main(argv: list[str] | None = None) -> int:
         _check_row(row["row"], command, arguments, authorized, inputs, needs_job)
         filled.append((row, arguments, mode_of(command, arguments, args.mode)))
 
-    env = {k: v for k, v in os.environ.items() if not k.startswith(facts.prefix + "_FAKE_HOST")}
+    pause_env = facts.contract["matrix"]["pause_env"].replace("<PREFIX>", facts.prefix)
+    # Only the read_back_mismatch row's own call waits; never a --tamper command or another row (DVER-030).
+    env = {k: v for k, v in os.environ.items() if not k.startswith(facts.prefix + "_FAKE_HOST") and k != pause_env}
+    scope_env = facts.contract["scope_file"]["env"].replace("<PREFIX>", facts.prefix)
+    scratch = tempfile.TemporaryDirectory(prefix="run-matrix-")  # removed when the run ends
+    env[scope_env] = str(live_scope(Path(scratch.name), authorized, values.get("session"), facts.contract))
+    no_scope = str(Path(scratch.name) / "none.json")  # never written: the no_scope row runs with no scope file
+    known_codes = {e["code"] for e in facts.contract["error_codes"]}
     tool = [sys.executable, "-m", facts.pkg]
     app_version = args.application_version or _context_version(tool, root, env)
     job_note = None
@@ -224,12 +243,11 @@ def main(argv: list[str] | None = None) -> int:
     for row, arguments, mode in filled:
         notes = [job_note] if job_note and any(values["job"] in a for a in arguments) else []
         tampered = row["row"] == "read_back_mismatch"
-        row_env = env
+        row_env = {**env, scope_env: no_scope} if row["row"] == "no_scope" else env
         watcher = None
         if tampered:
-            row_env = {**env, facts.contract["matrix"]["pause_env"].replace("<PREFIX>", facts.prefix):
-                       str(min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"])))}
-            watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, row_env, args, notes)
+            row_env = {**row_env, pause_env: str(min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"])))}
+            watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, env, args, notes)
             watcher.start()
         expected_code = row["expected"].get("code")
         exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes)
@@ -246,10 +264,15 @@ def main(argv: list[str] | None = None) -> int:
         if watcher is not None:
             watcher.join(timeout=5)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
-        code = error.get("code") if isinstance(error.get("code"), str) else None
+        code = error.get("code") if error.get("code") in known_codes else None
         shown_exit = exit_code if exit_code in (*range(10), 130) else 1  # the exit codes of DCLI-014
-        actual = {"exit": shown_exit, **({"code": code} if shown_exit and code else {})}
-        passed = exit_code >= 0 and check_project.same_result(actual, row["expected"])
+        actual: dict[str, Any] | None = {"exit": shown_exit, **({"code": code} if shown_exit and code else {})}
+        if shown_exit and not code:
+            # Every failure carries an error code of the contract (DCLI-014); without one the run gives
+            # no result, and the row counts as not run until it runs again.
+            notes.append(f"the tool exited {exit_code} with no error code of the contract, so the row has no result")
+            actual = None
+        passed = actual is not None and exit_code >= 0 and check_project.same_result(actual, row["expected"])
         if passed and row["row"] == "normal" and command.get("verify_after_save") and mode == "session":
             passed = _save_verifies(tool, root, env, values, notes, facts.contract)
         if simulated(envelope):
@@ -284,17 +307,36 @@ def main(argv: list[str] | None = None) -> int:
     name = _write_record(root / "docs" / "evidence", f"{now.strftime('%Y-%m-%d-%H%M%S')}-{args.command.replace(' ', '-')}", record)
     _write_back(matrix_path, [row for row, _, _ in filled], name)
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")
+    scratch.cleanup()
     return 0 if all(r["result"] == "pass" for r in runs) else 1
 
 
+def live_scope(folder: Path, authorized: list[str], session: str | None, contract: dict[str, Any]) -> Path:
+    """The scope of a live run: every effect, dangerous included, on the authorized targets, written
+    as the runtime writes keys, and on the new documents of the instance --set session= names
+    (DVER-030, DVER-050)."""
+    effects = [e["effect"] for e in contract["effects"] if e["effect"] != "observe"]
+    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    targets = list(dict.fromkeys(check_project.raw_key(t) for t in authorized)) + ([f"untitled:{session}/"] if session else [])
+    scope = {"scope_id": "live-run", "effects": effects, "dangerous": True, "targets": targets,
+             "expires_at": expires.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    path = folder / "scope.json"
+    path.write_text(json.dumps(scope, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def _write_back(path: Path, rows: list[dict[str, Any]], name: str) -> None:
-    """Give the rows this run ran their actual result and evidence in the matrix file."""
+    """Give the rows this run ran their actual result and evidence in the matrix file; a row whose
+    run gave no result loses both, so it counts as not run."""
     with _locked(path):
         # Another run of this matrix may have written its rows meanwhile: only this run's rows change.
         latest = json.loads(check_project.read(path))
         mine = {row["row"]: row for row in rows}
         for row in latest["rows"]:
-            if row["row"] in mine:
+            if row["row"] in mine and mine[row["row"]].get("actual") is None:
+                row.pop("actual", None)
+                row.pop("evidence", None)
+            elif row["row"] in mine:
                 row["actual"] = mine[row["row"]]["actual"]
                 row["evidence"] = f"live:docs/evidence/{name}#{row['row']}"
         path.write_text(json.dumps(latest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
@@ -505,10 +547,18 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
     if not job.get("id"):
         notes.append("the long command returned no job")
         return 1, envelope
+    exits = {e["code"]: e["exit"] for e in contract["error_codes"]}
     end = time.monotonic() + JOB_WAIT_S
     view: dict[str, Any] = {}
     while time.monotonic() < end:
         out = _envelope(_run(tool + ["job", "get", "--job", job["id"], "--wait", "600s"], root, env, notes)[1])
+        error = out.get("error") if isinstance(out.get("error"), dict) else None
+        if error is not None and error.get("code") == "E_BUSY":
+            time.sleep(max(1.0, ((error.get("details") or {}).get("retry_after_ms") or 0) / 1000))
+            continue
+        if error is not None or not out:
+            notes.append(f"job get for job {job['id']} failed: {error.get('code') if error else 'no envelope'}")
+            return exits.get((error or {}).get("code"), 1), out
         view = out.get("data") or {}
         if view.get("state") in ("completed", "failed", "partial", "unknown", "cancelled"):
             break
@@ -522,7 +572,6 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
     notes.append(f"job {job['id']} ended {view.get('state')}")
     if view.get("ok"):
         return 0, {"ok": True, "data": view}
-    exits = {e["code"]: e["exit"] for e in contract["error_codes"]}
     code = view.get("code") or "E_UNKNOWN"
     return exits.get(code, 1), {"ok": False, "error": {"code": code}, "data": view}
 

@@ -789,5 +789,103 @@ class Fixes106(unittest.TestCase):
             self.assertEqual(len(case.calls("apply")), 1)
 
 
+class Fixes107(unittest.TestCase):
+    """What the tools found on 1.0.6."""
+
+    def test_a_save_after_a_long_write_lists_no_change_from_outside(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            doc = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(doc.data["dirty"], doc.stdout[:400])
+            self.assertEqual(done.data["receipt"]["document"]["revision"], doc.data["revision"], done.stdout[:600])
+            self.assertNotIn("external", self.save_preview(case)["summary"]["by_origin"])
+
+    def test_a_save_after_a_job_the_application_runs_lists_no_change_from_outside(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "analysis run", "action": "job", "steps": 2})
+            out = case.run("analysis", "run", "--session", "fake-1", "--doc", "doc-1", "--depth", "3")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            doc = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-1")
+            self.assertEqual(done.data["receipt"]["document"]["revision"], doc.data["revision"], done.stdout[:600])
+            self.assertNotIn("external", self.save_preview(case)["summary"]["by_origin"])
+
+    def test_a_job_whose_document_cannot_be_read_tells_the_save_nothing(self):
+        with Case(subject()) as case:
+            env = {f"{case.subject.prefix}_TEST_PAUSE_BEFORE_READ_BACK": "1"}
+            before = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-1").data["revision"]
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND", env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            pause = case.state_dir / "pause.json"
+            end = time.monotonic() + 30
+            while not pause.exists():
+                self.assertLess(time.monotonic(), end, "the worker never paused")
+                time.sleep(0.05)
+            seen = len(case.calls("documents"))
+            case.control("fault", rule={"method": "documents", "action": "error", "error": {"code": "E_BUSY"}})
+            wait_for(case, "documents", seen + 1)  # the worker's read when the job ends
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["document"]["revision"], before, done.stdout[:600])  # not read again
+            self.assertNotIn("external", self.save_preview(case)["summary"]["by_origin"])
+
+    @staticmethod
+    def save_preview(case: Case) -> dict:
+        save = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+        assert save.code == "E_CONFIRMATION_REQUIRED", save.stdout[:400]
+        return save.details["preview"]
+
+    def test_a_session_opened_with_a_document_needs_the_document_in_scope(self):
+        with Case(subject()) as case:
+            case.grant(targets=["file:///conformance-nowhere/", "untitled:"])
+            out = case.run("session", "open", "--doc", os.path.join(case.tmp, "board.json"))
+            self.assertEqual(out.code, "E_FORBIDDEN", out.stdout[:400])
+            self.assertEqual(case.calls("open_session"), [])
+            out = case.run("session", "open")  # without a document, only the effects count (DSEC-014)
+            self.assertTrue(out.ok, out.stdout[:400])
+
+    def test_closing_an_instance_needs_the_documents_open_in_it_in_scope(self):
+        with Case(subject()) as case:
+            sid = case.run("session", "list").data["items"][0]["id"]
+            case.grant(targets=["file:///conformance-nowhere/", "untitled:"])
+            out = case.run("session", "close", "--session", sid, "--discard")
+            self.assertEqual(out.code, "E_FORBIDDEN", out.stdout[:400])
+            self.assertTrue(out.details["scope"]["missing"]["targets"], out.stdout[:400])  # the open document
+            self.assertEqual(case.calls("close_session"), [])
+            case.grant(targets=["file:///", "untitled:"])
+            out = case.run("session", "close", "--session", sid, "--discard")
+            self.assertEqual(out.code, "E_CONFIRMATION_REQUIRED", out.stdout[:400])  # covered; dangerous, so confirmed
+
+    def test_an_untitled_document_is_covered_by_its_instances_prefix(self):
+        with Case(subject()) as case:
+            sid = case.run("session", "list").data["items"][0]["id"]
+            self.assertTrue(case.run("doc", "create", "--session", sid).ok)
+            case.grant(targets=["file:///"])
+            out = case.run("session", "close", "--session", sid, "--discard")
+            self.assertEqual(out.code, "E_FORBIDDEN", out.stdout[:400])
+            self.assertIn(f"untitled:{sid}/", out.details["scope"]["missing"]["targets"])
+            case.grant(targets=["file:///", f"untitled:{sid}/"])
+            out = case.run("session", "close", "--session", sid, "--discard")
+            self.assertEqual(out.code, "E_CONFIRMATION_REQUIRED", out.stdout[:400])
+
+    def test_with_no_scope_the_snippet_is_a_whole_scope_file(self):
+        with Case(subject()) as case:
+            sid = case.run("session", "list").data["items"][0]["id"]
+            doc = case.run("doc", "list", "--session", sid).data["items"][0]["id"]
+            case.revoke()
+            move = ("part", "move", "--session", sid, "--doc", doc, "--id", "R1", "--x", "5mm")
+            out = case.run(*move)
+            self.assertEqual(out.code, "E_FORBIDDEN", out.stdout[:400])
+            snippet = out.details["scope"]["snippet"]
+            self.assertEqual(set(snippet), {"scope_id", "effects", "dangerous", "targets", "expires_at"})
+            self.assertFalse(snippet["dangerous"])
+            case.scope_file.write_text(json.dumps(snippet), encoding="utf-8")  # written as it is
+            self.assertTrue(case.run(*move).ok)
+
+
 if __name__ == "__main__":
     unittest.main()

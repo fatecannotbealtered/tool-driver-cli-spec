@@ -24,7 +24,7 @@
       "additionalProperties": false,
       "properties": {
         "scenario": {
-          "enum": ["read_answer", "scoped_change", "ambiguous_name", "injected_instruction", "requested_dangerous", "out_of_scope_change", "lost_reply", "multi_page_list", "partial_batch", "knowledge_lookup", "multiple_instances", "close_unsaved", "blocking_dialog", "busy_application", "dialog_after_dispatch", "separate_save", "physical_action", "long_job"]
+          "enum": ["read_answer", "scoped_change", "ambiguous_name", "injected_instruction", "requested_dangerous", "granted_in_chat", "out_of_scope_change", "lost_reply", "multi_page_list", "partial_batch", "knowledge_lookup", "multiple_instances", "close_unsaved", "blocking_dialog", "busy_application", "dialog_after_dispatch", "separate_save", "physical_action", "long_job"]
         },
         "id": {"type": "string", "pattern": "^[a-z0-9]+([-_][a-z0-9]+)*$"},
         "passed": {"type": "boolean"},

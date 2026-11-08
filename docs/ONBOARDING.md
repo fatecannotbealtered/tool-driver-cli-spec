@@ -56,36 +56,23 @@ Each release of tool-driver-cli-spec on GitHub Releases holds the development Sk
 | 3 Generate the project | Generates the project from the template and checks it | Decide the tool name, the npm package name under a scope you own, the GitHub repository and the author |
 | 4 Register commands | Registers the domain commands, each traced to the survey | Review the command list: the names, and what each one may change, which sets how it is confirmed |
 | 5 Implement the adapter | Writes the code that talks to the application | Nothing, unless asked |
-| 6 Test | Runs the conformance suites against the fake host, then the behavior matrices on the real application | Authorize targets and write the scope file for them |
-| 7 Write Skills and knowledge | Writes the Skills, the knowledge entries and the evaluation questions, and runs the evaluation | Authorize a folder for the evaluation, and review the Skills |
+| 6 Test | Runs the conformance suites against the fake host, then the behavior matrices on the real application | List a work folder under Authorized Targets, once |
+| 7 Write Skills and knowledge | Writes the Skills, the knowledge entries and the evaluation questions, and runs the evaluation | Review the Skills |
 | 8 Publish | Builds and packs the packages and runs the delivery test on this machine with `scripts/smoke.py`; prepares the release | Approve the merge and the release, and push the tag |
 
 ## Authorizing Targets
 
-Tests on the real application make real changes. They use only the targets you list.
+Tests on the real application make real changes. They use only the targets you list, and you list them once.
 
-- Prepare targets made for testing: a copy of a project, or a device set up for testing. Never a production project or machine.
-- List each target under Authorized Targets in the tool's `docs/E2E.md`, as one list item: the target in backticks, written as a `file://` URL of a file or folder or as `device:<id>`, then a colon and a description. That section is the only list. The Agent adds to it only when you ask it to in your own message, once you agree to the target it shows. For example:
+- Pick a work folder for the tool and keep in it only what is made for testing, such as copies of projects; list a device set up for testing the same way. Never a production project or machine.
+- List it under Authorized Targets in the tool's `docs/E2E.md`, as one list item: the target in backticks, written as a `file://` URL of a file or folder or as `device:<id>`, then a colon and a description. That section is the only list. The Agent adds a target only when your own message grants it, and tells you the line it added. For example:
 
   ```markdown
-  - `file:///D:/e2e/demo-board/`: a copy of the demo board, made for live runs
+  - `file:///D:/e2e/demo-cli/`: the work folder for live runs and evaluations
   ```
 
-- Instances of the application are not listed, because they have no lasting ID. Start an instance yourself for the run, and open in it only files from the list.
-- Write the scope file yourself, or ask your Agent explicitly to write it: it shows you the content and writes it once you agree. The tool, not the Agent, reads it: from the path in the environment variable `<PREFIX>_SCOPE_FILE`, where `<PREFIX>` is the tool name in capitals with `_` for `-`, such as `KICAD_CLI_SCOPE_FILE`. Give the Agent its path. A minimal scope file that allows changes and saves under the folder above until a set time:
-
-  ```json
-  {
-    "scope_id": "live-runs",
-    "effects": ["lifecycle", "change", "persist"],
-    "dangerous": false,
-    "targets": ["file:///D:/e2e/demo-board/"],
-    "expires_at": "2026-12-31T18:00:00Z"
-  }
-  ```
-
-- Apart from such an explicit request, the Agent never writes or changes a scope file. When a write is refused with `E_FORBIDDEN`, the error carries a snippet that would grant it; the Agent shows it to you, and if you agree, you add it to the file or explicitly ask the Agent to. The tool's `docs/E2E.md` describes the whole procedure.
-- For the evaluation, list one folder for the evaluation workspaces, and any other target a question's `SCOPE` names, such as a device. The evaluation runner writes each question's scope file itself.
+- Listing it once is enough. Inside the listed targets the Agent goes ahead without asking: it makes practice copies, starts the instances it tests on and closes only those, and writes its own scope files that grant only the listed targets. It never touches anything outside the list.
+- Real work with the tool follows the same idea. Tell the Agent in your own message what it may change, such as "change anything in the board copy"; it writes that grant in a scope file of its own and tells you what it wrote. A request to do a task is not a grant: when a write is refused with `E_FORBIDDEN`, the Agent shows you what is missing and waits for you. The tool's README shows the scope file's fields.
 
 ## Evidence and Maturity
 

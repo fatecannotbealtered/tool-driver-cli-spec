@@ -793,6 +793,9 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["--shim"]:
         return shim(argv[1], argv[2:])
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")  # the console code page may lack a character of the output
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("project")
     parser.add_argument("--questions", default="tests/eval", help="the folder of question files, relative to the project")
