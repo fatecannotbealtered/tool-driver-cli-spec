@@ -38,7 +38,7 @@ class BuildTest(unittest.TestCase):
                                "scripts/run_matrix.py", "scripts/run_eval.py", "conformance/eval/read_answer.py",
                                "skills/build-driver-cli/SKILL.md"):
                     self.assertIn(prefix + needed, names)
-                self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc")])
+                self.assertFalse([n for n in names if any(c in n.split("/") for c in ("__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache")) or n.endswith(".pyc")])
                 self.assertTrue(all(n.startswith(prefix) for n in names))
                 manifest = json.loads(archive.read(prefix + "MANIFEST.json"))
                 self.assertEqual(manifest["version"], bundle.version())
