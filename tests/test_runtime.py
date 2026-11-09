@@ -81,6 +81,20 @@ class Units(unittest.TestCase):
                 duration_seconds(bad, "--wait", ["ms", "s", "min", "h"])
 
 
+class SaveReadBack(unittest.TestCase):
+    def test_an_object_deleted_before_the_save_is_read_only_for_being_gone(self):
+        from _driver.standard import still_there
+
+        doc = "file:///D:/e2e/drawing.drw"
+        note, leader, other = f"{doc}#/notes/SPARE", f"{doc}#/notes/SPARE/leader", f"{doc}#/notes/SPARE_2"
+        fields = [{"target": note, "field": "text", "after": "SPARE"}, {"target": leader, "field": "x_mm", "after": 1.0},
+                  {"target": other, "field": "text", "after": "kept"}, {"target": note, "field": "exists", "after": False}]
+        self.assertEqual([(c["target"], c["field"]) for c in still_there(fields)],
+                         [(other, "text"), (note, "exists")])  # SPARE_2 only shares the prefix of the name
+        again = [dict(c, after=True) if c["field"] == "exists" else c for c in fields]  # created again: all are read
+        self.assertEqual(still_there(again), again)
+
+
 class TargetKeys(unittest.TestCase):
     def test_prefix_matches_only_at_a_boundary(self):
         self.assertTrue(covers("file:///D:/proj", "file:///D:/proj/board.kicad_pcb"))
