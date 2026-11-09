@@ -2,7 +2,7 @@
 """Run evaluation questions with an Agent: the evaluation runner (DSKL-040 to DSKL-044).
 
     python scripts/run_eval.py <project> --workspace-root <folder> [--questions tests/eval]
-        [--only <id>,<id>] [--model <model>] [--report <file>] [--keep]
+        [--only <id>,<id> | --stale] [--model <model>] [--report <file>] [--keep]
     python scripts/run_eval.py <project> --fake-host [...]
     python scripts/run_eval.py <project> --check (--fake-host | --workspace-root <folder>) [...]
 
@@ -24,9 +24,12 @@ On the real application the workspace root and every scope target must be listed
 Authorized Targets in docs/E2E.md, or lie inside a listed folder (DVER-050), and the tool keeps the person's environment, so
 it finds the running application. Before the Agent runs, the scripted `right` agent of each
 question that has one runs once on the fake host, or on the real application for a question with
-FAKE_HOST None; a question whose right answer fails stops the run, so no model credits go to it. A full run on the real application writes its report to
-docs/evidence/eval-<date>.json unless --report names another file; a run with --only writes
-one only to --report.
+FAKE_HOST None; a question whose right answer fails stops the run, so no model credits go to it. A run on the real
+application writes its report to docs/evidence/eval-<date>.json unless --report names another file.
+
+Each result counts on its own while its question file, the commands it lists and the tool's
+handwritten Skills and knowledge are unchanged (DSKL-043). --stale runs only the questions whose
+newest such result is missing or failed.
 """
 from __future__ import annotations
 
@@ -742,6 +745,8 @@ def evaluate(project: Path, facts: check_project.Facts, questions: list[Question
             "agent": agent.name, "model": "", "simulated": fake_host, "platform": PLATFORMS.get(sys.platform, "linux"),
             "targets": targets, "questions": results}
     base = file_key(root or Path(tempfile.gettempdir()).resolve()) + "/"
+    # What each result depends on, taken before the Agent runs (DSKL-043).
+    fingerprints = {q.id: check_project.question_fingerprint(facts, q.sha256, q.commands) for q in questions}
     for question in questions:
         problems, error, session = attempt(project, facts, question, agent.fresh(), fake_host, root, keep)
         failures = problems + ([error] if error else [])
@@ -749,7 +754,8 @@ def evaluate(project: Path, facts: check_project.Facts, questions: list[Question
             failures.append("refused: " + ", ".join(session.denied))
         results.append({"scenario": question.scenario, "id": question.id, "passed": not failures,
                         "notes": "; ".join(failures)[:2000] if failures else question.title,
-                        "sha256": question.sha256, "commands": question.commands, "ran": session.ran})
+                        "sha256": question.sha256, "commands": question.commands, "ran": session.ran,
+                        "fingerprint": fingerprints[question.id]})
         for target in [base] + [t for t in session.targets() if t != "{documents}"]:
             if target not in targets:
                 targets.append(target)
@@ -804,6 +810,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("project")
     parser.add_argument("--questions", default="tests/eval", help="the folder of question files, relative to the project")
     parser.add_argument("--only", help="question IDs, separated by commas")
+    parser.add_argument("--stale", action="store_true",
+                        help="only the questions without a current passed result from the real application")
     parser.add_argument("--model", help="the model the Agent uses")
     parser.add_argument("--check", action="store_true", help="run the scripted agents and check the graders")
     parser.add_argument("--fake-host", action="store_true", help="run on the fake host instead of the real application")
@@ -825,6 +833,15 @@ def main(argv: list[str] | None = None) -> int:
             unknown = [c for c in question.commands if c not in paths]
             if unknown:
                 raise EvalError(f"{question.id}: COMMANDS names commands the tool does not have: {', '.join(unknown)}")
+        if args.stale:
+            if args.only or args.fake_host or args.check:
+                raise EvalError("--stale picks the questions to run on the real application; leave out --only, --fake-host and --check")
+            results = check_project.Checker(facts).results()
+            questions = [q for q in questions if q.id not in results or not results[q.id][1]["passed"]]
+            if not questions:
+                print("every question has a current passed result; nothing to run")
+                return 0
+            print("running " + ", ".join(q.id for q in questions))
         if args.fake_host:
             questions = on_fake_host(questions)
             if not questions:
@@ -837,7 +854,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.check:
             return check_graders(project, facts, questions, args.fake_host, root, args.keep)
         report = Path(args.report).resolve() if args.report else None
-        if report is None and not args.fake_host and not args.only:
+        if report is None and not args.fake_host:
             report = default_report(project)
         stale = shadowing_skills(project, facts, not args.fake_host)
         if stale:

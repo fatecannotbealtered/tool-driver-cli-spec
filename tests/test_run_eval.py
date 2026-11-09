@@ -294,9 +294,10 @@ class RunTest(unittest.TestCase):
         checker = check_project.Checker(self.facts)
         self.assertEqual(checker.validate(data, "eval-report.schema.json"), [])
         self.assertEqual((data["agent"], data["model"], data["simulated"]), ("Stub Agent 1.0", "stub-model", True))
+        fingerprint = check_project.question_fingerprint(self.facts, loaded.sha256, ["part get"])
         self.assertEqual(data["questions"], [{"scenario": "read_answer", "id": "read_r1", "passed": True,
                                               "notes": "Read the value of R1.", "sha256": loaded.sha256,
-                                              "commands": ["part get"], "ran": ["part get"]}])
+                                              "commands": ["part get"], "ran": ["part get"], "fingerprint": fingerprint}])
         self.assertEqual(loaded.sha256, check_project.digest(self.questions / "read_r1.py"))
 
     def test_a_question_whose_right_answer_fails_stops_the_run_before_the_agent(self):
@@ -313,6 +314,34 @@ class RunTest(unittest.TestCase):
         self.assertIn("mismatched (the answer does not give 10k)", err.getvalue())
         self.assertNotIn("read_r1", err.getvalue())
         self.assertEqual(asked, [], "the Agent was started")
+
+    def test_stale_runs_only_the_questions_without_a_current_passed_result(self):
+        self.load(read_r1=QUESTION, read_r2=QUESTION)
+        current = {"read_r1": ("docs/evidence/eval-1.json", {"passed": True}),
+                   "read_r2": ("docs/evidence/eval-1.json", {"passed": False})}
+        asked: list = []
+
+        def evaluate(project, facts, questions, *rest):
+            asked.append([q.id for q in questions])
+            return 0
+
+        def stale_run() -> tuple[int, str]:
+            argv = [str(SAMPLE), "--stale", "--questions", str(self.questions), "--workspace-root", str(self.tmp / "work"),
+                    "--report", str(self.tmp / "report.json")]
+            with mock.patch.object(run_eval.check_project, "gather", return_value=self.facts), \
+                    mock.patch.object(run_eval.check_project.Checker, "results", return_value=current), \
+                    mock.patch.object(run_eval, "authorize"), mock.patch.object(run_eval, "shadowing_skills", return_value=[]), \
+                    mock.patch.object(run_eval, "broken_questions", return_value=[]), \
+                    mock.patch.object(run_eval, "evaluate", side_effect=evaluate), mock.patch.object(run_eval, "ClaudeAgent"), \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                return run_eval.main(argv), out.getvalue()
+
+        self.assertEqual(stale_run()[0], 0)
+        self.assertEqual(asked, [["read_r2"]])  # read_r1 has a current passed result
+        current["read_r2"] = ("docs/evidence/eval-2.json", {"passed": True})
+        code, out = stale_run()
+        self.assertEqual((code, len(asked)), (0, 1))
+        self.assertIn("nothing to run", out)
 
     def test_a_question_only_for_the_real_application_checks_its_right_answer_there_first(self):
         questions = self.load(real_only=QUESTION.replace("FAKE_HOST =", "FAKE_HOST = None\nIGNORED ="), read_r1=QUESTION)

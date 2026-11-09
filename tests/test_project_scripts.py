@@ -176,6 +176,9 @@ class ProjectTest(unittest.TestCase):
         self.setUp()
         self.edit("CHANGELOG.md", "## [Unreleased]", "## [0.1.0] - 2026-01-01\n\n### Fixed\n\n- x\n\n## [Unreleased]")
         self.expect("DREPO-018")
+        self.setUp()
+        self.edit("CHANGELOG.md", "### Added", "### Added\n\n- The BOM check accepts the ideographic comma `、` as a separator.")
+        self.assertNotIn("DREPO-018", self.clauses())  # code quotes the character itself
 
     def test_placeholders_anywhere(self):
         self.edit("demo_cli/adapter/__init__.py", "return {\"found\": False}", "return {\"found\": False}  # {{fill: later}}")
@@ -334,6 +337,47 @@ class ProjectTest(unittest.TestCase):
             self.assertFalse((cache / "tool-driver-cli-spec" / "0.9.0").exists())
             sync_spec.download("0.9.0", hashlib.sha256(data).hexdigest())
         self.assertTrue((cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+
+    def test_a_download_link_that_keeps_failing_is_replaced_by_the_github_api(self):
+        import urllib.error
+
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("tool-driver-cli-spec-0.9.0/VERSION", "0.9.0\n")
+        data = payload.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        files = {"tool-driver-cli-spec-0.9.0.zip": data, "tool-driver-cli-spec-0.9.0.sha256": f"{digest}  x.zip\n".encode()}
+        asked = []
+
+        def urlopen(request, timeout):
+            url = request.full_url
+            asked.append(url)
+            if "/releases/download/" in url:
+                raise urllib.error.HTTPError(url, 504, "Gateway Timeout", {}, None)
+            if url.endswith("/releases/tags/v0.9.0"):
+                assets = [{"name": n, "url": f"https://api.example/assets/{n}"} for n in files]
+                return io.BytesIO(json.dumps({"assets": assets}).encode())
+            self.assertEqual(request.get_header("Accept"), "application/octet-stream")
+            return io.BytesIO(files[url.rsplit("/", 1)[1]])
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", urlopen), \
+                mock.patch("time.sleep") as slept:
+            sync_spec.download("0.9.0", None)
+        release = cache / "tool-driver-cli-spec" / "0.9.0"
+        self.assertEqual((release / "bundle.sha256").read_text(encoding="utf-8").strip(), digest)  # still checked
+        self.assertTrue((release / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+        self.assertEqual([c.args[0] for c in slept.call_args_list], [2, 4, 8] * 2)  # each link tried four times
+        self.assertEqual(len([u for u in asked if "/releases/download/" in u]), 8)
+
+        def missing(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", missing), \
+                mock.patch("time.sleep") as slept, self.assertRaises(SystemExit) as stop:
+            sync_spec.download("0.8.0", None)
+        self.assertFalse(slept.called)  # a release that does not exist is not asked for again
+        self.assertIn("nor through the GitHub API", str(stop.exception))
 
     # -------------------------------------------------------------- versions, platforms and the survey
 
@@ -514,10 +558,117 @@ class ProjectTest(unittest.TestCase):
         self.report("eval-2026-11-02.json", date="2026-11-02",
                     questions=[dict(q, passed=False) for q in data["questions"]])
         problems = [p.message for p in self.problems() if p.clause == "DSKL-043"]
-        self.assertTrue(any("not the newest" in m for m in problems), problems)
+        self.assertTrue(any("newest current result of" in m for m in problems), problems)  # a newer failure wins
         (self.project / "docs" / "evidence" / "eval-2026-11-02.json").unlink()
         self.report("eval-2026-11-01.json", targets=["file:///D:/elsewhere/"])
         self.expect("DVER-050")
+
+    def fingerprinted(self, run: dict) -> dict:
+        return dict(run, fingerprint=check_project.fingerprint(check_project.gather(self.project), run["command"]))
+
+    def test_a_live_run_counts_until_its_registration_or_the_adapter_changes(self):
+        self.authorize("file:///D:/e2e/demo/")
+        run = self.fingerprinted({"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass",
+                                  "mode": "session", "matrix_row": "normal"})
+        ref = self.record("2026-11-01-move.json", tool_version="0.0.9", runs=[run])  # another minor: the fingerprint decides
+        self.mature("verified", [f"live:{ref}"], f"live:{ref}#normal")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        self.edit("demo_cli/commands/__init__.py", "Move one part.", "Move one part to a new place.")
+        self.edit("README.md", "Filled in by the author\n", "Filled in by the author, again\n")
+        self.fix()
+        self.assertEqual([p.text() for p in self.problems()], [])  # a summary changes nothing the run shows
+        adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "# a change\n", encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("before a change to its registration or to the adapter" in m for m in messages), messages)
+
+    def test_an_evaluation_result_counts_until_what_it_depends_on_changes(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01.json"], f"live:{ref}#normal")
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        facts = check_project.gather(self.project)
+
+        def fingerprinted(data: dict) -> list:
+            return [dict(q, fingerprint=check_project.question_fingerprint(facts, q["sha256"], q["commands"])) for q in data["questions"]]
+
+        data = self.report("eval-2026-11-01.json", tool_version="0.0.9")
+        self.report("eval-2026-11-01.json", tool_version="0.0.9",
+                    questions=[q for q in fingerprinted(data) if q["id"] != "separate_save"])
+        self.report("eval-2026-11-03.json", tool_version="0.0.9", date="2026-11-03",
+                    questions=[q for q in fingerprinted(data) if q["id"] == "separate_save"])
+        self.assertEqual([p.text() for p in self.problems()], [])  # the results of two reports count together
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        start, end = "<!-- driver:command-map:start -->", "<!-- driver:command-map:end -->"
+        skill.write_text(text.replace(end, "| `made up` | generated |\n" + end), encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())  # generated content is not guidance
+        skill.write_text(text.replace(start, "Always read the document first.\n\n" + start), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("no current result" in m and "spec.py eval --stale" in m for m in messages), messages)
+        skill.write_text(text, encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())
+
+    def test_a_new_version_of_a_host_component_keeps_the_fingerprint(self):
+        root = Path(tempfile.mkdtemp(prefix="fingerprint-", dir=self.work))
+        (root / "demo_cli").mkdir()
+        (root / "demo_cli" / "adapter.py").write_text("x = 1\n", encoding="utf-8")
+        (root / "plugin").mkdir()
+
+        def digest(version: str, methods: list[str], readme: str = "", depends: str = "[]") -> str:
+            (root / "plugin" / "manifest.json").write_text(json.dumps({"version": version, "methods": methods}), encoding="utf-8")
+            (root / "plugin" / "README.md").write_text(readme, encoding="utf-8")
+            (root / "pyproject.toml").write_text(f'[project]\nname = "demo"\nversion = "{version}"\ndependencies = {depends}\n',
+                                                 encoding="utf-8")
+            facts = check_project.Facts(root=root, contract={}, pkg="demo_cli")
+            return check_project.adapter_digest(facts)
+
+        first = digest("0.1.0", ["apply"])
+        self.assertEqual(digest("0.2.0", ["apply"], readme="new text"), first)  # the version and the README change nothing
+        self.assertNotEqual(digest("0.2.0", ["apply", "read_back"]), first)  # another method does
+        self.assertNotEqual(digest("0.1.0", ["apply"], depends='["pywin32>=306"]'), first)  # and a dependency
+
+    def test_the_second_report_of_a_day_is_newer_than_the_first(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01-2.json"], f"live:{ref}#normal")
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        data = self.report("eval-2026-11-01.json")
+        self.report("eval-2026-11-01.json", questions=[dict(q, passed=False) for q in data["questions"]])
+        self.report("eval-2026-11-01-2.json")
+        self.assertEqual([p.text() for p in self.problems()], [])  # the morning's failures were run again and passed
+        self.report("eval-2026-11-01-10.json", questions=[dict(q, passed=False) for q in data["questions"]])
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("newest current result of" in m for m in messages), messages)  # -10 comes after -2
+
+    def test_the_newest_run_on_each_kind_decides(self):
+        self.authorize("file:///D:/e2e/demo/")
+        self.edit("demo_cli/__init__.py", "doc_kinds=[]", 'doc_kinds=["board", "panel"]')
+        self.edit("demo_cli/commands/__init__.py", '"maturity": "draft", "evidence": []',
+                  '"maturity": "draft", "evidence": [], "doc_kinds": ["board", "panel"] if path == "part move" else []')
+        self.fix()
+        run = {"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass", "mode": "session",
+               "matrix_row": "normal"}
+        board = self.record("2026-11-01-board.json", runs=[self.fingerprinted(dict(run, doc_kind="board"))])
+        panel = self.record("2026-11-01-panel.json", runs=[self.fingerprinted(dict(run, doc_kind="panel"))])
+        self.mature("verified", [f"live:{board}"], f"live:{board}#normal")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        data["rows"][0]["kind_evidence"] = {"board": f"live:{board}#normal", "panel": f"live:{panel}#normal"}
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        data["rows"][0]["kind_evidence"] = {"board": f"live:{board}#normal"}  # the last panel run crashed
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("on a panel" in m for m in messages), messages)  # the older panel pass no longer counts
+        del data["rows"][0]["kind_evidence"]
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("on a panel" in m for m in messages), messages)  # runs with a fingerprint count only through it
 
     def test_question_files_are_checked(self):
         self.question("move-r1", "made_up", ["part move"])
@@ -691,6 +842,7 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         record = json.loads(records[0].read_text(encoding="utf-8"))
         self.assertEqual((record["targets"], record["runs"][0]["mode"]), ([url], "session"))
+        self.assertEqual(record["runs"][0]["fingerprint"], check_project.fingerprint(check_project.gather(self.project), "part get"))
         row = json.loads((self.project / "tests" / "matrix" / "part-get.json").read_text(encoding="utf-8"))["rows"][0]
         self.assertTrue(row["evidence"].startswith("live:docs/evidence/"))
         for written in (records[0], self.project / "tests" / "matrix" / "part-get.json"):
@@ -774,6 +926,42 @@ class ProjectTest(unittest.TestCase):
         self.assertNotEqual(live_path, str(mine))
         self.assertIsNone(none)  # no scope file at all
         self.assertFalse(Path(live_path).exists())  # removed when the run ended
+
+    def test_run_matrix_asks_for_no_target_the_rows_do_not_use(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        matrix = self.project / "tests" / "matrix" / "part-get.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        row = next(r for r in data["rows"] if r["row"] == "invalid_input")
+        row.clear()
+        row.update(row="invalid_input", applies=True, arguments=["--session", "{session}", "--id", ""],
+                   expected={"exit": 2, "code": "E_USAGE"})
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        granted = target.resolve().as_uri() + "/"
+        self.authorize(granted)
+        argv = [str(self.project), "--command", "part get", "--row", "invalid_input", "--set", "session=s1",
+                "--application-version", "1.5.0"]
+        with mock.patch.object(run_matrix, "_confirmed", return_value=(2, b'{"ok": false, "error": {"code": "E_USAGE"}}')):
+            self.assertEqual(run_matrix.main(argv), 0)
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-get.json")).read_text(encoding="utf-8"))
+        self.assertEqual(record["targets"], [granted])  # the run's scope held every authorized target
+        with self.assertRaises(SystemExit):
+            run_matrix.main([*argv[:4], "normal", *argv[5:]])  # a row that names the document still needs --set doc=
+
+    def test_run_matrix_keeps_the_normal_row_s_evidence_of_each_kind(self):
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        normal = {"row": "normal", "actual": {"exit": 0}}
+        run_matrix._write_back(matrix, [normal], "2026-11-01-a.json", "project")
+        run_matrix._write_back(matrix, [normal], "2026-11-02-b.json", "board")
+        row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
+        self.assertEqual(row["kind_evidence"], {"board": "live:docs/evidence/2026-11-02-b.json#normal",
+                                                "project": "live:docs/evidence/2026-11-01-a.json#normal"})
+        self.assertEqual(row["evidence"], "live:docs/evidence/2026-11-02-b.json#normal")
+        run_matrix._write_back(matrix, [{"row": "normal", "actual": None}], "2026-11-03-c.json", "board")  # a crash
+        row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
+        self.assertEqual(row["kind_evidence"], {"project": "live:docs/evidence/2026-11-01-a.json#normal"})
+        self.assertNotIn("evidence", row)
 
     def test_covered(self):
         base = self.work / "e2e"

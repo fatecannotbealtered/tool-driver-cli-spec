@@ -33,6 +33,10 @@
           "--value",
           "12mm"
         ]
+      },
+      "kind_evidence": {
+        "assembly": "live:docs/evidence/2026-11-02-dimension-set.json#normal",
+        "part": "live:docs/evidence/2026-11-01-footprint-move.json#normal"
       }
     },
     {

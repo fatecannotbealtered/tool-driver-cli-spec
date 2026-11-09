@@ -21,7 +21,8 @@
       "ran": [
         "footprint get",
         "knowledge get"
-      ]
+      ],
+      "fingerprint": "4b1f0c9e2d7a6b5c8e3f1a0d9c8b7a6e5f4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b"
     },
     {
       "scenario": "scoped_change",
@@ -36,7 +37,8 @@
         "session list",
         "footprint move",
         "doc save"
-      ]
+      ],
+      "fingerprint": "4b1f0c9e2d7a6b5c8e3f1a0d9c8b7a6e5f4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b"
     },
     {
       "scenario": "knowledge_lookup",
@@ -49,7 +51,8 @@
       "ran": [
         "footprint get",
         "knowledge get"
-      ]
+      ],
+      "fingerprint": "4b1f0c9e2d7a6b5c8e3f1a0d9c8b7a6e5f4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b"
     },
     {
       "scenario": "separate_save",
@@ -65,7 +68,8 @@
         "session list",
         "footprint move",
         "doc save"
-      ]
+      ],
+      "fingerprint": "4b1f0c9e2d7a6b5c8e3f1a0d9c8b7a6e5f4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b"
     }
   ]
 }

@@ -13,7 +13,7 @@ description: >-
   Not for using a driver tool to do work in an application; use that tool's own Skill, such as kicad-cli.
   不负责用驱动工具在软件里干活，那要用该工具自己的 Skill，比如 kicad-cli。
 metadata:
-  version: 1.0.10
+  version: 1.1.0
 ---
 
 # build-driver-cli
@@ -90,7 +90,7 @@ Each step names the clauses to read, what to fill, the check and when it is done
 
 - Read: DVER-001, DVER-002, DVER-030, DVER-031, DVER-040 to DVER-043, DVER-050, DSEC-034. How-to: [references/commands-and-matrices.md](references/commands-and-matrices.md).
 - Fill: every file in `tests/matrix/`, one per domain command and per standard command whose adapter capabilities the tool implements (`generate` writes the first version; other standard commands need none); the tool's own tests in `tests/`.
-- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`, on the targets listed under Authorized Targets; the runner writes the scope file of each run. With a host component, first run `plugin install` with the live-run state directory, under a scope file of your own (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` once it is prepared, by you in an instance you started or by the person; `dialog` and `read_back_mismatch` are never `unrunnable`. `--row read_back_mismatch` makes the tool wait before its read-back while the person, or a script given with `--tamper`, changes the result. A command with `doc_kinds` runs its `normal` row once per kind, with `--kind`. Commit the live records.
+- Check: `python scripts/spec.py suites`. Then the live runs of `docs/E2E.md`, on the targets listed under Authorized Targets; the runner writes the scope file of each run. With a host component, first run `plugin install` with the live-run state directory, under a scope file of your own (see host-component.md). Run `python scripts/spec.py matrix --command "<path>" --set doc=<file>`, one `--set` per placeholder. A row that needs a prepared situation, such as `dialog`, runs alone with `--row dialog` once it is prepared, by you in an instance you started or by the person; `dialog` and `read_back_mismatch` are never `unrunnable`. `--row read_back_mismatch` makes the tool wait before its read-back while the person, or a script given with `--tamper`, changes the result. A command with `doc_kinds` runs its `normal` row once per kind, with `--kind`. Commit the live records. A run counts until the command's registration or the adapter's code changes; after such a change, `python scripts/spec.py check` names the rows to run again.
 - Done when both suites pass, every matrix row that applies has passed live or is marked `unrunnable` with a reason, and each command's `maturity` matches its evidence.
 
 ### 7 Write Skills and knowledge

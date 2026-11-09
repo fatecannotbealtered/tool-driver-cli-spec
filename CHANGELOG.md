@@ -4,6 +4,22 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+Evidence follows what it depends on, not the version number, from the Xpedition tool's 1.2.0 release. After syncing, new live runs and evaluation results carry fingerprints and keep counting across versions until the command, the adapter's code or the guidance they depend on changes. Records and reports written before keep counting for their minor version; run the matrices and questions once more to give them fingerprints. `python scripts/spec.py check` names what to run again, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs only the questions that need it.
+
+### Changed
+
+- Evidence goes stale when what it depends on changes, no longer when the version number moves (DVER-043, DSKL-043). A live run carries a `fingerprint` of the command, by what changes what it does, and of the adapter's code and the Python packages it depends on; it counts while that matches, in any version. An evaluation result carries a `fingerprint` of its question file, the commands it lists as an Agent sees them and the tool's handwritten Skills and knowledge; the results of several reports count together, so stable needs every question's newest current result to have passed, not one run of all questions. `run_eval --stale` runs only the questions without a current passed result, and every run on the real application writes a report. Records and reports without a fingerprint keep counting while their tool version has the tool's major and minor version.
+- `run_matrix --kind` keeps the `normal` row's evidence of each document kind in `kind_evidence`, so the newest run on each kind decides: an older pass no longer counts after a later run on that kind failed (DVER-030).
+- `check_project` says why a row or a command's evidence does not count, such as a change to the adapter since the run.
+
+### Fixed
+
+- `scripts/spec.py` downloaded the release once, from one link. When GitHub answered that link with HTTP 504 for some minutes, every tool's check and release stopped. It now tries a failed download again after 2, 4 and 8 seconds, and then fetches the same file through the GitHub API; the bundle's SHA-256 is checked as before.
+- `run_matrix` refused a live run that named no document, folder or device, even when the rows it ran used none, such as a row that takes only the session. It now asks only for the values the rows use; the record of such a run lists every authorized target, since its scope held them all.
+- The English-only check of `CHANGELOG.md` also flagged a character quoted in code, such as the ideographic comma in `、`. Code spans are skipped now (DREPO-018).
+
 ## [1.0.10] - 2026-11-08
 
 Fixes from the Creo tool's live run and the 1.0.9 release bundle. After syncing, a tool copies the long-job sentence of the template's entry Skill again, and anything that reads `job get` finds a failed job's error in `code`, `message` and `details`.

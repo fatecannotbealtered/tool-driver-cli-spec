@@ -76,7 +76,7 @@ tool-driver-cli-spec 在 GitHub Releases 上的每个发布包里都有开发用
 
 ## 证据与成熟度
 
-每条命令处在 `draft`、`verified` 或 `stable` 之一，`<tool> reference` 会连同证据一起显示。`verified` 要求这条命令的行为矩阵在真实软件上跑通，`stable` 还要求用真实 Agent 做的评测全部通过。证据只对主版本号和次版本号相同的工具版本有效，在模拟宿主上得到的结果从不算证据。
+每条命令处在 `draft`、`verified` 或 `stable` 之一，`<tool> reference` 会连同证据一起显示。`verified` 要求这条命令的行为矩阵在真实软件上跑通，`stable` 还要求用真实 Agent 做的评测全部通过。证据在它依赖的东西（比如适配层代码）改动之前一直有效，只是版本号变了不影响；在模拟宿主上得到的结果从不算证据。
 
 ## 发布
 

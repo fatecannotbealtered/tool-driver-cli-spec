@@ -43,6 +43,7 @@
         "expected": {"$ref": "#/$defs/result"},
         "actual": {"$ref": "#/$defs/result"},
         "evidence": {"$ref": "reference.schema.json#/$defs/evidence_ref"},
+        "kind_evidence": {"description": "The normal row's live evidence on each document kind the command lists, keyed by kind, so a run on one kind keeps another's (DVER-030).", "type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"}, "additionalProperties": {"$ref": "reference.schema.json#/$defs/evidence_ref"}},
         "unrunnable": {"description": "Why this row, which applies, cannot be caused on demand on the real application. It then needs no live run (DVER-030).", "type": "string", "minLength": 1}
       },
       "if": {"properties": {"applies": {"const": true}}},
@@ -53,12 +54,12 @@
         "allOf": [
           {"if": {"required": ["unrunnable"]}, "then": {"not": {"anyOf": [{"required": ["actual"]}, {"required": ["evidence"]}]}}},
           {"if": {"properties": {"row": {"enum": ["normal", "dialog", "read_back_mismatch"]}}}, "then": {"not": {"required": ["unrunnable"]}}},
-          {"if": {"not": {"properties": {"row": {"const": "normal"}}}}, "then": {"not": {"required": ["kind_arguments"]}}}
+          {"if": {"not": {"properties": {"row": {"const": "normal"}}}}, "then": {"not": {"anyOf": [{"required": ["kind_arguments"]}, {"required": ["kind_evidence"]}]}}}
         ]
       },
       "else": {
         "required": ["reason"],
-        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["kind_arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["unrunnable"]}]}
+        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["kind_arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["kind_evidence"]}, {"required": ["unrunnable"]}]}
       }
     },
     "result": {
