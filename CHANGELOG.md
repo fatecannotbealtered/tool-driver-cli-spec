@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+Evidence follows what it depends on, not the version number, from the Xpedition tool's 1.2.0 release. After syncing, new live runs and evaluation results carry fingerprints and keep counting across versions until the command, the adapter's code or the guidance they depend on changes. Records and reports written before keep counting for their minor version; run the matrices and questions once more to give them fingerprints. `python scripts/spec.py check` names what to run again, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs only the questions that need it.
+
 ### Changed
 
 - Evidence goes stale when what it depends on changes, no longer when the version number moves (DVER-043, DSKL-043). A live run carries a `fingerprint` of the command, by what changes what it does, and of the adapter's code and the Python packages it depends on; it counts while that matches, in any version. An evaluation result carries a `fingerprint` of its question file, the commands it lists as an Agent sees them and the tool's handwritten Skills and knowledge; the results of several reports count together, so stable needs every question's newest current result to have passed, not one run of all questions. `run_eval --stale` runs only the questions without a current passed result, and every run on the real application writes a report. Records and reports without a fingerprint keep counting while their tool version has the tool's major and minor version.
