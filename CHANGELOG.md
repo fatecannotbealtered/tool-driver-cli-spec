@@ -6,6 +6,9 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ### Fixed
 
+- Every release made every evaluation result stale, because the fingerprint of a result covered the `version` in the Skills' front matter, which each release changes; and any fix in the adapter's code did too. A result's fingerprint now leaves out that version and the adapter's code: it covers the question, the commands it lists as `reference` describes them, and the handwritten Skills and knowledge (DSKL-043). Live runs still follow the adapter's code (DVER-043).
+- `run_matrix` ended the call of a long job's `job get --wait 600s`, and of a row paused longer than 300 seconds, after 300 seconds, so the row had no result. It now waits as long as the tool may wait.
+- When the tool ended its pause before the read-back early, `run_matrix` stopped a `--tamper` command still running, which could leave the application half changed. The command now finishes its steps; one still running 300 seconds after the row ended is stopped, and the row's notes say so.
 - A batch returned only each item's code, so what a change produced, such as what a moved track end connects to, was lost; `operation get` of an item gave only its receipt. Each item that succeeded now carries its `result`, as a call for that object alone returns it, and its record keeps it; when the results do not fit in the response, `more_results` names the `operation get` command that gives them (DCLI-064).
 - `reference` marked a parameter `required` although `--input`, or `--ids` for `--id`, gives it instead, so an Agent added it beside `--input` and the call was refused. Such a parameter now shows `required_without` with those flags (DCLI-031).
 - The example of `reference` named `session list`, which a tool that works only on files does not have. It names `context` now.

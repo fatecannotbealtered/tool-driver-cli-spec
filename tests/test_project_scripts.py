@@ -5,11 +5,13 @@ copies it, breaks one rule, and expects check_project to name the clause.
 """
 from __future__ import annotations
 
-import hashlib
+import argparse
 import contextlib
+import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -631,6 +633,10 @@ class ProjectTest(unittest.TestCase):
         self.assertTrue(any("no current result" in m and "spec.py eval --stale" in m for m in messages), messages)
         skill.write_text(text, encoding="utf-8")
         self.assertNotIn("DSKL-043", self.clauses())
+        skill.write_text(re.sub(r"(?m)^(\s*version:).*$", r"\1 9.9.9", text, count=1), encoding="utf-8")
+        adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "# a fix\n", encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())  # a release's version and an adapter fix leave the results standing
 
     def test_a_new_version_of_a_host_component_keeps_the_fingerprint(self):
         root = Path(tempfile.mkdtemp(prefix="fingerprint-", dir=self.work))
@@ -897,7 +903,7 @@ class ProjectTest(unittest.TestCase):
             def start(self):
                 pass
 
-            def join(self, timeout=None):
+            def finish(self, timeout):
                 pass
 
         # The tool crashed: it exited 1 and printed no envelope.
@@ -930,7 +936,7 @@ class ProjectTest(unittest.TestCase):
                 "--set", "session=s1", "--application-version", "1.5.0"]
         seen: list[tuple[str, dict | None]] = []
 
-        def confirmed(call, root, env, expected_code, notes):
+        def confirmed(call, root, env, expected_code, notes, timeout=None):
             path = Path(env["DEMO_CLI_SCOPE_FILE"])
             seen.append((str(path), json.loads(path.read_text(encoding="utf-8")) if path.exists() else None))
             return 4, b'{"ok": false, "error": {"code": "E_FORBIDDEN"}}'
@@ -983,6 +989,23 @@ class ProjectTest(unittest.TestCase):
         row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
         self.assertEqual(row["kind_evidence"], {"project": "live:docs/evidence/2026-11-01-a.json#normal"})
         self.assertNotIn("evidence", row)
+
+    def test_a_tamper_command_finishes_its_steps_after_the_row(self):
+        pause = self.work / "pause.json"
+        pause.write_text("{}", encoding="utf-8")  # the tool has paused already
+
+        def watch(seconds: float, timeout: float) -> list[str]:
+            notes: list[str] = []
+            args = argparse.Namespace(tamper=f'{{python}} -c "import time; time.sleep({seconds})"')
+            watcher = run_matrix._Watcher(pause, self.work, dict(os.environ), args, notes)
+            watcher.start()
+            time.sleep(0.5)  # the row ends while the command still runs
+            watcher.finish(timeout)
+            return notes
+
+        self.assertEqual(watch(2, 30), ["--tamper exited 0"])
+        notes = watch(30, 1)
+        self.assertTrue(any("was still running 1 s after the row ended" in n for n in notes), notes)
 
     def test_covered(self):
         base = self.work / "e2e"

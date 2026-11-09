@@ -609,20 +609,26 @@ def adapter_digest(facts: Facts) -> str:
 
 def guidance_digest(facts: Facts) -> str:
     """What the Agent reads about the tool besides its output: the Skills without the content
-    check_project generates, and the builtin knowledge (DSKL-043)."""
+    check_project generates and without the version every release writes into them (DSKL-030),
+    and the builtin knowledge (DSKL-043)."""
     if "guidance" not in facts.digests:
         def handwritten(path: Path, text: str) -> str:
-            return re.sub(r"(<!-- driver:([a-z-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
+            text = re.sub(r"(<!-- driver:([a-z-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
+            if text.startswith("---\n") and "\n---" in text[4:]:
+                head, rest = text[4:].split("\n---", 1)
+                text = "---\n" + re.sub(r"(?m)^\s*version:.*\n?", "", head) + "\n---" + rest
+            return text
 
         facts.digests["guidance"] = files_digest(facts.root, project_files(facts.root, "skills", "knowledge"), handwritten)
     return facts.digests["guidance"]
 
 
 def command_digest(facts: Facts, command: str, described: bool = False) -> str:
-    """A command as the tool registers and reports it, with the adapter's code. ``described``
-    keeps the text an Agent reads about it, such as its summary and examples (DSKL-043); without
-    it, only what changes what the command does counts (DVER-043). Fields at their empty default
-    are left out, so a field a later runtime adds changes nothing."""
+    """A command as the tool registers and reports it. ``described``: as an Agent reads it, with
+    its summary and examples, and without the adapter's code, which an evaluation does not
+    measure (DSKL-043); else only what changes what the command does, with the adapter's code
+    (DVER-043). Fields at their empty default are left out, so a field a later runtime adds
+    changes nothing."""
     reg = next((c for c in (facts.registration or {}).get("commands", []) if c.get("path") == command), {})
     ref = next((c for c in facts.commands if c.get("path") == command), {})
     drop = NOT_EVIDENCE + (() if described else DESCRIPTION)
@@ -632,7 +638,7 @@ def command_digest(facts: Facts, command: str, described: bool = False) -> str:
         for name, key in (("flags", "summary"), ("tier_when", "description")):
             if isinstance(kept.get(name), list):
                 kept[name] = [{k: v for k, v in i.items() if k != key} if isinstance(i, dict) else i for i in kept[name]]
-    text = json.dumps(kept, sort_keys=True, ensure_ascii=False) + adapter_digest(facts)
+    text = json.dumps(kept, sort_keys=True, ensure_ascii=False) + ("" if described else adapter_digest(facts))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -645,7 +651,8 @@ def fingerprint(facts: Facts, command: str) -> str:
 
 def question_fingerprint(facts: Facts, sha256: str, commands: list[str]) -> str:
     """What an evaluation result depends on: the question file, the commands it lists as an
-    Agent sees them, and the tool's handwritten guidance (DSKL-043)."""
+    Agent reads them, and the tool's handwritten guidance. A fix in the adapter's code leaves it
+    standing; the behavior matrices check the adapter (DSKL-043)."""
     text = json.dumps([sha256, sorted(command_digest(facts, c, described=True) for c in commands), guidance_digest(facts)])
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
