@@ -394,9 +394,9 @@
     {"rule": 9, "otherwise": true, "ok": true, "code": null}
   ],
   "batch": {
-    "item_keys": ["target", "operation_id", "ok", "code", "skipped"],
+    "item_keys": ["target", "operation_id", "ok", "code", "skipped", "result"],
     "summary_keys": ["total", "succeeded", "failed", "unknown", "skipped"],
-    "data_keys": ["operation_id", "items", "summary"],
+    "data_keys": ["operation_id", "items", "summary", "more_results"],
     "continue_on_error_default": true,
     "continue_on_error_default_dangerous": false
   },

@@ -17,6 +17,7 @@
     "state": {"enum": ["planned", "dispatched", "completed", "failed", "unknown"]},
     "preview": {"$ref": "preview.schema.json#/$defs/preview"},
     "receipt": {"$ref": "receipt.schema.json#/$defs/receipt"},
+    "result": {"description": "What the change of an item of a batch produced, as a call of one object returns it (DCLI-064)."},
     "planned_at": {"$ref": "error.schema.json#/$defs/utc"},
     "dispatched_at": {"$ref": "error.schema.json#/$defs/utc"},
     "finished_at": {"$ref": "error.schema.json#/$defs/utc"},

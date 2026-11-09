@@ -6,6 +6,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ### Fixed
 
+- A batch returned only each item's code, so what a change produced, such as what a moved track end connects to, was lost; `operation get` of an item gave only its receipt. Each item that succeeded now carries its `result`, as a call for that object alone returns it, and its record keeps it; when the results do not fit in the response, `more_results` names the `operation get` command that gives them (DCLI-064).
+- `reference` marked a parameter `required` although `--input`, or `--ids` for `--id`, gives it instead, so an Agent added it beside `--input` and the call was refused. Such a parameter now shows `required_without` with those flags (DCLI-031).
+- The example of `reference` named `session list`, which a tool that works only on files does not have. It names `context` now.
+- The fake host gave every call a fault matched the same injected value, so a value changed in one reply changed the next ones.
 - A flag of a mode the command does not work in, such as `--session` for a command that works only on files, got the hint of a flag with a near name, such as `--json`. The error now says which modes the command works in, and for a command that works on files, to name the file with `--doc`.
 - `spec.py sync` listed the template files that changed only in the run that moved the pin; a second run said nothing. `spec.py sync <version> --since <earlier version>` lists them again, and a run that changes nothing says so.
 - A save read back the fields of an object that a later write in the same session deleted, such as a note created and deleted before the save, and failed with `E_VERIFY_FAILED` although the document was right. A target whose last change deletes it is now checked only for being absent (DCLI-057).

@@ -479,6 +479,7 @@
 - `tier` 必须按命令支持的每种模式分别给出确认级别。取决于具体调用的级别，必须在 `tier_when` 里说明，比如 `doc close --discard`、关闭不是本工具启动的实例、另存为或导出时覆盖已有文件，以及命令自己登记的条件及其 `description`（DCLI-029）。
 - 命令登记了 `doc_kinds`、`long` 或 `verify_after_save` 时（登记了 `jobs` 的命令也显示 `long`，因为它同样返回任务），`reference` 必须显示出来，让 Agent 在调用之前就知道它接受哪些文档、会返回长任务、核实要等到保存。
 - 表示坐标的每个参数和输出字段，都必须写明它的 `coordinate_system`（DCLI-084）。
+- 必填参数能由 `--input` 给出（`--id` 还能由 `--ids` 给出，DCLI-064）时，必须用 `required_without` 列出这些参数，不写 `required`，免得 Agent 把它和这些参数一起传。
 - 不带参数的 `reference` 必须只返回索引，不超过 8000 个字符：每条命令只有路径和一句话摘要。限制和条件写在这条命令自己的说明里。
 - `reference --command <path>` 必须只返回一条命令，不超过 6000 个字符。
 - `reference --all --output <path>` 必须把全部命令的说明写进这个文件，响应里只给摘要（DCLI-008）。
@@ -844,7 +845,7 @@
   - `--input <file|->` 读入 `{"items": [{...}, ...]}`，每个对象有自己的值，比如把 20 个器件移到 20 个不同的位置。每一项用 `id` 指明对象；同一个对象出现在两项里时，必须返回 `E_USAGE`。`create` 命令的条目可以不带 `id`：每一项新建一个对象，由适配层在预览里给它目标键。
 - 列表为空时必须返回 `E_USAGE`。预览显示任何一个对象不能执行（`can_apply: false`）时，整批都禁止执行。批量操作先锁住全部目标（DCLI-060）。
 - 批量操作有自己的操作 ID，其中每个对象是一个子操作，有自己的记录和回执（DCLI-059）。
-- 批量操作成功时必须返回 `data` = `{operation_id, items, summary}`。每项是精简的 `{target, operation_id, ok, code}`，被跳过的对象为 `{target, ok: false, skipped: true}`；某一项的完整回执用 `operation get --id <operation_id>` 获取。`summary` 为 `{total, succeeded, failed, unknown, skipped}`。批量没有全部成功时，`error.details.batch` 里放同样的对象。
+- 批量操作成功时必须返回 `data` = `{operation_id, items, summary}`。每项是精简的 `{target, operation_id, ok, code}`，被跳过的对象为 `{target, ok: false, skipped: true}`；某一项的完整回执用 `operation get --id <operation_id>` 获取。成功的项还必须在响应放得下的范围内带上 `result`，即只对这个对象调用时会返回的结果（DCLI-068）；每一项的记录都保存它的结果，有放不下的时，`more_results` 给出取结果的 `operation get` 命令。`summary` 为 `{total, succeeded, failed, unknown, skipped}`。批量没有全部成功时，`error.details.batch` 里放同样的对象。
 - 全部对象成功才算成功。否则：有对象结果未知的，错误码必须为 `E_OUTCOME_UNKNOWN`，`lookup` 为 `operation list --state unknown --batch <operation_id>`；没有结果未知、但有对象已生效的，为 `E_PARTIAL`；都不是时，取第一个失败对象的错误码。
 - `--continue-on-error` 默认必须为 `true`，危险级命令默认必须为 `false`。批量停下后，剩余对象必须报告为已跳过，并计入 `summary.skipped`。
 - 会话变为 `busy`、`unresponsive`、`blocked` 或 `lost`（DCLI-204）时，不论 `--continue-on-error` 怎么设，批量都必须停下，剩余对象记为跳过。只要没有对象结果未知：已有对象生效时错误码为 `E_PARTIAL`，否则为该状态对应的错误码；`details.resume` 给出只覆盖未完成对象的命令。

@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import shlex
 import os
 import subprocess
 import sys
@@ -490,6 +491,22 @@ class InProcess(unittest.TestCase):
         records = (self.tmp / "state" / "operations")
         for path in records.glob("*.json"):
             self.assertNotIn("s3cret", path.read_text(encoding="utf-8"), "a secret reached an operation record")
+
+    def test_reference_says_what_input_and_ids_can_replace(self):
+        reg = registration(path="part update", modes=["file"], flags=[
+            {"name": "--id", "type": "string", "required": True}, {"name": "--value", "type": "string", "required": True},
+            {"name": "--ids", "type": "list"}, {"name": "--input", "type": "input"}], tolerances={})
+        self.tool = Tool(root=SAMPLE, adapter=SampleAdapter, commands=[reg], application="Files", versions="any",
+                         modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        code, env = self.run_tool("reference", "--command", "part update")
+        self.assertEqual(code, 0, env)
+        flags = {f["name"]: f for f in env["data"]["flags"]}
+        self.assertEqual((flags["--id"].get("required"), flags["--id"]["required_without"]), (None, ["--ids", "--input"]))
+        self.assertEqual((flags["--value"].get("required"), flags["--value"]["required_without"]), (None, ["--input"]))
+        self.assertTrue(flags["--doc"].get("required") or "required_without" not in flags["--doc"])
+        code, env = self.run_tool("reference", "--command", "reference")
+        for example in env["data"]["examples"]:
+            self.assertEqual(self.run_tool(*shlex.split(example)[1:])[0], 0, example)  # a file-mode tool runs its own examples
 
     def test_adapter_errors_keep_the_native_message_untrusted(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "missing", "--value", "x")
