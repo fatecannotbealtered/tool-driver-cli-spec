@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy the pinned copies of this specification release into a tool project: sync_spec.
 
-    python scripts/sync_spec.py <project>
+    python scripts/sync_spec.py <project> [--since <version>]
 
 It runs from an unpacked specification release (or a checkout of this repository) and
 replaces, as a whole, everything a tool pins (DREPO-030 to DREPO-035): the five
@@ -13,8 +13,10 @@ earlier release that this one no longer has are removed from ``.agent/``, ``lice
 
 It also lists the other template files that changed since the release the project pinned
 before, such as ``docs/E2E.md``: compare the project's copies with them and carry over what
-applies. That release comes from the download cache of ``scripts/spec.py``; when it is missing
-there, it is downloaded first, checked against ``.agent/SPEC_SHA256``.
+applies. ``--since`` names another release to compare with, so the list can be had again after
+the pin moved. That release comes from the download cache of ``scripts/spec.py``; when it is
+missing there, it is downloaded first, checked against ``.agent/SPEC_SHA256`` when that pins it,
+else against the SHA-256 published with it.
 
 Afterwards run ``python scripts/spec.py generate`` and ``python scripts/spec.py check`` in
 the project: the fixed text and the generated content follow the new release.
@@ -98,14 +100,15 @@ def download(version: str, pin: str | None) -> None:
     module.download(version, pin)
 
 
-def fetch_old(project: Path, before: str | None) -> str | None:
+def fetch_old(project: Path, before: str | None, pinned: bool = True) -> str | None:
     """Download release ``before`` when it is missing from the download cache, before sync
-    replaces the SHA-256 the project pinned with it; the reason when that fails."""
+    replaces the SHA-256 the project pinned with it; the reason when that fails. ``pinned``:
+    ``before`` is the release the project pinned, so ``.agent/SPEC_SHA256`` checks it."""
     if not before or before == bundle_version() or old_template(before) is not None:
         return None
     pin = project / ".agent" / "SPEC_SHA256"
     try:
-        download(before, (pin.read_text(encoding="utf-8").strip() or None) if pin.is_file() else None)
+        download(before, (pin.read_text(encoding="utf-8").strip() or None) if pinned and pin.is_file() else None)
     except (SystemExit, Exception) as exc:  # the download only serves the listing, never the sync
         return str(exc) or type(exc).__name__
     return None if old_template(before) is not None else f"release {before} holds no template/"
@@ -152,11 +155,13 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8")  # the console code page may lack a character of the output
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("project", type=Path)
+    parser.add_argument("--since", help="the release to list the template changes since; by default the one pinned before")
     args = parser.parse_args(argv)
     project = args.project.resolve()
     pinned_before = project / ".agent" / "SPEC_VERSION"
-    before = pinned_before.read_text(encoding="utf-8").strip() if pinned_before.is_file() else None
-    failed = fetch_old(project, before)
+    pinned = pinned_before.read_text(encoding="utf-8").strip() if pinned_before.is_file() else None
+    before = args.since or pinned
+    failed = fetch_old(project, before, pinned=before == pinned)
     changed = sync(project)
     for line in changed:
         print(line)
@@ -170,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
               f"in {old_template(before)} and carry over to the project's copy what applies:")
         for rel in template:
             print(f"  {rel}")
+    elif before == bundle_version():
+        print(f"The project pinned {before} already. To list the template files that changed since an earlier release, "
+              f"run `python scripts/spec.py sync {before} --since <earlier version>`.")
     return 0
 
 

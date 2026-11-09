@@ -129,4 +129,4 @@ Run it before you ask for the release in step 8, and whenever you are asked to r
 
 ## Move to a new specification release
 
-Run `python scripts/spec.py sync <version>`; it replaces every pinned copy, writes the generated content and lists the other template files that changed since the release pinned before: compare the project's copies with them and carry over what applies. Then read the CHANGELOG of the new release, run `python scripts/spec.py check` and `python scripts/spec.py suites`, and fix what they report.
+Run `python scripts/spec.py sync <version>`; it replaces every pinned copy, writes the generated content and lists the other template files that changed since the release pinned before: compare the project's copies with them and carry over what applies. `--since <version>` lists them again later, against that release. Then read the CHANGELOG of the new release, run `python scripts/spec.py check` and `python scripts/spec.py suites`, and fix what they report.

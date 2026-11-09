@@ -6,6 +6,7 @@ copies it, breaks one rule, and expects check_project to name the clause.
 from __future__ import annotations
 
 import hashlib
+import contextlib
 import io
 import json
 import os
@@ -291,6 +292,26 @@ class ProjectTest(unittest.TestCase):
             self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
             self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded
         self.assertEqual(sync_spec.template_changes(self.project, check_project.bundle_version()), [])
+
+    def test_sync_lists_the_template_changes_again_with_since(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        (self.project / ".agent" / "SPEC_SHA256").write_text("ab" * 32 + "\n", encoding="utf-8")  # pins this release
+        asked = []
+
+        def download(version, pin):
+            asked.append((version, pin))
+            old = cache / "tool-driver-cli-spec" / version / f"tool-driver-cli-spec-{version}" / "template"
+            shutil.copytree(REPO / "template", old)
+            (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", download):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project)]), 0)
+            self.assertIn("--since <earlier version>", out.getvalue())  # the same release again: how to list them
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project), "--since", "0.9.0"]), 0)
+        self.assertIn("  docs/E2E.md", out.getvalue())
+        self.assertEqual(asked, [("0.9.0", None)])  # checked against its published SHA-256, not this release's pin
 
     def test_sync_downloads_the_release_pinned_before(self):
         cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))

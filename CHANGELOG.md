@@ -7,6 +7,7 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 ### Fixed
 
 - A flag of a mode the command does not work in, such as `--session` for a command that works only on files, got the hint of a flag with a near name, such as `--json`. The error now says which modes the command works in, and for a command that works on files, to name the file with `--doc`.
+- `spec.py sync` listed the template files that changed only in the run that moved the pin; a second run said nothing. `spec.py sync <version> --since <earlier version>` lists them again, and a run that changes nothing says so.
 - The verb table did not say where a computation that only reads goes, such as working out a routing plan. It is `run`, declared `observe` (DCLI-022).
 
 ## [1.1.0] - 2026-11-09
