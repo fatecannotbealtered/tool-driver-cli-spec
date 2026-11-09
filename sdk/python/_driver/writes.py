@@ -91,6 +91,10 @@ class WriteSpec:
         """The adapter request ``operation resolve`` and ``doc undo`` replay to read the target back."""
         return None
 
+    def tolerances(self) -> dict[str, float]:
+        """How far each changed field may read back from the preview, by field: the command's own."""
+        return dict(self.command.tolerances)
+
     def settle_facts(self) -> dict[str, Any] | None:
         """What ``operation resolve`` needs, taken just before dispatch, to settle a standard
         write that changes no field the adapter reads back, such as the instances running."""
@@ -256,8 +260,11 @@ def dispatch(run: Run, cap: str, request: dict[str, Any]) -> dict[str, Any]:
     return reply
 
 
-def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]], tolerances: dict[str, float]) -> Verification:
-    """Read the changed fields back and compare them with the preview's ``after`` (DCLI-057)."""
+def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]],
+              tolerances: dict[Any, float | None]) -> Verification:
+    """Read the changed fields back and compare them with the preview's ``after`` (DCLI-057).
+    ``tolerances`` holds a tolerance by field, or by (target, field) when the changes were made by
+    other writes, as for a save."""
     try:
         result = run.backend.call("read_back", request, run.read_deadline_ms)
     except (CapabilityError, Unanswered, Lost, BadProtocol) as exc:
@@ -280,7 +287,7 @@ def read_back(run: Run, request: dict[str, Any], changes: list[dict[str, Any]], 
             missing.append(f"(no field)@{change['target']}")
         elif field in unreadable or field not in values:
             missing.append(f"{field}@{change['target']}")
-        elif not same(change["after"], values[field], tolerances.get(field)):
+        elif not same(change["after"], values[field], tolerances.get((change["target"], field), tolerances.get(field))):
             mismatched.append(f"{field}@{change['target']}")
     if mismatched:
         return Verification("failed", observed, mismatched)
@@ -732,7 +739,7 @@ class Engine:
         request = spec.stored_request()
         if request is not None:
             record["_request"] = request
-            record["_tolerances"] = dict(spec.command.tolerances)
+            record["_tolerances"] = spec.tolerances()
         if spec.command.long and spec.command.kind == "standard":
             record["_argv"] = worker_argv(self.run)  # its worker runs the same call (DCLI-065)
         record["_changes"] = self.mask(spec, [copy.deepcopy(c) for c in self._all_changes
@@ -1305,7 +1312,7 @@ class Engine:
                                  "summary": {"total": len(child_changes), "by_origin": {"tool": len(child_changes)} if child_changes else {},
                                              "by_kind": {target["kind"]: len(child_changes)} if child_changes else {}}},
                      "_call": record.get("_call"), "_request": spec.stored_request(index),
-                     "_tolerances": dict(spec.command.tolerances), "_seq": time.time_ns(),
+                     "_tolerances": spec.tolerances(), "_seq": time.time_ns(),
                      "_changes": self.mask(spec, [copy.deepcopy(c) for c in child_changes if c.get("origin", "tool") == "tool"])}
             child["preview"].pop("changes_truncated", None)
             child_keys = _keys([target], child_changes)

@@ -340,25 +340,39 @@ def d08(subject: Subject) -> list[str]:
             mismatched = out.details.get("receipt", {}).get("mismatched", [])
             check(out.code == "E_VERIFY_FAILED" and any(m.startswith("exists@") for m in mismatched),
                   f"{sample.path} reported a file that does not exist: {out.describe()}")
-    for sample in samples:
+    def off_by(case: Case, sample: Sample, argv: list[str], factor: float) -> bool:
+        """The application stores each toleranced number ``factor`` tolerances away from the preview."""
         tolerances = subject.registrations[sample.path]["tolerances"]
-        if not tolerances:
-            continue
+        dry = call(case, sample, "--dry-run", argv=argv)
+        values = {c["field"]: c["after"] + factor * tolerances[c["field"]] for c in dry.data["preview"]["changes"]
+                  if c.get("field") in tolerances and isinstance(c.get("after"), (int, float))}
+        if values:
+            case.control("fault", rule={"method": "apply", "command": sample.path, "action": "store", "values": values})
+        return bool(values)
+
+    for sample in [s for s in samples if subject.registrations[s.path]["tolerances"]][:1]:
         for factor, ok in ((2.0, False), (0.5, True)):
             with Case(subject) as case:
                 argv = sample.prepare(case)
-                dry = call(case, sample, "--dry-run", argv=argv)
-                values = {c["field"]: c["after"] + factor * tolerances[c["field"]] for c in dry.data["preview"]["changes"]
-                          if c.get("field") in tolerances and isinstance(c.get("after"), (int, float))}
-                if not values:
+                if not off_by(case, sample, argv, factor):
                     continue
-                case.control("fault", rule={"method": "apply", "command": sample.path, "action": "store", "values": values})
                 out = through(case, sample, argv)
                 if ok:
                     check(out.ok, f"{sample.path} stored within its tolerance: {out.describe()}")
                 else:
                     check(out.code == "E_VERIFY_FAILED", f"{sample.path} stored outside its tolerance: {out.describe()}")
-        break
+    for sample in [s for s in samples if s.mode == "session" and subject.registrations[s.path]["tolerances"]
+                   and "persist" not in subject.registrations[s.path]["effects"]][:1]:
+        # The save reads the change back within the tolerance of the write that made it.
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            if off_by(case, sample, argv, 0.5):
+                out = finish(case, through(case, sample, argv))
+                check(out.ok, f"{sample.path} stored within its tolerance: {out.describe()}")
+                receipt = out.data["receipt"]
+                save = finish(case, through(case, _std(subject, "doc save"),
+                                            ["--session", receipt["session"]["id"], "--doc", receipt["document"]["id"]]))
+                check(save.ok, f"doc save after {sample.path} stored within its tolerance: {save.describe()}")
     for sample in [s for s in samples if batchable(subject, s)][:1]:
         with Case(subject) as case:
             argv = sample.prepare(case)

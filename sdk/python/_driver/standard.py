@@ -1262,7 +1262,26 @@ class DocSave(_OnDocument):
         request = {"command": "doc save", "inputs": {}, "session": self.where.session["id"], "document": self.where.document["id"],
                    "operation_id": operation_id, "targets": sorted({c["target"] for c in fields}),
                    "fields": sorted({c["field"] for c in fields})}
-        return read_back(self.run, request, fields, {})
+        return read_back(self.run, request, fields, made_tolerances(self.run, self.where.session["id"], self.where.document["id"], fields))
+
+
+def made_tolerances(run: Run, session: str, doc_id: str, fields: list[dict[str, Any]]) -> dict[tuple[str, str], float | None]:
+    """Each field a save reads back, with the tolerance of the command whose write left the value
+    the save expects, so the save compares it as that write did (DCLI-057). That is the newest
+    write on the document that changed the field to that value, else the newest that changed it;
+    a field no write changed is compared exactly. A save's own record lists others' changes."""
+    writes = [r for r in run.records.all() if r.get("command") != "doc save"
+              and ((r.get("receipt") or {}).get("outcome") or {}).get("change") in ("applied", "partial", "unknown")
+              and (r.get("_call") or {}).get("session") == session and (r.get("_call") or {}).get("document") == doc_id]
+    writes.sort(key=lambda r: r.get("_seq", 0), reverse=True)
+    out: dict[tuple[str, str], float | None] = {}
+    for field in fields:
+        key = (field["target"], field["field"])
+        made = [(r, c) for r in writes for c in r.get("_changes", []) if (c.get("target"), c.get("field")) == key]
+        record = next((r for r, c in made if c.get("after") == field.get("after")), made[0][0] if made else None)
+        if record is not None:
+            out[key] = (record.get("_tolerances") or {}).get(key[1])
+    return out
 
 
 def deferred_records(run: Run, session: str, doc_id: str | None) -> list[dict[str, Any]]:
@@ -1394,6 +1413,10 @@ class DocUndo(_OnDocument):
     def stored_request(self, child: int | None = None) -> dict[str, Any] | None:
         return self.last.get("_request") if self.last else None
 
+    def tolerances(self) -> dict[str, float]:
+        """The fields go back as the undone command changed them, within that command's tolerances."""
+        return dict(self.last.get("_tolerances", {})) if self.last else {}
+
     def apply(self, operation_id: str, child: int | None = None) -> dict[str, Any]:
         # Mark the change as being undone before the undo is sent, so a second undo never
         # picks it again, whatever this one's outcome (DCLI-067).
@@ -1406,7 +1429,7 @@ class DocUndo(_OnDocument):
             return Verification("incomplete", notes=["There was no recorded change to compare."])
         request = {**self.last["_request"], "operation_id": operation_id, "targets": sorted({c["target"] for c in changes}),
                    "fields": sorted({c["field"] for c in changes})}
-        return read_back(self.run, request, changes, self.last.get("_tolerances", {}))
+        return read_back(self.run, request, changes, self.tolerances())
 
 
 def job_cancel(run: Run) -> Result:

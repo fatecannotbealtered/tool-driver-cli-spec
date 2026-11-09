@@ -149,7 +149,7 @@
 | `D05` | `session` | 派发之前弹窗挡住了软件；另外，修改本身在派发之后弹出了弹窗 | 派发之前：`E_HUMAN_REQUIRED`，带 `action` 和重新运行这次调用的 `resume` 命令。派发之后：操作的结果未知，目标保持锁定，`resume` 是查询命令，绝不是再写一次 | DCLI-066, DCLI-204 |
 | `D06` | `session`, `device` | 派发之后连接断开：单次写入，以及批量中的一个对象 | `E_OUTCOME_UNKNOWN`，`lookup` 指向 `operation resolve`；目标保持锁定，直到查明结果。批量时，`lookup` 为 `operation list --state unknown --batch <id>`，该对象保持锁定 | DCLI-014, DCLI-035, DCLI-060, DCLI-063, DCLI-064, DCLI-275 |
 | `D07` | `writes` | 修改已生效，但没能读回 | `E_VERIFY_INCOMPLETE`，附回执 | DCLI-057, DCLI-062 |
-| `D08` | `writes` | 读回的值与预览中 `after` 的差超出登记的容差：每个写命令的样例，以及批量中的一个对象；另外，数值落在容差之内 | `E_VERIFY_FAILED`，列出不符的字段；批量时，该对象的条目为 `E_VERIFY_FAILED`；落在容差内时写入成功 | DCLI-057, DCLI-062, DCLI-064 |
+| `D08` | `writes` | 读回的值与预览中 `after` 的差超出登记的容差：每个写命令的样例，以及批量中的一个对象；另外，数值落在容差之内，写入要等存盘时再 `doc save` 这个文档 | `E_VERIFY_FAILED`，列出不符的字段；批量时，该对象的条目为 `E_VERIFY_FAILED`；落在容差内时写入和存盘都成功 | DCLI-057, DCLI-062, DCLI-064 |
 | `D09` | `session` | 会话模式下做一次修改 | 保存维度为 `unchanged`，`dirty` 为 `true`；`doc save` 之后保存维度为 `saved` | DCLI-058, DCLI-061 |
 | `D10` | `session` | 关闭有未保存修改的文档 | 被拒绝，`E_CONFLICT` `unsaved_changes`；带 `--discard` 时属于危险级，没有 `--dangerous` 也被拒绝 | DCLI-212 |
 | `D11` | `jobs` | 取消长任务，包括实例忙的时候；另外，任务结束时产出读回成功、读不回、或只完成一部分 | 先报告 `cancel_requested`；软件仍报告任务在运行时，`job get` 不报告它已取消；软件确认已停止后，任务的 `state` 才变为 `cancelled`；`job get` 给出由回执推导的 `ok` 和 `code`，已取消的任务还带 `message` 和含 `next_action` 的 `details` | DCLI-065, DCLI-220, DCLI-221, DSEC-018 |

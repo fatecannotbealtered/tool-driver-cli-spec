@@ -1138,5 +1138,69 @@ class ResolveStandardWrites(unittest.TestCase):
             self.assertIs(self.settled(case, resume)["document"]["exists"], True)
 
 
+class SaveTolerances(unittest.TestCase):
+    """A save, and an undo, compare a field with the tolerance of the command that changed it (DCLI-057)."""
+
+    def moved_within_tolerance(self, case: Case, off: float = 0.0004) -> None:
+        case.control("fault", rule={"method": "apply", "command": "part move", "action": "store",
+                                    "values": {"x_mm": 3 + off, "y_mm": 4 - off}})
+        out = case.run(*MOVE, "--id", "R1", "--x", "3mm", "--y", "4mm")
+        if off <= 0.001:
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed")
+        else:
+            self.assertEqual(out.code, "E_VERIFY_FAILED", out.stdout[:400])
+
+    def test_a_save_reads_a_change_back_within_the_tolerance_of_the_write_that_made_it(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertTrue(out.ok, out.stdout[:600])
+            self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed")
+
+    def test_a_long_save_reads_it_back_the_same_way(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed")
+
+    def test_a_number_beyond_the_tolerance_still_fails_the_save(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case, off=0.0015)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertEqual(out.code, "E_VERIFY_FAILED", out.stdout[:600])
+
+    def test_a_save_takes_the_tolerance_of_the_write_that_left_the_value(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            later = case.run(*MOVE, "--id", "R1", "--x", "5mm", "--y", "6mm")
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(later.ok and undo.ok, undo.stdout[:400])
+            for op in (later.data["operation_id"], undo.data["operation_id"]):
+                # As if the later change came from a command without tolerances.
+                path = case.state_dir / "operations" / f"{op}.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record["_tolerances"] = {}
+                path.write_text(json.dumps(record), encoding="utf-8")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertTrue(out.ok, out.stdout[:600])
+
+    def test_an_undo_keeps_the_tolerances_of_the_change_it_takes_back(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:400])
+            record = json.loads((case.state_dir / "operations" / f"{undo.data['operation_id']}.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["_tolerances"], {"x_mm": 0.001, "y_mm": 0.001})
+
+
 if __name__ == "__main__":
     unittest.main()
