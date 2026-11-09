@@ -576,7 +576,8 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
     if view.get("ok"):
         return 0, {"ok": True, "data": view}
     code = view.get("code") or "E_UNKNOWN"
-    return exits.get(code, 1), {"ok": False, "error": {"code": code}, "data": view}
+    error = {"code": code, **{k: view[k] for k in ("message", "details") if k in view}}  # what the call would have said
+    return exits.get(code, 1), {"ok": False, "error": error, "data": view}
 
 
 def _save_verifies(tool: list[str], root: Path, env: dict[str, str], values: dict[str, str], notes: list[str],

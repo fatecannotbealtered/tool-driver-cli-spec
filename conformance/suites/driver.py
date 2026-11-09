@@ -340,25 +340,39 @@ def d08(subject: Subject) -> list[str]:
             mismatched = out.details.get("receipt", {}).get("mismatched", [])
             check(out.code == "E_VERIFY_FAILED" and any(m.startswith("exists@") for m in mismatched),
                   f"{sample.path} reported a file that does not exist: {out.describe()}")
-    for sample in samples:
+    def off_by(case: Case, sample: Sample, argv: list[str], factor: float) -> bool:
+        """The application stores each toleranced number ``factor`` tolerances away from the preview."""
         tolerances = subject.registrations[sample.path]["tolerances"]
-        if not tolerances:
-            continue
+        dry = call(case, sample, "--dry-run", argv=argv)
+        values = {c["field"]: c["after"] + factor * tolerances[c["field"]] for c in dry.data["preview"]["changes"]
+                  if c.get("field") in tolerances and isinstance(c.get("after"), (int, float))}
+        if values:
+            case.control("fault", rule={"method": "apply", "command": sample.path, "action": "store", "values": values})
+        return bool(values)
+
+    for sample in [s for s in samples if subject.registrations[s.path]["tolerances"]][:1]:
         for factor, ok in ((2.0, False), (0.5, True)):
             with Case(subject) as case:
                 argv = sample.prepare(case)
-                dry = call(case, sample, "--dry-run", argv=argv)
-                values = {c["field"]: c["after"] + factor * tolerances[c["field"]] for c in dry.data["preview"]["changes"]
-                          if c.get("field") in tolerances and isinstance(c.get("after"), (int, float))}
-                if not values:
+                if not off_by(case, sample, argv, factor):
                     continue
-                case.control("fault", rule={"method": "apply", "command": sample.path, "action": "store", "values": values})
                 out = through(case, sample, argv)
                 if ok:
                     check(out.ok, f"{sample.path} stored within its tolerance: {out.describe()}")
                 else:
                     check(out.code == "E_VERIFY_FAILED", f"{sample.path} stored outside its tolerance: {out.describe()}")
-        break
+    for sample in [s for s in samples if s.mode == "session" and subject.registrations[s.path]["tolerances"]
+                   and "persist" not in subject.registrations[s.path]["effects"]][:1]:
+        # The save reads the change back within the tolerance of the write that made it.
+        with Case(subject) as case:
+            argv = sample.prepare(case)
+            if off_by(case, sample, argv, 0.5):
+                out = finish(case, through(case, sample, argv))
+                check(out.ok, f"{sample.path} stored within its tolerance: {out.describe()}")
+                receipt = out.data["receipt"]
+                save = finish(case, through(case, _std(subject, "doc save"),
+                                            ["--session", receipt["session"]["id"], "--doc", receipt["document"]["id"]]))
+                check(save.ok, f"doc save after {sample.path} stored within its tolerance: {save.describe()}")
     for sample in [s for s in samples if batchable(subject, s)][:1]:
         with Case(subject) as case:
             argv = sample.prepare(case)
@@ -435,6 +449,8 @@ def d11(subject: Subject) -> None:
         got = case.run("job", "get", "--job", job["id"], "--wait", "10s")
         check(got.ok and got.data["state"] == "cancelled", f"job get after the application stopped: {got.describe()}")
         check(got.data.get("ok") is False and got.data.get("code") == "E_INTERRUPTED", f"a cancelled job's outcome: {got.data}")
+        check(got.data.get("message") and (got.data.get("details") or {}).get("next_action"),
+              f"a cancelled job does not say what happened and what to do next: {got.data}")
     if "session" in subject.modes and sample.mode == "session":
         with Case(subject) as case:
             argv = sample.prepare(case)
@@ -767,18 +783,24 @@ def d25(subject: Subject) -> None:
 
 def d26(subject: Subject) -> list[str]:
     """A long command returns a job at once; its worker settles it like any write, or returns
-    the read's result; a long read needs no scope (DCLI-065)."""
+    the read's result; a long read needs no scope (DCLI-065). A job the application refuses
+    carries the error the call would have returned (DCLI-220)."""
     longs = [p for p, r in subject.registrations.items() if r.get("long") and p in subject.samples]
     check(longs, "a long command has no sample in the normal row of its behavior matrix")
     for path in longs:
         reg = subject.registrations[path]
         sample = Sample(path, subject.samples[path], mode_of(subject, path, subject.samples[path]), True)
         writes = reg["effects"] != ["observe"]
-        for mismatch in ((False, True) if writes else (False,)):
+        for variant in (("normal", "mismatch", "refused") if writes else ("normal",)):
+            mismatch = variant == "mismatch"
             with Case(subject) as case:
                 argv = sample.prepare(case)
                 if not writes:
                     case.revoke()
+                if variant == "refused":
+                    case.control("fault", rule={"method": "apply", "command": path, "action": "error",
+                                                "error": {"code": "E_CONFLICT", "conflict": "application_state",
+                                                          "message": "conformance: finish the other task first"}})
                 if mismatch:
                     fields = [f for f in _fields_of(case, sample, argv) if f != "exists"]
                     if fields:
@@ -798,6 +820,13 @@ def d26(subject: Subject) -> list[str]:
                 if not writes:
                     check(data.get("ok") and "result" in data and data.get("operation_id") is None,
                           f"{path}: the read job gave no result: {done.describe()}")
+                elif variant == "refused":
+                    details = data.get("details") or {}
+                    check((data.get("state"), data.get("code"), details.get("conflict")) == ("failed", "E_CONFLICT", "application_state")
+                          and "finish the other task first" in str(data.get("message")),
+                          f"{path}: a job the application refused does not carry its error: {done.describe()}")
+                    check(f" {path} " in str(details.get("next_action")) and "job get" not in str(details.get("next_action")),
+                          f"{path}: a refused job does not lead back to its first call: {details.get('next_action')}")
                 elif mismatch:
                     check(data.get("code") == "E_VERIFY_FAILED", f"{path}: a mismatch in the worker was not reported: {done.describe()}")
                 else:

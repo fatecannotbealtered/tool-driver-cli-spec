@@ -900,15 +900,17 @@ class DialogStopsLongJob(unittest.TestCase):
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
             data = done.data
             self.assertEqual((data["state"], data["ok"], data["code"]), ("unknown", False, "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual(data["action"], "dismiss_dialog")
-            self.assertIn("operation resolve --id", data["resume"])  # never the write again
-            self.assertEqual(data.get("title"), "Routing options")
-            self.assertIn("$.data.title", done.envelope["meta"]["untrusted"])
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual(data["details"]["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", data["details"]["resume"])  # never the write again
+            self.assertIn("operation resolve --id", data["details"]["next_action"])
+            self.assertEqual(data["details"].get("title"), "Routing options")
+            self.assertIn("$.data.details.title", done.envelope["meta"]["untrusted"])
             unknown = case.run("operation", "list", "--state", "unknown")
             self.assertEqual(len(unknown.data["items"]), 1, unknown.stdout[:400])  # it stays locked until resolved
             listed = case.run("job", "list")
             self.assertEqual(listed.data["items"][0]["code"], "E_HUMAN_REQUIRED", listed.stdout[:600])
-            self.assertIn("$.data.items[*].title", listed.envelope["meta"]["untrusted"])
+            self.assertIn("$.data.items[*].details.title", listed.envelope["meta"]["untrusted"])
 
     def test_resolving_while_the_dialog_is_open_asks_for_the_person_again(self):
         with Case(subject()) as case:
@@ -934,7 +936,12 @@ class DialogStopsLongJob(unittest.TestCase):
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
             data = done.data
             self.assertEqual((data["state"], data["code"]), ("failed", "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual({"action", "resume", "title"} & set(data), set())  # nothing was sent: run the write again
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            # Nothing was sent: once the person is done, the write starts again from its first call.
+            resume = data["details"]["resume"]
+            self.assertIn("route run --session fake-1 --doc doc-1 --net GND", resume)
+            self.assertNotIn("job get", resume)
+            self.assertNotIn("--confirm", resume)
             self.assertEqual(case.run("operation", "list", "--state", "unknown").data["items"], [])
 
     def test_a_long_standard_command_a_dialog_stops_says_the_same(self):
@@ -948,8 +955,91 @@ class DialogStopsLongJob(unittest.TestCase):
             self.assertTrue(out.ok, out.stdout[:400])
             done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=long)
             self.assertEqual((done.data["state"], done.data["code"]), ("unknown", "E_HUMAN_REQUIRED"), done.stdout[:600])
-            self.assertEqual(done.data["action"], "dismiss_dialog")
-            self.assertIn("operation resolve --id", done.data["resume"])
+            self.assertEqual(done.data["details"]["action"], "dismiss_dialog")
+            self.assertIn("operation resolve --id", done.data["details"]["resume"])
+
+
+class FailedJobs(unittest.TestCase):
+    """A job that ends with ok false carries the error the call would have returned (DCLI-220)."""
+
+    def test_a_write_job_the_application_refuses_says_why_and_how_to_start_again(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error",
+                                        "error": {"code": "E_CONFLICT", "conflict": "unsaved_changes",
+                                                  "message": "Save board.fake first.", "native_message": "board.fake has unsaved changes"}})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["ok"], data["code"]), ("failed", False, "E_CONFLICT"), done.stdout[:600])
+            self.assertEqual(data["message"], "Save board.fake first.")
+            details = data["details"]
+            self.assertEqual((details["conflict"], details["dispatch_state"]), ("unsaved_changes", "not_started"))
+            self.assertEqual(details["native_message"], "board.fake has unsaved changes")
+            self.assertNotIn("receipt", details)  # the job carries its own
+            self.assertIn("route run --session fake-1 --doc doc-1 --net GND", details["next_action"])
+            self.assertNotIn("job get", details["next_action"])
+            for path in ("$.data.message", "$.data.details.native_message", "$.data.details.next_action"):
+                self.assertIn(path, done.envelope["meta"]["untrusted"])
+            notes = data["receipt"]["notes"]
+            self.assertEqual([n for n in notes if n.startswith("The application said:")],
+                             ["The application said: board.fake has unsaved changes"])
+            listed = case.run("job", "list").data["items"][0]
+            self.assertEqual((listed["message"], listed["details"]["conflict"]), ("Save board.fake first.", "unsaved_changes"))
+
+    def test_a_long_confirmed_save_the_application_refuses_leads_back_to_its_first_call(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            case.run("part", "move", "--session", "fake-1", "--doc", "doc-1", "--id", "R1", "--x", "3mm", "--y", "4mm")
+            case.control("fault", rule={"method": "save_doc", "action": "error",
+                                        "error": {"code": "E_CONFLICT", "conflict": "unsaved_changes",
+                                                  "message": "Save the model board.fake refers to first."}})
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["code"], data["details"]["conflict"]), ("failed", "E_CONFLICT", "unsaved_changes"),
+                             done.stdout[:600])
+            self.assertEqual(data["message"], "Save the model board.fake refers to first.")
+            step = data["details"]["next_action"]
+            self.assertIn("doc save --session fake-1 --doc doc-1`", step)
+            self.assertNotIn("--confirm", step)  # the job spent the token
+            self.assertNotIn("same command", step)
+
+    def test_a_job_an_older_runtime_recorded_still_says_what_to_do(self):
+        dialog = {"code": "E_HUMAN_REQUIRED", "action": "dismiss_dialog", "title": "Routing options"}
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "route run", "action": "error", "apply_first": True,
+                                        "error": dialog})
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s")
+            path = case.state_dir / "operations" / f"{done.data['operation_id']}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            for key in ("message", "details", "again"):
+                record["_job"].pop(key, None)
+            record["_job"]["human"] = {"action": "dismiss_dialog", "title": "Routing options"}  # as 1.0.9 kept it
+            path.write_text(json.dumps(record), encoding="utf-8")
+            old = case.run("job", "get", "--job", out.data["result"]["job"]["id"]).data
+            self.assertEqual(schemas.errors(old, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((old["details"]["action"], old["details"]["title"]), ("dismiss_dialog", "Routing options"))
+            self.assertIn("operation resolve --id", old["details"]["resume"])
+
+    def test_a_failed_long_read_says_why_and_how_to_run_it_again(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "read", "command": "design check", "action": "error",
+                                        "error": {"code": "E_NOT_FOUND", "message": "No rule set named strict."}})
+            out = case.run("design", "check", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["job"]["id"], "--wait", "60s")
+            data = done.data
+            self.assertEqual(schemas.errors(data, "objects.schema.json", "/$defs/job"), [])
+            self.assertEqual((data["state"], data["code"], data["message"]), ("failed", "E_NOT_FOUND", "No rule set named strict."),
+                             done.stdout[:600])
+            self.assertIn("design check --session fake-1 --doc doc-1", data["details"]["next_action"])
+            self.assertNotIn("job get", data["details"]["next_action"])
 
 
 class ResolveStandardWrites(unittest.TestCase):
@@ -1046,6 +1136,70 @@ class ResolveStandardWrites(unittest.TestCase):
             self.assertIs(self.settled(case, resume)["document"]["open"], False)
             resume = self.stopped(case, "create_doc", "doc", "create", "--session", "fake-1")
             self.assertIs(self.settled(case, resume)["document"]["exists"], True)
+
+
+class SaveTolerances(unittest.TestCase):
+    """A save, and an undo, compare a field with the tolerance of the command that changed it (DCLI-057)."""
+
+    def moved_within_tolerance(self, case: Case, off: float = 0.0004) -> None:
+        case.control("fault", rule={"method": "apply", "command": "part move", "action": "store",
+                                    "values": {"x_mm": 3 + off, "y_mm": 4 - off}})
+        out = case.run(*MOVE, "--id", "R1", "--x", "3mm", "--y", "4mm")
+        if off <= 0.001:
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed")
+        else:
+            self.assertEqual(out.code, "E_VERIFY_FAILED", out.stdout[:400])
+
+    def test_a_save_reads_a_change_back_within_the_tolerance_of_the_write_that_made_it(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertTrue(out.ok, out.stdout[:600])
+            self.assertEqual(out.data["receipt"]["outcome"]["verification"], "passed")
+
+    def test_a_long_save_reads_it_back_the_same_way(self):
+        env = {"SAMPLE_CLI_LONG": "doc save"}
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", env=env)
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"], env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            done = case.run("job", "get", "--job", out.data["result"]["job"]["id"], "--wait", "60s", env=env)
+            self.assertTrue(done.data["ok"], done.stdout[:600])
+            self.assertEqual(done.data["receipt"]["outcome"]["verification"], "passed")
+
+    def test_a_number_beyond_the_tolerance_still_fails_the_save(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case, off=0.0015)
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertEqual(out.code, "E_VERIFY_FAILED", out.stdout[:600])
+
+    def test_a_save_takes_the_tolerance_of_the_write_that_left_the_value(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            later = case.run(*MOVE, "--id", "R1", "--x", "5mm", "--y", "6mm")
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(later.ok and undo.ok, undo.stdout[:400])
+            for op in (later.data["operation_id"], undo.data["operation_id"]):
+                # As if the later change came from a command without tolerances.
+                path = case.state_dir / "operations" / f"{op}.json"
+                record = json.loads(path.read_text(encoding="utf-8"))
+                record["_tolerances"] = {}
+                path.write_text(json.dumps(record), encoding="utf-8")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            out = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"])
+            self.assertTrue(out.ok, out.stdout[:600])
+
+    def test_an_undo_keeps_the_tolerances_of_the_change_it_takes_back(self):
+        with Case(subject()) as case:
+            self.moved_within_tolerance(case)
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:400])
+            record = json.loads((case.state_dir / "operations" / f"{undo.data['operation_id']}.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["_tolerances"], {"x_mm": 0.001, "y_mm": 0.001})
 
 
 if __name__ == "__main__":

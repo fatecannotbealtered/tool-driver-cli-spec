@@ -38,12 +38,26 @@ class BuildTest(unittest.TestCase):
                                "scripts/run_matrix.py", "scripts/run_eval.py", "conformance/eval/read_answer.py",
                                "skills/build-driver-cli/SKILL.md"):
                     self.assertIn(prefix + needed, names)
-                self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc")])
+                self.assertFalse([n for n in names if any(c in n.split("/") for c in ("__pycache__", ".ruff_cache", ".pytest_cache", ".mypy_cache")) or n.endswith(".pyc")])
                 self.assertTrue(all(n.startswith(prefix) for n in names))
                 manifest = json.loads(archive.read(prefix + "MANIFEST.json"))
                 self.assertEqual(manifest["version"], bundle.version())
                 for name, digest in manifest["files"].items():
                     self.assertEqual(hashlib.sha256(archive.read(prefix + name)).hexdigest(), digest, name)
+
+
+class LocalFilesTest(unittest.TestCase):
+    def test_a_file_git_does_not_track_never_ships(self):
+        cache = ROOT / "template" / ".ruff_cache-bundle-test"
+        cache.mkdir(exist_ok=True)
+        try:
+            (cache / "entry").write_text("local", encoding="utf-8")
+            names = {p.relative_to(ROOT).as_posix() for p in bundle.bundle_files()}
+            self.assertNotIn("template/.ruff_cache-bundle-test/entry", names)
+            self.assertIn("template/package.json", names)
+        finally:
+            (cache / "entry").unlink(missing_ok=True)
+            cache.rmdir()
 
 
 class NotesTest(unittest.TestCase):

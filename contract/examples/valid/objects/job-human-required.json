@@ -8,17 +8,34 @@
   "receipt": {
     "operation_id": "op_k2m4",
     "command": "session open",
-    "target": {"key": "file:///D:/proj/board.kicad_pcb", "kind": "document", "label": "board.kicad_pcb"},
-    "effects": ["lifecycle"],
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "lifecycle"
+    ],
     "tier": "direct",
-    "outcome": {"execution": "unknown", "change": "unknown", "delivery": "unknown", "persistence": "unknown", "verification": "not_run"},
+    "outcome": {
+      "execution": "unknown",
+      "change": "unknown",
+      "delivery": "unknown",
+      "persistence": "unknown",
+      "verification": "not_run"
+    },
     "observed": {},
     "mismatched": []
   },
   "result": {},
   "ok": false,
   "code": "E_HUMAN_REQUIRED",
-  "action": "dismiss_dialog",
-  "title": "Recover unsaved work?",
-  "resume": "demo-cli operation resolve --id op_k2m4"
+  "message": "The change was sent, then the application asked for a person; it may have taken effect. A dialog is open.",
+  "details": {
+    "dispatch_state": "dispatched",
+    "action": "dismiss_dialog",
+    "resume": "demo-cli operation resolve --id op_k2m4",
+    "title": "Recover unsaved work?",
+    "next_action": "Ask the person to deal with the dialog, then run `demo-cli operation resolve --id op_k2m4`; never send the write again."
+  }
 }
