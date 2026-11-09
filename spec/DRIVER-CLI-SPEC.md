@@ -314,7 +314,7 @@ A domain command MUST take its verb from this table. It MUST NOT use synonyms su
 | `import` | `change` | Imports an external file into the current document |
 | `render` | `artifact` | Produces a picture, a PDF or another preview |
 | `export` | `artifact` | Writes the content to a file in another format |
-| `run` | — | Performs an action, short or long, with the effect the command declares; work longer than 60 seconds becomes a long job (DCLI-065) |
+| `run` | — | Performs an action, short or long, with the effect the command declares, such as an analysis, or a computation that only reads and returns what it worked out, such as a routing plan, declared `observe`; work longer than 60 seconds becomes a long job (DCLI-065) |
 | `stop` | `lifecycle` | Halts work in progress, such as a machine cycle or a running analysis (DSEC-018) |
 
 Why: With a short fixed verb list the Agent never wonders whether to call `show`, `info` or `get`.

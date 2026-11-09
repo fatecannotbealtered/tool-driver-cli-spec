@@ -4,6 +4,11 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Fixed
+
+- A flag of a mode the command does not work in, such as `--session` for a command that works only on files, got the hint of a flag with a near name, such as `--json`. The error now says which modes the command works in, and for a command that works on files, to name the file with `--doc`.
+- The verb table did not say where a computation that only reads goes, such as working out a routing plan. It is `run`, declared `observe` (DCLI-022).
+
 ## [1.1.0] - 2026-11-09
 
 Evidence follows what it depends on, not the version number, from the Xpedition tool's 1.2.0 release. After syncing, new live runs and evaluation results carry fingerprints and keep counting across versions until the command, the adapter's code or the guidance they depend on changes. Records and reports written before keep counting for their minor version; run the matrices and questions once more to give them fingerprints. `python scripts/spec.py check` names what to run again, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs only the questions that need it.

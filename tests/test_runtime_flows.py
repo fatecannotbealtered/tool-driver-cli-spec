@@ -186,6 +186,19 @@ class OddReplies(unittest.TestCase):
             self.assertEqual(resolved.code, "E_UNSUPPORTED", resolved.stdout[:400])
 
 
+class FlagHints(unittest.TestCase):
+    def test_a_mode_flag_the_command_does_not_take_names_its_modes(self):
+        with Case(subject()) as case:
+            out = case.run("part", "update", "--session", "fake-1", "--doc", "board.fake", "--id", "R1")
+            self.assertEqual(out.code, "E_USAGE", out.stdout[:400])
+            self.assertIn("works only in file mode", out.envelope["error"]["message"])
+            self.assertIn("--doc <path>", out.details["next_action"])
+            self.assertNotIn("Did you mean", out.details["next_action"])
+            out = case.run("axis", "move", "--session", "fake-1")
+            self.assertIn("works only in device mode", out.envelope["error"]["message"])
+            self.assertNotIn("--doc", out.details["next_action"])
+
+
 class Undo(unittest.TestCase):
     def test_a_second_undo_takes_the_change_before(self):
         with Case(subject()) as case:
