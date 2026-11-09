@@ -176,6 +176,9 @@ class ProjectTest(unittest.TestCase):
         self.setUp()
         self.edit("CHANGELOG.md", "## [Unreleased]", "## [0.1.0] - 2026-01-01\n\n### Fixed\n\n- x\n\n## [Unreleased]")
         self.expect("DREPO-018")
+        self.setUp()
+        self.edit("CHANGELOG.md", "### Added", "### Added\n\n- The BOM check accepts the ideographic comma `、` as a separator.")
+        self.assertNotIn("DREPO-018", self.clauses())  # code quotes the character itself
 
     def test_placeholders_anywhere(self):
         self.edit("demo_cli/adapter/__init__.py", "return {\"found\": False}", "return {\"found\": False}  # {{fill: later}}")
@@ -334,6 +337,47 @@ class ProjectTest(unittest.TestCase):
             self.assertFalse((cache / "tool-driver-cli-spec" / "0.9.0").exists())
             sync_spec.download("0.9.0", hashlib.sha256(data).hexdigest())
         self.assertTrue((cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+
+    def test_a_download_link_that_keeps_failing_is_replaced_by_the_github_api(self):
+        import urllib.error
+
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("tool-driver-cli-spec-0.9.0/VERSION", "0.9.0\n")
+        data = payload.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        files = {"tool-driver-cli-spec-0.9.0.zip": data, "tool-driver-cli-spec-0.9.0.sha256": f"{digest}  x.zip\n".encode()}
+        asked = []
+
+        def urlopen(request, timeout):
+            url = request.full_url
+            asked.append(url)
+            if "/releases/download/" in url:
+                raise urllib.error.HTTPError(url, 504, "Gateway Timeout", {}, None)
+            if url.endswith("/releases/tags/v0.9.0"):
+                assets = [{"name": n, "url": f"https://api.example/assets/{n}"} for n in files]
+                return io.BytesIO(json.dumps({"assets": assets}).encode())
+            self.assertEqual(request.get_header("Accept"), "application/octet-stream")
+            return io.BytesIO(files[url.rsplit("/", 1)[1]])
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", urlopen), \
+                mock.patch("time.sleep") as slept:
+            sync_spec.download("0.9.0", None)
+        release = cache / "tool-driver-cli-spec" / "0.9.0"
+        self.assertEqual((release / "bundle.sha256").read_text(encoding="utf-8").strip(), digest)  # still checked
+        self.assertTrue((release / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+        self.assertEqual([c.args[0] for c in slept.call_args_list], [2, 4, 8] * 2)  # each link tried four times
+        self.assertEqual(len([u for u in asked if "/releases/download/" in u]), 8)
+
+        def missing(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", missing), \
+                mock.patch("time.sleep") as slept, self.assertRaises(SystemExit) as stop:
+            sync_spec.download("0.8.0", None)
+        self.assertFalse(slept.called)  # a release that does not exist is not asked for again
+        self.assertIn("nor through the GitHub API", str(stop.exception))
 
     # -------------------------------------------------------------- versions, platforms and the survey
 
@@ -774,6 +818,28 @@ class ProjectTest(unittest.TestCase):
         self.assertNotEqual(live_path, str(mine))
         self.assertIsNone(none)  # no scope file at all
         self.assertFalse(Path(live_path).exists())  # removed when the run ended
+
+    def test_run_matrix_asks_for_no_target_the_rows_do_not_use(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        matrix = self.project / "tests" / "matrix" / "part-get.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        row = next(r for r in data["rows"] if r["row"] == "invalid_input")
+        row.clear()
+        row.update(row="invalid_input", applies=True, arguments=["--session", "{session}", "--id", ""],
+                   expected={"exit": 2, "code": "E_USAGE"})
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        granted = target.resolve().as_uri() + "/"
+        self.authorize(granted)
+        argv = [str(self.project), "--command", "part get", "--row", "invalid_input", "--set", "session=s1",
+                "--application-version", "1.5.0"]
+        with mock.patch.object(run_matrix, "_confirmed", return_value=(2, b'{"ok": false, "error": {"code": "E_USAGE"}}')):
+            self.assertEqual(run_matrix.main(argv), 0)
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-get.json")).read_text(encoding="utf-8"))
+        self.assertEqual(record["targets"], [granted])  # the run's scope held every authorized target
+        with self.assertRaises(SystemExit):
+            run_matrix.main([*argv[:4], "normal", *argv[5:]])  # a row that names the document still needs --set doc=
 
     def test_covered(self):
         base = self.work / "e2e"

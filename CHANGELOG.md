@@ -4,6 +4,12 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/spec.py` downloaded the release once, from one link. When GitHub answered that link with HTTP 504 for some minutes, every tool's check and release stopped. It now tries a failed download again after 2, 4 and 8 seconds, and then fetches the same file through the GitHub API; the bundle's SHA-256 is checked as before.
+- `run_matrix` refused a live run that named no document, folder or device, even when the rows it ran used none, such as a row that takes only the session. It now asks only for the values the rows use; the record of such a run lists every authorized target, since its scope held them all.
+- The English-only check of `CHANGELOG.md` also flagged a character quoted in code, such as the ideographic comma in `、`. Code spans are skipped now (DREPO-018).
+
 ## [1.0.10] - 2026-11-08
 
 Fixes from the Creo tool's live run and the 1.0.9 release bundle. After syncing, a tool copies the long-job sentence of the template's entry Skill again, and anything that reads `job get` finds a failed job's error in `code`, `message` and `details`.

@@ -35,6 +35,7 @@ BUNDLE = Path(__file__).resolve().parents[1]
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\Z")
 CJK = re.compile(r"[㐀-鿿豈-﫿　-〿＀-￯]")
+CODE_SPAN = re.compile(r"`[^`\n]*`")  # an English-only text may quote any character in code
 LATIN = re.compile(r"[A-Za-z]{3,}")
 VARIABLES = ["tool", "package", "pkg", "PREFIX", "product", "application", "versions", "repo", "author", "year", "modes", "host_component",
              "version", "spec_version"]
@@ -1014,7 +1015,7 @@ class Checker:
         heads = []
         group_index = -1
         for number, line in enumerate(text.split("\n"), 1):
-            if CJK.search(line):
+            if CJK.search(CODE_SPAN.sub("", line)):
                 self.add("DREPO-018", "CHANGELOG.md", "the CHANGELOG is English only", number)
             if line.startswith("## "):
                 heads.append((line[3:].strip(), number))
@@ -1357,7 +1358,7 @@ class Checker:
 
     def entry_template_lines(self) -> set[str]:
         """Distinctive lines of the template's write recipe and STOP checkpoints."""
-        text = template_text(f"skills/{{{{tool}}}}/SKILL.md", self.facts) if self.facts.reference is not None else None
+        text = template_text("skills/{{tool}}/SKILL.md", self.facts) if self.facts.reference is not None else None
         if text is None:
             return set()
         out = set()

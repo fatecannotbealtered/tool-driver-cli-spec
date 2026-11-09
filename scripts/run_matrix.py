@@ -192,8 +192,6 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"{name}={value} is not covered by Authorized Targets in docs/E2E.md; a person adds the target, or grants it "
                              "to the coding Agent in their own message (Authorization Rules in docs/E2E.md)")
         used.add(covered(target, authorized) or target)
-    if not used:
-        raise SystemExit("a live run names at least one authorized target with --set doc=, dir= or device=")
 
     wanted = {r.strip() for r in args.row.split(",") if r.strip()}
     rows = [r for r in matrix["rows"] if r["applies"] and not r.get("unrunnable") and (not wanted or r["row"] in wanted)]
@@ -306,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     record = {"kind": "live", "tool": facts.tool, "tool_version": facts.version, "commit": commit,
               "application": {"name": facts.driver.get("application"), "version": app_version}, "os": platform.platform(),
               "platform": PLATFORMS[sys.platform], "recorded_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "targets": sorted(used), "runs": runs}
+              "targets": sorted(used) or sorted(authorized), "runs": runs}  # with no target named, the scope held them all
     name = _write_record(root / "docs" / "evidence", f"{now.strftime('%Y-%m-%d-%H%M%S')}-{args.command.replace(' ', '-')}", record)
     _write_back(matrix_path, [row for row, _, _ in filled], name)
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")

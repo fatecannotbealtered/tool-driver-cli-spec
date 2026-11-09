@@ -769,7 +769,7 @@ def check_repo_docs(report: Report) -> None:
         heads = [ln for ln in text.splitlines() if ln.startswith("## ")]
         if not heads or heads[0] != "## [Unreleased]":
             report.add("CHANGELOG.md", "the first section must be '## [Unreleased]'")
-        if CJK.search(text):
+        if CJK.search(re.sub(r"`[^`\n]*`", "", text)):  # code may quote any character
             report.add("CHANGELOG.md", "CHANGELOG is English only")
     if not (ROOT / "docs" / "OPEN-QUESTIONS.md").is_file():
         report.add("docs/OPEN-QUESTIONS.md", "missing")
