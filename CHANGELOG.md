@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-11-08
+
+Fixes from the Creo tool's live run and the 1.0.9 release bundle. After syncing, a tool copies the long-job sentence of the template's entry Skill again, and anything that reads `job get` finds a failed job's error in `code`, `message` and `details`.
+
 ### Fixed
 
 - The release bundle took every file in its folders, so the 1.0.9 bundle also held a local ruff cache, `template/.ruff_cache/`, and `sync_spec` listed its files as template changes. The bundle now holds only the files git tracks; tools ignore those cache files.

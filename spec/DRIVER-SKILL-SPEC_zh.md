@@ -2,7 +2,7 @@
 
 [English](DRIVER-SKILL-SPEC.md) | 中文
 
-> 版本 1.0.9 · 条款 DSKL-001 至 DSKL-127
+> 版本 1.0.10 · 条款 DSKL-001 至 DSKL-127
 
 ## 怎么读
 
