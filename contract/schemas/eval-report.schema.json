@@ -29,6 +29,7 @@
         "id": {"type": "string", "pattern": "^[a-z0-9]+([-_][a-z0-9]+)*$"},
         "passed": {"type": "boolean"},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the question file, with LF line ends."},
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of what the result depends on: the question file, the fingerprints of the commands in COMMANDS and the tool's handwritten Skills and knowledge. The result counts as evidence while it matches (DSKL-043)."},
         "commands": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "The question's COMMANDS."},
         "ran": {"type": "array", "items": {"type": "string"}, "description": "The command paths the Agent ran."},
         "notes": {"type": "string"}

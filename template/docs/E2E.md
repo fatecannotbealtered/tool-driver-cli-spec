@@ -31,7 +31,7 @@ To run a behavior matrix on the real {{application}}:
 
 To run the evaluation questions on the real {{application}}, run `python scripts/spec.py eval --workspace-root <folder>` with a folder inside a listed folder. The runner writes each question's scope file and writes the evaluation report to `docs/evidence/`.
 
-A live record counts as evidence only while its tool version has the same major and minor version as {{tool}}. Records never hold secrets, and arguments that carry secrets show as `***`.
+A run in a live record counts as evidence until the command's registration or the adapter's code changes; a new version number alone changes nothing. Records never hold secrets, and arguments that carry secrets show as `***`.
 
 ## Evidence Records
 

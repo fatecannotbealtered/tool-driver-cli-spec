@@ -112,6 +112,7 @@ class Facts:
     registration: dict[str, Any] | None = None
     reference: dict[str, Any] | None = None
     tool_error: str | None = None
+    digests: dict[str, str] = field(default_factory=dict, repr=False)  # computed once per gather
 
     @property
     def driver(self) -> dict[str, Any]:
@@ -541,9 +542,136 @@ def live_shape(data: Any) -> bool:
 
 
 def current(tool_version: Any, version: str) -> bool:
-    """Evidence counts while its tool version has the tool's major and minor (DVER-043)."""
+    """A record or result without a fingerprint counts while its tool version has the tool's
+    major and minor (DVER-043)."""
     a, b = SEMVER.match(str(tool_version)), SEMVER.match(version)
     return bool(a and b and a.group(1, 2) == b.group(1, 2))
+
+
+# What a command's description holds that cannot change what it does: a live run does not depend on it.
+DESCRIPTION = ("summary", "examples", "related_knowledge", "output_schema")
+NOT_EVIDENCE = ("maturity", "evidence")  # set from the evidence, so never part of what it depends on
+
+
+def project_files(root: Path, *folders: str) -> list[Path]:
+    """The files under these folders that git tracks or would track, so a build output or a
+    cache never counts and a new file counts before it is added; outside a git checkout, every
+    file but Python caches."""
+    present = [f for f in folders if (root / f).exists()]
+    if not present:
+        return []
+    try:
+        listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *present],
+                                cwd=root, capture_output=True, check=True, creationflags=NO_WINDOW).stdout.decode("utf-8")
+        return sorted({root / p for p in listed.split("\0") if p and (root / p).is_file()})
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return sorted(p for f in present for p in (root / f).rglob("*")
+                  if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc")
+
+
+def files_digest(root: Path, files: list[Path], text: Any = None) -> str:
+    """One SHA-256 over the files' paths and contents, line ends as LF; ``text`` may rewrite a file's text."""
+    total = hashlib.sha256()
+    for path in files:
+        data = path.read_bytes().replace(b"\r\n", b"\n")
+        if text is not None:
+            data = text(path, data.decode("utf-8", "replace")).encode("utf-8")
+        total.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0" + hashlib.sha256(data).digest())
+    return total.hexdigest()
+
+
+def adapter_digest(facts: Facts) -> str:
+    """The code the tool's commands run on the application: its package without the pinned
+    runtime and the command registrations, the host component source with the methods its
+    manifest lists, and the Python packages the tool depends on (DVER-043)."""
+    if "adapter" not in facts.digests:
+        skip = (f"{facts.pkg}/_driver/", f"{facts.pkg}/commands/", "plugin/README.md")
+        files = [p for p in project_files(facts.root, facts.pkg, "plugin")
+                 if not p.relative_to(facts.root).as_posix().startswith(skip)]
+
+        def code(path: Path, text: str) -> str:
+            if path.relative_to(facts.root).as_posix() != "plugin/manifest.json":
+                return text
+            try:  # generated, with the tool version: only the methods the author lists count
+                return json.dumps(json.loads(text).get("methods", []))
+            except (ValueError, AttributeError):
+                return text
+
+        try:
+            import tomllib
+            depends = tomllib.loads(read(facts.root / "pyproject.toml")).get("project", {}).get("dependencies", [])
+        except (OSError, ValueError, ImportError):
+            depends = []
+        facts.digests["adapter"] = files_digest(facts.root, files, code) + json.dumps(sorted(map(str, depends)))
+    return facts.digests["adapter"]
+
+
+def guidance_digest(facts: Facts) -> str:
+    """What the Agent reads about the tool besides its output: the Skills without the content
+    check_project generates, and the builtin knowledge (DSKL-043)."""
+    if "guidance" not in facts.digests:
+        def handwritten(path: Path, text: str) -> str:
+            return re.sub(r"(<!-- driver:([a-z-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
+
+        facts.digests["guidance"] = files_digest(facts.root, project_files(facts.root, "skills", "knowledge"), handwritten)
+    return facts.digests["guidance"]
+
+
+def command_digest(facts: Facts, command: str, described: bool = False) -> str:
+    """A command as the tool registers and reports it, with the adapter's code. ``described``
+    keeps the text an Agent reads about it, such as its summary and examples (DSKL-043); without
+    it, only what changes what the command does counts (DVER-043). Fields at their empty default
+    are left out, so a field a later runtime adds changes nothing."""
+    reg = next((c for c in (facts.registration or {}).get("commands", []) if c.get("path") == command), {})
+    ref = next((c for c in facts.commands if c.get("path") == command), {})
+    drop = NOT_EVIDENCE + (() if described else DESCRIPTION)
+    kept = {k: v for k, v in {**ref, **reg, "path": command}.items()
+            if k not in drop and v is not None and v is not False and v != [] and v != {} and v != ""}
+    if not described:
+        for name, key in (("flags", "summary"), ("tier_when", "description")):
+            if isinstance(kept.get(name), list):
+                kept[name] = [{k: v for k, v in i.items() if k != key} if isinstance(i, dict) else i for i in kept[name]]
+    text = json.dumps(kept, sort_keys=True, ensure_ascii=False) + adapter_digest(facts)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def fingerprint(facts: Facts, command: str) -> str:
+    """What a live run of the command depends on: the command, by what changes what it does, and
+    the adapter's code. The runtime is the same for every tool, and the conformance suites check
+    it at each sync, so it is not part of it (DVER-043)."""
+    return command_digest(facts, command)
+
+
+def question_fingerprint(facts: Facts, sha256: str, commands: list[str]) -> str:
+    """What an evaluation result depends on: the question file, the commands it lists as an
+    Agent sees them, and the tool's handwritten guidance (DSKL-043)."""
+    text = json.dumps([sha256, sorted(command_digest(facts, c, described=True) for c in commands), guidance_digest(facts)])
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def report_order(path: Path, data: dict[str, Any]) -> tuple[str, int, str]:
+    """When a report was written: by its date, then by run_eval's number for a second report that
+    day, eval-<date>-2.json after eval-<date>.json."""
+    match = re.fullmatch(r"eval-\d{4}-\d{2}-\d{2}(?:-(\d+))?\.json", path.name)
+    return str(data.get("date", "")), int(match.group(1) or 1) if match else 0, path.name
+
+
+def run_counts(facts: Facts, record: dict[str, Any], run: dict[str, Any]) -> bool:
+    """A run of a live record is evidence while nothing it depends on changed (DVER-043)."""
+    if "fingerprint" in run:
+        return run["fingerprint"] == fingerprint(facts, run.get("command", ""))
+    return current(record.get("tool_version"), facts.version)
+
+
+def result_counts(facts: Facts, report: dict[str, Any], result: dict[str, Any], digest_now: str | None) -> bool:
+    """An evaluation result is evidence while its question file, the commands it lists and the
+    guidance are unchanged (DSKL-043)."""
+    if digest_now is None or result.get("sha256") != digest_now:
+        return False
+    if "fingerprint" in result:
+        return result["fingerprint"] == question_fingerprint(facts, digest_now, result.get("commands", []))
+    return current(report.get("tool_version"), facts.version)
 
 
 def minor(version: str) -> str:
@@ -558,12 +686,12 @@ def support_matrix(facts: Facts, lang: str) -> str:
     modes = [m for m in ("file", "session", "device") if m in facts.modes]
     rows: dict[tuple[str, str, str], str] = {}
     for _, record in live_records(facts):
-        if record.get("tool") != facts.tool or not current(record.get("tool_version"), facts.version):
+        if record.get("tool") != facts.tool:
             continue
         app = minor((record.get("application") or {}).get("version", ""))
         platform = record.get("platform")
         for mode in modes:
-            runs = [r for r in record.get("runs", []) if r.get("mode") == mode]
+            runs = [r for r in record.get("runs", []) if r.get("mode") == mode and run_counts(facts, record, r)]
             if not runs or platform not in NPM_OS:
                 continue
             key = (app, platform, mode)
@@ -804,6 +932,7 @@ class Checker:
         self.problems: list[Problem] = []
         self._validators: dict[str, Any] = {}
         self._questions: dict[str, tuple[dict[str, Any], str]] | None = None
+        self._results: dict[str, tuple[str, dict[str, Any]]] | None = None
 
     def add(self, clause: str, path: str, message: str, line: int | None = None) -> None:
         self.problems.append(Problem(clause, path, message, line))
@@ -1517,17 +1646,18 @@ class Checker:
             level = command.get("maturity", "draft")
             refs = [str(r) for r in command.get("evidence", []) or []]
             if level in ("verified", "stable"):
-                if not any(r.startswith("live:") and not self.live_problem(r, command["path"]) for r in refs):
+                reasons = [self.live_problem(r, command["path"]) for r in refs if r.startswith("live:")]
+                if not reasons or all(reasons):
                     self.add("DVER-040", "contract/commands.json", f"`{command['path']}` is {level}, which needs current "
-                             "`live:` evidence of a passing run of this command (DVER-043)")
+                             f"`live:` evidence of a passing run of this command ({'; '.join(reasons) or 'none named'})")
                 self.matrix_passed(command)
             if level == "stable":
                 stable = True
                 reasons = [self.eval_problem(r, command["path"]) for r in refs if r.startswith("eval:")]
                 if not reasons or all(reasons):
-                    self.add("DSKL-043", "contract/commands.json", f"`{command['path']}` is stable, which needs a current "
-                             "`eval:` report from the real application of every question in tests/eval/, all passed, "
-                             f"among them one that lists and ran the command ({'; '.join(reasons) or 'none named'})")
+                    self.add("DSKL-043", "contract/commands.json", f"`{command['path']}` is stable, which needs a current, "
+                             "passed result from the real application for every question in tests/eval/, and an `eval:` "
+                             f"report holding one that lists and ran the command ({'; '.join(reasons) or 'none named'})")
         self.eval_questions(stable)
 
     def reference_problem(self, where: str, ref: str) -> None:
@@ -1556,59 +1686,72 @@ class Checker:
             return None, None, f"{ref!r} does not validate against its schema"
         if data["tool"] != self.facts.tool:
             return None, None, f"{ref!r} is a record of {data['tool']}, not {self.facts.tool}"
-        if not current(data["tool_version"], self.facts.version):
-            return None, None, f"{ref!r} is from {data['tool_version']}, not the current minor version (DVER-043)"
         return data, match.group(3), None
 
-    def live_problem(self, ref: str, command: str, row: str | None = None) -> str | None:
-        """Why a `live:` reference does not show a passing run of this command (and row)."""
+    def live_problem(self, ref: str, command: str, row: str | None = None, kind: str | None = None) -> str | None:
+        """Why a `live:` reference does not show a current passing run of this command (and row,
+        and document kind)."""
         data, anchor, problem = self._evidence_file(str(ref), "live")
         if problem:
             return problem
         wanted = row or anchor
-        runs = [r for r in data["runs"] if r["command"] == command and (wanted is None or r.get("matrix_row") == wanted)]
+        runs = [r for r in data["runs"] if r["command"] == command and (wanted is None or r.get("matrix_row") == wanted)
+                and (kind is None or r.get("doc_kind") == kind)]
         if not runs:
-            return f"{ref!r} has no run of `{command}`{' for row ' + wanted if wanted else ''}"
+            return f"{ref!r} has no run of `{command}`{' for row ' + wanted if wanted else ''}{' on a ' + kind if kind else ''}"
         if not all(r["result"] == "pass" for r in runs):
             return f"{ref!r} records a failed run of `{command}`"
+        stale = [r for r in runs if not run_counts(self.facts, data, r)]
+        if stale and "fingerprint" in stale[0]:
+            return f"{ref!r} ran `{command}` before a change to its registration or to the adapter's code (DVER-043)"
+        if stale:
+            return f"{ref!r} is from {data['tool_version']} and has no fingerprint, so it counts only for that minor version (DVER-043)"
         return None
 
     def eval_problem(self, ref: str, command: str) -> str | None:
-        """Why an `eval:` reference does not show that Agents use this command correctly: the
-        report must be the newest from the real application, cover every current question
-        unchanged, pass all of them, and hold a question that lists and ran the command."""
+        """Why the evaluation does not show that Agents use this command correctly: every question
+        in tests/eval/ needs a current result from the real application whose newest one passed,
+        and the `eval:` report must hold such a result of a question that lists and ran the command."""
         data, _, problem = self._evidence_file(str(ref), "eval")
         if problem:
             return problem
         if data["simulated"]:
             return f"{ref!r} is a run on the fake host; a simulated result is never evidence (DVER-021)"
-        failed = [q["id"] for q in data["questions"] if not q["passed"]]
+        results = self.results()
+        missing = [q for q in self.questions() if q not in results]
+        if missing:
+            return (f"no current result from the real application for {', '.join(missing)}: the question, a command it lists "
+                    "or the Skills and knowledge changed since, or it never ran; run them with `spec.py eval --stale`")
+        failed = [q for q, (_, result) in results.items() if not result["passed"]]
         if failed:
-            return f"{ref!r}: questions failed: {', '.join(failed)}"
-        asked = {q["id"]: q for q in data["questions"]}
-        for question_id, (_, digest) in self.questions().items():
-            if question_id not in asked:
-                return f"{ref!r} has no result for the question {question_id} in tests/eval/"
-            if asked[question_id]["sha256"] != digest:
-                return f"{ref!r} ran an earlier version of the question {question_id}; run the evaluation again"
-        if not any(command in q["commands"] and command in q["ran"] for q in data["questions"]):
-            return f"{ref!r} has no question that lists `{command}` in COMMANDS and ran it"
-        newer = self.newer_report(Path(str(ref)[len("eval:"):].split("#")[0]), data)
-        return f"{ref!r} is not the newest evaluation report; {newer} is" if newer else None
-
-    def newer_report(self, path: Path, data: dict[str, Any]) -> str | None:
-        """A later report from the real application for the same minor version, if any."""
-        mine = (data["date"], path.name)
-        for other in sorted((self.root / "docs" / "evidence").glob("eval-*.json")):
-            try:
-                found = json.loads(read(other))
-            except (OSError, ValueError):
-                continue
-            if self.validate(found, "eval-report.schema.json") or found["simulated"] or found["tool"] != self.facts.tool:
-                continue
-            if current(found["tool_version"], self.facts.version) and (found["date"], other.name) > mine:
-                return other.relative_to(self.root).as_posix()
+            return f"the newest current result of {', '.join(failed)} failed"
+        digests = {q: d for q, (_, d) in self.questions().items()}
+        if not any(command in r["commands"] and command in r["ran"] and r["passed"]
+                   and result_counts(self.facts, data, r, digests.get(r["id"])) for r in data["questions"]):
+            return f"{ref!r} holds no current, passed result of a question that lists `{command}` in COMMANDS and ran it"
         return None
+
+    def results(self) -> dict[str, tuple[str, dict[str, Any]]]:
+        """For each question in tests/eval/, its newest result from the real application that still
+        counts, with the report that holds it (DSKL-043)."""
+        if self._results is None:
+            digests = {q: d for q, (_, d) in self.questions().items()}
+            newest: dict[str, tuple[tuple[str, int, str], str, dict[str, Any]]] = {}
+            for path in sorted((self.root / "docs" / "evidence").glob("eval-*.json")):
+                try:
+                    data = json.loads(read(path))
+                except (OSError, ValueError):
+                    continue
+                if self.validate(data, "eval-report.schema.json") or data["simulated"] or data["tool"] != self.facts.tool:
+                    continue
+                for result in data["questions"]:
+                    if not result_counts(self.facts, data, result, digests.get(result["id"])):
+                        continue
+                    when = report_order(path, data)
+                    if result["id"] not in newest or when > newest[result["id"]][0]:
+                        newest[result["id"]] = (when, path.relative_to(self.root).as_posix(), result)
+            self._results = {q: (rel, result) for q, (_, rel, result) in newest.items()}
+        return self._results
 
     def questions(self) -> dict[str, tuple[dict[str, Any], str]]:
         """The well-formed evaluation questions in tests/eval/, with their values and file hashes."""
@@ -1632,17 +1775,31 @@ class Checker:
         for row in matrix["rows"]:
             if not row["applies"] or row.get("unrunnable"):
                 continue
-            if "actual" not in row or not same_result(row["actual"], row.get("expected")) \
-                    or self.live_problem(row.get("evidence", ""), command["path"], row["row"]):
+            if "actual" not in row:
+                why = "it has no actual result"
+            elif not same_result(row["actual"], row.get("expected")):
+                why = "its actual result differs from the expected one"
+            else:
+                why = self.live_problem(row.get("evidence", ""), command["path"], row["row"])
+            if why:
                 self.add("DVER-040", path.relative_to(self.root).as_posix(), f"`{command['path']}` is "
-                         f"{command.get('maturity')}, but row {row['row']} has no current passing run")
+                         f"{command.get('maturity')}, but row {row['row']} has no current passing run: {why}")
         # The normal row passed on every kind of document the command lists (DVER-030, DVER-040).
+        normal = next((r for r in matrix["rows"] if r["row"] == "normal"), {})
         for kind in command.get("doc_kinds") or []:
-            if not self.kind_passed(command["path"], kind):
+            if "kind_evidence" in normal:
+                ref = normal["kind_evidence"].get(kind)
+                passed = bool(ref) and not self.live_problem(ref, command["path"], "normal", kind)
+            else:
+                passed = self.kind_passed(command["path"], kind)
+            if not passed:
                 self.add("DVER-040", path.relative_to(self.root).as_posix(), f"`{command['path']}` is "
                          f"{command.get('maturity')}, but its normal row has no current passing run on a {kind}")
 
     def kind_passed(self, command: str, kind: str) -> bool:
+        """A run on the kind in a record written before the matrix kept `kind_evidence`: those runs
+        carry no fingerprint. A run that has one is evidence only through `kind_evidence`, so the
+        newest run on each kind decides (DVER-030)."""
         folder = self.root / "docs" / "evidence"
         for record in sorted(folder.glob("*.json")) if folder.is_dir() else []:
             if record.name.startswith("eval-"):
@@ -1651,7 +1808,7 @@ class Checker:
             if problem:
                 continue
             if any(r["command"] == command and r.get("matrix_row") == "normal" and r.get("doc_kind") == kind
-                   and r["result"] == "pass" for r in data["runs"]):
+                   and r["result"] == "pass" and "fingerprint" not in r and run_counts(self.facts, data, r) for r in data["runs"]):
                 return True
         return False
 

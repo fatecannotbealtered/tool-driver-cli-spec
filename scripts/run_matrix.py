@@ -233,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     env[scope_env] = str(live_scope(Path(scratch.name), authorized, values.get("session"), facts.contract))
     no_scope = str(Path(scratch.name) / "none.json")  # never written: the no_scope row runs with no scope file
     known_codes = {e["code"] for e in facts.contract["error_codes"]}
+    # What the runs depend on, taken before they start: the evidence counts until it changes (DVER-043).
+    fingerprint = check_project.fingerprint(facts, args.command)
     tool = [sys.executable, "-m", facts.pkg]
     app_version = args.application_version or _context_version(tool, root, env)
     job_note = None
@@ -289,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 shown.append(argument)
         entry = {"command": args.command, "arguments": shown, "exit": exit_code, "result": "pass" if passed else "fail",
-                 "matrix_row": row["row"], "mode": mode}
+                 "matrix_row": row["row"], "mode": mode, "fingerprint": fingerprint}
         if args.kind:
             entry["doc_kind"] = args.kind
         if tampered:
@@ -306,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
               "platform": PLATFORMS[sys.platform], "recorded_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
               "targets": sorted(used) or sorted(authorized), "runs": runs}  # with no target named, the scope held them all
     name = _write_record(root / "docs" / "evidence", f"{now.strftime('%Y-%m-%d-%H%M%S')}-{args.command.replace(' ', '-')}", record)
-    _write_back(matrix_path, [row for row, _, _ in filled], name)
+    _write_back(matrix_path, [row for row, _, _ in filled], name, args.kind)
     print(f"Wrote docs/evidence/{name} and updated {matrix_path.relative_to(root).as_posix()}.")
     scratch.cleanup()
     return 0 if all(r["result"] == "pass" for r in runs) else 1
@@ -326,20 +328,31 @@ def live_scope(folder: Path, authorized: list[str], session: str | None, contrac
     return path
 
 
-def _write_back(path: Path, rows: list[dict[str, Any]], name: str) -> None:
+def _write_back(path: Path, rows: list[dict[str, Any]], name: str, kind: str | None = None) -> None:
     """Give the rows this run ran their actual result and evidence in the matrix file; a row whose
-    run gave no result loses both, so it counts as not run."""
+    run gave no result loses both, so it counts as not run. The normal row also keeps the evidence
+    of each document kind, so a run on one kind never drops another's (DVER-030)."""
     with _locked(path):
         # Another run of this matrix may have written its rows meanwhile: only this run's rows change.
         latest = json.loads(check_project.read(path))
         mine = {row["row"]: row for row in rows}
         for row in latest["rows"]:
-            if row["row"] in mine and mine[row["row"]].get("actual") is None:
+            if row["row"] not in mine:
+                continue
+            ref = None if mine[row["row"]].get("actual") is None else f"live:docs/evidence/{name}#{row['row']}"
+            if ref is None:
                 row.pop("actual", None)
                 row.pop("evidence", None)
-            elif row["row"] in mine:
+            else:
                 row["actual"] = mine[row["row"]]["actual"]
-                row["evidence"] = f"live:docs/evidence/{name}#{row['row']}"
+                row["evidence"] = ref
+            if kind and row["row"] == "normal":
+                kinds = {k: v for k, v in (row.get("kind_evidence") or {}).items() if k != kind}
+                if ref is not None:
+                    kinds[kind] = ref
+                row.pop("kind_evidence", None)
+                if kinds:
+                    row["kind_evidence"] = dict(sorted(kinds.items()))
         path.write_text(json.dumps(latest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 

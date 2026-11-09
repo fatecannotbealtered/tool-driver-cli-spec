@@ -76,7 +76,7 @@ Tests on the real application make real changes. They use only the targets you l
 
 ## Evidence and Maturity
 
-Each command is `draft`, `verified` or `stable`, and `<tool> reference` shows the level with its evidence. `verified` needs a passing run of the command's behavior matrix on the real application, and `stable` also a passing evaluation with a real Agent. Evidence counts only for the same major and minor tool version, and results from the fake host never count.
+Each command is `draft`, `verified` or `stable`, and `<tool> reference` shows the level with its evidence. `verified` needs a passing run of the command's behavior matrix on the real application, and `stable` also a passing evaluation with a real Agent. Evidence counts until what it depends on changes, such as the adapter's code, not when only the version number moves, and results from the fake host never count.
 
 ## Publishing
 
