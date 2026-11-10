@@ -1,0 +1,11 @@
+{
+  "code": "E_USAGE",
+  "message": "--x needs a unit.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Give the value with a unit, for example `--x 12.5mm`.",
+    "problem": "--x 12.5 has no unit; accepted units: nm, um, mm, cm, m, mil, in",
+    "parameter": "--x"
+  }
+}

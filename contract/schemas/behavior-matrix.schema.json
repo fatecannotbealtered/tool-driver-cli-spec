@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/behavior-matrix.schema.json",
+  "title": "Behavior matrix",
+  "description": "The behavior matrix of one command, a data file in tests/ (DVER-030). Every row of the contract appears once. A row that does not apply to the command says why; a row that applies gives the arguments and the expected result, and once run on the real application, the actual result and a live evidence reference; a row that cannot be caused on demand says why in unrunnable. Arguments may use the sample placeholders of the contract. The normal row is the command's write sample (G00).",
+  "type": "object",
+  "required": ["command", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "command": {"type": "string", "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"},
+    "rows": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/row"},
+      "allOf": [
+        {"contains": {"properties": {"row": {"const": "normal"}}}},
+        {"contains": {"properties": {"row": {"const": "empty"}}}},
+        {"contains": {"properties": {"row": {"const": "invalid_input"}}}},
+        {"contains": {"properties": {"row": {"const": "not_found"}}}},
+        {"contains": {"properties": {"row": {"const": "ambiguous"}}}},
+        {"contains": {"properties": {"row": {"const": "conflict"}}}},
+        {"contains": {"properties": {"row": {"const": "no_scope"}}}},
+        {"contains": {"properties": {"row": {"const": "busy"}}}},
+        {"contains": {"properties": {"row": {"const": "dialog"}}}},
+        {"contains": {"properties": {"row": {"const": "disconnect"}}}},
+        {"contains": {"properties": {"row": {"const": "unsaved"}}}},
+        {"contains": {"properties": {"row": {"const": "read_back_mismatch"}}}}
+      ]
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "required": ["row", "applies"],
+      "additionalProperties": false,
+      "properties": {
+        "row": {"enum": ["normal", "empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog", "disconnect", "unsaved", "read_back_mismatch"]},
+        "applies": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1},
+        "arguments": {"type": "array", "items": {"type": "string"}},
+        "kind_arguments": {"description": "The normal row's arguments for a document kind whose objects the arguments do not fit, keyed by kind; arguments serve the other kinds (DVER-030).", "type": "object", "minProperties": 1, "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+        "expected": {"$ref": "#/$defs/result"},
+        "actual": {"$ref": "#/$defs/result"},
+        "evidence": {"$ref": "reference.schema.json#/$defs/evidence_ref"},
+        "kind_evidence": {"description": "The normal row's live evidence on each document kind the command lists, keyed by kind, so a run on one kind keeps another's (DVER-030).", "type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[a-z][a-z0-9-]*$"}, "additionalProperties": {"$ref": "reference.schema.json#/$defs/evidence_ref"}},
+        "unrunnable": {"description": "Why this row, which applies, cannot be caused on demand on the real application. It then needs no live run (DVER-030).", "type": "string", "minLength": 1}
+      },
+      "if": {"properties": {"applies": {"const": true}}},
+      "then": {
+        "required": ["arguments", "expected"],
+        "not": {"required": ["reason"]},
+        "dependentRequired": {"actual": ["evidence"], "evidence": ["actual"]},
+        "allOf": [
+          {"if": {"required": ["unrunnable"]}, "then": {"not": {"anyOf": [{"required": ["actual"]}, {"required": ["evidence"]}]}}},
+          {"if": {"properties": {"row": {"enum": ["normal", "dialog", "read_back_mismatch"]}}}, "then": {"not": {"required": ["unrunnable"]}}},
+          {"if": {"not": {"properties": {"row": {"const": "normal"}}}}, "then": {"not": {"anyOf": [{"required": ["kind_arguments"]}, {"required": ["kind_evidence"]}]}}}
+        ]
+      },
+      "else": {
+        "required": ["reason"],
+        "not": {"anyOf": [{"required": ["arguments"]}, {"required": ["kind_arguments"]}, {"required": ["expected"]}, {"required": ["actual"]}, {"required": ["evidence"]}, {"required": ["kind_evidence"]}, {"required": ["unrunnable"]}]}
+      }
+    },
+    "result": {
+      "description": "The result of one run: the exit code and, for a failure, the error code.",
+      "type": "object",
+      "required": ["exit"],
+      "additionalProperties": false,
+      "properties": {
+        "exit": {"enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 130]},
+        "code": {"$ref": "error.schema.json#/properties/code"},
+        "summary": {"type": "string", "minLength": 1}
+      },
+      "if": {"properties": {"exit": {"const": 0}}},
+      "then": {"not": {"required": ["code"]}},
+      "else": {"required": ["code"]}
+    }
+  }
+}

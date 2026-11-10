@@ -1,0 +1,396 @@
+{
+  "preview": {
+    "operation_id": "op_9xk2m4qa",
+    "command": "doc save",
+    "action": "Save board.kicad_pcb to its original path.",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "persist"
+    ],
+    "tier": "two_step",
+    "summary": {
+      "total": 51,
+      "by_origin": {
+        "tool": 51
+      },
+      "by_kind": {
+        "track": 51
+      }
+    },
+    "changes": [
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T1",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T2",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T3",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T4",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T5",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T6",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T7",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T8",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T9",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T10",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T11",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T12",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T13",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T14",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T15",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T16",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T17",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T18",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T19",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T20",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T21",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T22",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T23",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T24",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T25",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T26",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T27",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T28",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T29",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T30",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T31",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T32",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T33",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T34",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T35",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T36",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T37",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T38",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T39",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T40",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T41",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T42",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T43",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T44",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T45",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T46",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T47",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T48",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T49",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T50",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/tracks/T51",
+        "field": "width_mm",
+        "before": 0.25,
+        "after": 0.5,
+        "origin": "tool"
+      }
+    ],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": "rev-8",
+      "dirty": true
+    },
+    "can_apply": true
+  },
+  "confirm_token": "tok_3f9a7c1e2b8d4a60",
+  "expires_at": "2026-11-02T08:40:00Z"
+}

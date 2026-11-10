@@ -1,0 +1,11 @@
+{
+  "code": "E_USAGE",
+  "message": "Unknown flag --colour.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Use `--color` instead.",
+    "problem": "unknown flag --colour",
+    "parameter": "--colour"
+  }
+}

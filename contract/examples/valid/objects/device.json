@@ -1,0 +1,10 @@
+{
+  "id": "cnc-01",
+  "model": "Mill 3X",
+  "firmware": "2.4.1",
+  "state": "ready",
+  "simulated": true,
+  "extra": {
+    "spindle_max_rpm": 24000
+  }
+}

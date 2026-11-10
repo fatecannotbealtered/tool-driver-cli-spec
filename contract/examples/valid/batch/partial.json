@@ -1,0 +1,28 @@
+{
+  "operation_id": "op_b4t9q2",
+  "items": [
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+      "operation_id": "op_b4t9q2r1",
+      "ok": true
+    },
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
+      "operation_id": "op_b4t9q2r2",
+      "ok": false,
+      "code": "E_VALIDATION"
+    },
+    {
+      "target": "file:///D:/proj/board.kicad_pcb#/footprints/R3",
+      "ok": false,
+      "skipped": true
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "succeeded": 1,
+    "failed": 1,
+    "unknown": 0,
+    "skipped": 1
+  }
+}

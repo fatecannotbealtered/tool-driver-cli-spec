@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "error": {
+    "code": -32000,
+    "message": "Main thread busy",
+    "data": {
+      "code": "E_BUSY",
+      "dispatch_state": "not_started",
+      "retry_after_ms": 3000
+    }
+  }
+}

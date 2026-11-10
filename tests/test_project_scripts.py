@@ -1,0 +1,1225 @@
+"""Unit tests of the project scripts: instantiate, sync_spec, check_project and run_matrix.
+
+One project is generated from the template and filled in the way an author would. Each test
+copies it, breaks one rule, and expects check_project to name the clause.
+"""
+from __future__ import annotations
+
+import argparse
+import contextlib
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+import zipfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "scripts"))
+sys.path.insert(0, str(REPO / "tests"))
+
+import check_project  # noqa: E402
+import e2e_template  # noqa: E402
+import run_matrix  # noqa: E402
+import sync_spec  # noqa: E402
+
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+
+class ProjectTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.work = Path(tempfile.mkdtemp(prefix="project-scripts-"))
+        cls.fresh = e2e_template.generate(cls.work, "file,session", False)
+        cls.filled = cls.work / "filled"
+        shutil.copytree(cls.fresh, cls.filled)
+        e2e_template.register(cls.filled)
+        e2e_template.fill(cls.filled)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.work, ignore_errors=True)
+
+    def setUp(self):
+        self.project = Path(tempfile.mkdtemp(prefix="project-", dir=self.work)) / "demo-cli"
+        shutil.copytree(self.filled, self.project)
+
+    def problems(self, project: Path | None = None) -> list[check_project.Problem]:
+        return check_project.check(project or self.project)
+
+    def clauses(self, project: Path | None = None) -> set[str]:
+        return {p.clause for p in self.problems(project)}
+
+    def edit(self, name: str, old: str, new: str, count: int = 1) -> None:
+        path = self.project / name
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(old, text, name)
+        path.write_text(text.replace(old, new, count), encoding="utf-8", newline="\n")
+
+    def expect(self, clause: str) -> None:
+        found = self.problems()
+        self.assertIn(clause, {p.clause for p in found}, [p.text() for p in found])
+
+    def fix(self) -> None:
+        check_project.fix(check_project.gather(self.project))
+
+    def authorize(self, url: str) -> None:
+        self.edit("docs/E2E.md", "No target is authorized yet.", f"- `{url}`: the demo files")
+
+    def record(self, name: str, **changes) -> str:
+        """A live record in docs/evidence/; returns its path."""
+        record = {"kind": "live", "tool": "demo-cli", "tool_version": "0.1.3", "commit": "abc1234",
+                  "application": {"name": "FakeApp", "version": "1.5.2"}, "os": "Windows 11", "platform": "windows",
+                  "recorded_at": "2026-11-01T09:30:00Z", "targets": ["file:///D:/e2e/demo/"],
+                  "runs": [{"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass",
+                            "mode": "session", "matrix_row": "normal"}]}
+        record.update(changes)
+        path = self.project / "docs" / "evidence" / name
+        path.write_text(json.dumps(record), encoding="utf-8")
+        return f"docs/evidence/{name}"
+
+    def mature(self, level: str, evidence: list[str], row_evidence: str | None) -> None:
+        """Mark part move at a maturity level, with its normal row run and the other rows not applying."""
+        self.edit("demo_cli/commands/__init__.py", '"maturity": "draft", "evidence": []',
+                  f'"maturity": "{level}" if path == "part move" else "draft", '
+                  f'"evidence": {evidence!r} if path == "part move" else []')
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        if row_evidence:
+            data["rows"][0].update(actual={"exit": 0}, evidence=row_evidence)
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self.fix()
+
+    # -------------------------------------------------------------- instantiate
+
+    def test_a_fresh_project_lacks_only_what_the_author_fills_in(self):
+        found = self.problems(self.fresh)
+        self.assertTrue(found)
+        rest = [p.text() for p in found if p.clause != "DREPO-019"
+                and not (p.clause == "DCLI-029" and p.path == "contract/commands.json")]
+        self.assertEqual(rest, [])
+
+    def test_the_filled_project_conforms(self):
+        self.assertEqual([p.text() for p in self.problems()], [])
+
+    def test_every_mode_and_a_host_component_instantiate_cleanly(self):
+        for modes, host in (("device", False), ("file,session,device", True)):
+            project = e2e_template.generate(Path(tempfile.mkdtemp(prefix="variant-", dir=self.work)), modes, host)
+            self.assertEqual((project / "plugin").is_dir(), host)
+            security = (project / "SECURITY.md").read_text(encoding="utf-8")
+            self.assertEqual("## Host Component" in security, host)
+            self.assertEqual("## Physical Effects" in security, "device" in modes)
+
+    # -------------------------------------------------------------- layout and documents
+
+    def test_root_files_and_paths(self):
+        (self.project / "CODE_OF_CONDUCT.md").unlink()
+        (self.project / "notes.txt").write_text("x", encoding="utf-8")
+        (self.project / "plugin").mkdir()
+        shutil.rmtree(self.project / "docs" / "evidence")
+        self.assertTrue({"DREPO-002", "DREPO-003", "DREPO-004"} <= self.clauses())
+
+    def test_sections_and_language_pairs(self):
+        self.edit("README_zh.md", "## 卸载", "## 移除")
+        self.expect("DREPO-011")
+
+    def test_table_rows_must_match_between_languages(self):
+        self.edit("docs/COMPATIBILITY.md", "|---|---|---|---|", "|---|---|---|---|\n| 9.0 | Linux | file | ⏳ untested |")
+        self.expect("DREPO-010")
+
+    def test_language_switch_line(self):
+        self.edit("CONTRIBUTING_zh.md", "[English](CONTRIBUTING.md) | 中文", "English")
+        self.expect("DREPO-010")
+
+    def test_fixed_text_cannot_change(self):
+        cases = [("README.md", "## How It Works\n", "## How It Works\n\nAlso this.\n", "DREPO-011"),
+                 ("README_zh.md", "npm install -g @tool-driver/demo-cli", "npm i -g @tool-driver/demo-cli", "DREPO-054"),
+                 ("AGENTS.md", "## Bare minimum to obey\n", "## Bare minimum to obey\n\nOr not.\n", "DREPO-012"),
+                 ("SECURITY_zh.md", "## 自更新\n", "## 自更新\n\n改过。\n", "DREPO-013"),
+                 ("docs/E2E.md", "A target is added only by a person", "Anyone adds a target", "DREPO-017"),
+                 ("docs/E2E_zh.md", "## 授权规则\n", "## 授权规则\n\n谁都可以加目标。\n", "DREPO-017")]
+        for name, old, new, clause in cases:
+            with self.subTest(name=name):
+                self.setUp()
+                self.edit(name, old, new)
+                self.expect(clause)
+                self.fix()
+                self.assertNotIn(clause, self.clauses(), "generate restores the fixed text")
+
+    def test_authorized_targets_hold_only_the_list(self):
+        self.edit("docs/E2E.md", "No target is authorized yet.", "- `file:///D:/tests/`: copies made for testing\n"
+                  "  of the sample project")
+        self.assertNotIn("DREPO-017", self.clauses())
+        # An older project keeps its rules paragraph in Authorized Targets; generate cannot tell it apart.
+        self.edit("docs/E2E.md", "- `file:///", "Only a person adds a target to it.\n\n- `file:///")
+        self.expect("DREPO-017")
+        self.fix()
+        self.expect("DREPO-017")
+        self.setUp()
+        self.edit("docs/E2E_zh.md", "清单以 `docs/E2E.md` 为准，本节不另列目标。", "- `file:///D:/tests/`：测试用的副本")
+        self.expect("DREPO-017")
+        self.setUp()
+        text = (self.project / "docs" / "E2E.md").read_text(encoding="utf-8")
+        start, end = text.index("## Authorization Rules"), text.index("## Authorized Targets")
+        (self.project / "docs" / "E2E.md").write_text(text[:start] + text[end:], encoding="utf-8")
+        self.expect("DREPO-017")  # the structure before Authorization Rules
+
+    def test_shared_text_follows_the_release_and_the_tool_s_own_text_stays(self):
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-stop-checkpoints:start -->", "<!-- driver:spec-stop-checkpoints:end -->"
+        inside = text[text.index(start) + len(start):text.index(end)]
+        old = text.replace(inside, "\n- An older checkpoint.\n").replace(end, end + "\n\n- A checkpoint of this tool only.")
+        skill.write_text(old, encoding="utf-8")
+        problems = [p for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(problems and "spec-stop-checkpoints" in problems[0].message, [p.text() for p in problems])
+        self.fix()
+        fixed = skill.read_text(encoding="utf-8")
+        self.assertIn(inside, fixed)  # the release's text is back
+        self.assertNotIn("An older checkpoint", fixed)
+        self.assertIn("A checkpoint of this tool only.", fixed)  # the tool's own text outside the markers stays
+        self.assertNotIn("DREPO-036", self.clauses())
+        contributing = self.project / "CONTRIBUTING_zh.md"
+        text = contributing.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-security:start -->", "<!-- driver:spec-security:end -->"
+        contributing.write_text(text.replace(start + "\n", "").replace(end + "\n", ""), encoding="utf-8")
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("spec-security" in m and "is missing" in m and "generate replaces" in m for m in problems), problems)
+        contributing.write_text(text.replace(end, end + "\n" + start), encoding="utf-8")
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("must each appear once" in m for m in problems), problems)
+        start, end = "<!-- driver:spec-commands:start -->", "<!-- driver:spec-commands:end -->"
+        region = text[text.index(start):text.index(end) + len(end)]
+        contributing.write_text(text.replace(region, "") + "\n" + region + "\n", encoding="utf-8")  # moved into the last section
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("belongs in section" in m for m in problems), problems)
+        contributing.write_text(text, encoding="utf-8")
+
+    def test_the_routing_table_and_the_length_are_the_tool_s(self):
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        routed = text.replace("| Every FakeApp task |", "| Placing parts | `demo-layout` |\n| Every FakeApp task |")
+        self.assertNotEqual(routed, text)
+        skill.write_text(routed, encoding="utf-8")
+        self.fix()
+        self.assertIn("| Placing parts | `demo-layout` |", skill.read_text(encoding="utf-8"))  # generate keeps the tool's row
+        lines = skill.read_text(encoding="utf-8").rstrip("\n").split("\n")
+        markers = sum(1 for line in lines if line.startswith("<!-- driver:"))
+        skill.write_text("\n".join(lines + ["filler"] * (150 - (len(lines) - markers))) + "\n", encoding="utf-8")
+        self.assertNotIn("DSKL-003", self.clauses())  # 150 lines of text, the markers not counted
+        skill.write_text("\n".join(lines + ["filler"] * (151 - (len(lines) - markers))) + "\n", encoding="utf-8")
+        self.assertIn("DSKL-003", self.clauses())
+
+    def test_changelog(self):
+        self.edit("CHANGELOG.md", "### Added", "### 新增")
+        self.expect("DREPO-018")
+        self.setUp()
+        self.edit("CHANGELOG.md", "## [Unreleased]", "## [0.1.0] - 2026-01-01\n\n### Fixed\n\n- x\n\n## [Unreleased]")
+        self.expect("DREPO-018")
+        self.setUp()
+        self.edit("CHANGELOG.md", "### Added", "### Added\n\n- The BOM check accepts the ideographic comma `、` as a separator.")
+        self.assertNotIn("DREPO-018", self.clauses())  # code quotes the character itself
+
+    def test_placeholders_anywhere(self):
+        self.edit("demo_cli/adapter/__init__.py", "return {\"found\": False}", "return {\"found\": False}  # {{fill: later}}")
+        self.edit("docs/E2E.md", "## Procedure\n", "## Procedure\n\n{{application}}\n")
+        problems = [p for p in self.problems() if p.clause == "DREPO-019"]
+        self.assertEqual({p.path for p in problems}, {"demo_cli/adapter/__init__.py", "docs/E2E.md"})
+
+    def test_no_invented_badges(self):
+        self.edit("docs/E2E.md", "## Procedure\n", "## Procedure\n\n![beta](https://img.shields.io/badge/beta-yes-red)\n")
+        self.expect("DREPO-024")
+
+    # -------------------------------------------------------------- generated content
+
+    def test_generated_regions_are_compared(self):
+        cases = [("README.md", "![risk](https://img.shields.io/badge/risk-T1-d29922)", "![risk](https://img.shields.io/badge/risk-T0-d29922)", "DREPO-020"),
+                 ("README_zh.md", "| 风险等级 | T1 |", "| 风险等级 | T0 |", "DREPO-021"),
+                 ("SECURITY.md", "`part move`: change", "`part move`: observe", "DSEC-002"),
+                 ("skills/demo-cli/SKILL.md", "- `part`: get, move", "- `part`: get", "DSKL-006"),
+                 ("docs/COMPATIBILITY_zh.md", "| >=1.0 <2 | Windows | file | ⏳ untested |", "| >=1.0 <2 | Windows | file | ✅ verified |", "DREPO-016")]
+        for name, old, new, clause in cases:
+            with self.subTest(name=name):
+                self.setUp()
+                self.edit(name, old, new)
+                self.expect(clause)
+                self.fix()
+                self.assertNotIn(clause, self.clauses())
+
+    def test_commands_json_is_regenerated_and_validated(self):
+        self.edit("contract/commands.json", '"summary": "Read one part."', '"summary": "Read a part."')
+        self.expect("DREPO-031")
+
+    def test_support_matrix_rests_on_current_live_records(self):
+        self.authorize("file:///D:/e2e/demo/")
+        self.record("2026-11-01-current.json")
+        self.record("2026-10-01-old.json", tool_version="0.0.9", application={"name": "FakeApp", "version": "1.4.0"},
+                    platform="linux")
+        self.record("2026-10-02-failed.json", application={"name": "FakeApp", "version": "1.3.0"},
+                    runs=[{"command": "part move", "arguments": [], "exit": 1, "result": "fail", "mode": "session"}])
+        self.expect("DREPO-016")
+        self.fix()
+        matrix = (self.project / "docs" / "COMPATIBILITY.md").read_text(encoding="utf-8")
+        self.assertIn("| 1.5 | Windows | session | ✅ verified |", matrix)
+        self.assertIn("| >=1.0 <2 | Windows | file | ⏳ untested |", matrix)
+        self.assertIn("| 1.3 | Windows | session | ⏳ untested |", matrix)
+        self.assertNotIn("1.4", matrix)
+        self.assertIn("2026-11-01-current.json", (self.project / "docs" / "E2E.md").read_text(encoding="utf-8"))
+        self.assertEqual([p.text() for p in self.problems()], [])
+
+    def test_unshipped_systems_are_unsupported(self):
+        package = json.loads((self.project / "package.json").read_text(encoding="utf-8"))
+        package["optionalDependencies"] = {"@tool-driver/demo-cli-linux-x64": "0.1.0"}
+        (self.project / "package.json").write_text(json.dumps(package, indent=2), encoding="utf-8")
+        self.fix()
+        matrix = (self.project / "docs" / "COMPATIBILITY.md").read_text(encoding="utf-8")
+        self.assertIn("| >=1.0 <2 | Windows | session | ⛔ unsupported |", matrix)
+        self.assertIn("platform-Linux-555555", (self.project / "README.md").read_text(encoding="utf-8"))
+        self.authorize("file:///D:/e2e/demo/")
+        self.record("2026-11-01-windows.json")
+        self.fix()
+        matrix = (self.project / "docs" / "COMPATIBILITY.md").read_text(encoding="utf-8")
+        self.assertIn("| 1.5 | Windows | session | ⛔ unsupported |", matrix)
+        self.assertNotIn("| ✅ verified |", matrix)
+
+    def test_unauthorized_targets_in_records(self):
+        self.record("2026-11-01-elsewhere.json", targets=["file:///C:/production/customer/"])
+        self.expect("DVER-050")
+
+    def test_malformed_records_are_reported_not_crashed_on(self):
+        self.record("2026-11-01-odd.json", application="FakeApp", runs=["x"], platform=["windows"])
+        self.fix()
+        self.expect("DVER-042")
+
+    # -------------------------------------------------------------- pinned copies
+
+    def test_pinned_copies_are_never_edited(self):
+        self.edit("demo_cli/_driver/update.py", "MOVE_ASIDE = WINDOWS", "MOVE_ASIDE = False")
+        self.edit(".agent/DRIVER-CLI-SPEC.md", "MUST", "SHOULD")
+        self.edit("contract/driver-contract.json", '"notice_interval_hours": 24', '"notice_interval_hours": 48')
+        (self.project / "licenses" / "extra.txt").write_text("x", encoding="utf-8")
+        self.assertTrue({"DREPO-030", "DREPO-031", "DREPO-032", "DREPO-033"} <= self.clauses())
+
+    def test_sync_restores_the_release(self):
+        (self.project / "demo_cli" / "_driver" / "update.py").unlink()
+        (self.project / "demo_cli" / "_driver" / "mine.py").write_text("x = 1\n", encoding="utf-8")
+        (self.project / ".agent" / "SPEC_VERSION").write_text("0.9.0\n", encoding="utf-8")
+        self.expect("DREPO-034")
+        changes = sync_spec.sync(self.project)
+        self.assertIn("removed demo_cli/_driver/mine.py", changes)
+        self.assertEqual([p.text() for p in self.problems()], [])
+        self.assertEqual(sync_spec.sync(self.project), [])
+
+    def test_script_copies_are_pinned(self):
+        self.edit("scripts/build.py", "def target()", "def target_of_this_machine()")
+        self.edit("scripts/build.py", "system, cpu = target()", "system, cpu = target_of_this_machine()")
+        self.expect("DREPO-035")
+        self.assertIn("wrote scripts/build.py", sync_spec.sync(self.project))
+        self.assertNotIn("DREPO-035", self.clauses())
+        (self.project / "scripts" / "mine.py").write_text("print('the author keeps it')\n", encoding="utf-8")
+        self.assertNotIn("DREPO-035", self.clauses())  # scripts of the author's own are not pinned
+
+    def test_sync_lists_the_template_files_that_changed(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        old = cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "template"
+        shutil.copytree(REPO / "template", old)
+        (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
+        (old / "scripts" / "build.py").write_text("an older script\n", encoding="utf-8")  # pinned: sync replaces it
+        agents = (old / "AGENTS.md").read_text(encoding="utf-8")
+        (old / "AGENTS.md").write_text(agents.replace("Never edit a pinned copy", "Do not edit a pinned copy"), encoding="utf-8")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}):
+            self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
+            self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded
+        self.assertEqual(sync_spec.template_changes(self.project, check_project.bundle_version()), [])
+
+    def test_sync_does_not_list_shared_text_generate_writes(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        old = cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "template"
+        shutil.copytree(REPO / "template", old)
+        contributing = old / "CONTRIBUTING.md"
+        text = contributing.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-security:start -->", "<!-- driver:spec-security:end -->"
+        contributing.write_text(text[:text.index(start) + len(start)] + "\nAn older text.\n" + text[text.index(end):], encoding="utf-8")
+        e2e = old / "docs" / "E2E.md"
+        e2e.write_text(re.sub(r"<!-- driver:spec-procedure:(start|end) -->\n?", "", e2e.read_text(encoding="utf-8")), encoding="utf-8")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}):
+            changed = sync_spec.template_changes(self.project, "0.9.0")
+        self.assertNotIn("CONTRIBUTING.md", changed)  # generate writes the new text
+        self.assertIn("docs/E2E.md", changed)  # a region the new release adds needs its markers
+
+    def test_sync_lists_the_template_changes_again_with_since(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        (self.project / ".agent" / "SPEC_SHA256").write_text("ab" * 32 + "\n", encoding="utf-8")  # pins this release
+        asked = []
+
+        def download(version, pin):
+            asked.append((version, pin))
+            old = cache / "tool-driver-cli-spec" / version / f"tool-driver-cli-spec-{version}" / "template"
+            shutil.copytree(REPO / "template", old)
+            (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", download):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project)]), 0)
+            self.assertIn("--since <earlier version>", out.getvalue())  # the same release again: how to list them
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project), "--since", "0.9.0"]), 0)
+        self.assertIn("  docs/E2E.md", out.getvalue())
+        self.assertEqual(asked, [("0.9.0", None)])  # checked against its published SHA-256, not this release's pin
+
+    def test_sync_downloads_the_release_pinned_before(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        (self.project / ".agent" / "SPEC_SHA256").write_text("ab" * 32 + "\n", encoding="utf-8")
+        asked = []
+
+        def download(version, pin):
+            asked.append((version, pin))
+            old = cache / "tool-driver-cli-spec" / version / f"tool-driver-cli-spec-{version}" / "template"
+            shutil.copytree(REPO / "template", old)
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", download):
+            self.assertIsNone(sync_spec.fetch_old(self.project, "0.9.0"))
+            self.assertEqual(asked, [("0.9.0", "ab" * 32)])  # checked against the pinned SHA-256
+            self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), [])
+            self.assertIsNone(sync_spec.fetch_old(self.project, "0.9.0"))
+            self.assertEqual(len(asked), 1)  # in the cache now
+
+        def offline(version, pin):
+            raise SystemExit("cannot download the release: offline")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", offline):
+            self.assertIn("offline", sync_spec.fetch_old(self.project, "0.8.0"))
+
+        def broken(version, pin):
+            raise OSError("disk full")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", broken):
+            self.assertIn("disk full", sync_spec.fetch_old(self.project, "0.8.0"))  # never stops the sync
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), \
+                mock.patch.object(sync_spec, "download", lambda version, pin: None):
+            self.assertIn("no template/", sync_spec.fetch_old(self.project, "0.8.0"))
+
+    def test_the_download_of_spec_py_fills_the_cache(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("tool-driver-cli-spec-0.9.0/VERSION", "0.9.0\n")
+        data = payload.getvalue()
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), \
+                mock.patch("urllib.request.urlopen", side_effect=lambda url, timeout: io.BytesIO(data)):
+            with self.assertRaises(SystemExit):
+                sync_spec.download("0.9.0", "00" * 32)  # another SHA-256: nothing is unpacked
+            self.assertFalse((cache / "tool-driver-cli-spec" / "0.9.0").exists())
+            sync_spec.download("0.9.0", hashlib.sha256(data).hexdigest())
+        self.assertTrue((cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+
+    def test_a_download_link_that_keeps_failing_is_replaced_by_the_github_api(self):
+        import urllib.error
+
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("tool-driver-cli-spec-0.9.0/VERSION", "0.9.0\n")
+        data = payload.getvalue()
+        digest = hashlib.sha256(data).hexdigest()
+        files = {"tool-driver-cli-spec-0.9.0.zip": data, "tool-driver-cli-spec-0.9.0.sha256": f"{digest}  x.zip\n".encode()}
+        asked = []
+
+        def urlopen(request, timeout):
+            url = request.full_url
+            asked.append(url)
+            if "/releases/download/" in url:
+                raise urllib.error.HTTPError(url, 504, "Gateway Timeout", {}, None)
+            if url.endswith("/releases/tags/v0.9.0"):
+                assets = [{"name": n, "url": f"https://api.example/assets/{n}"} for n in files]
+                return io.BytesIO(json.dumps({"assets": assets}).encode())
+            self.assertEqual(request.get_header("Accept"), "application/octet-stream")
+            return io.BytesIO(files[url.rsplit("/", 1)[1]])
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", urlopen), \
+                mock.patch("time.sleep") as slept:
+            sync_spec.download("0.9.0", None)
+        release = cache / "tool-driver-cli-spec" / "0.9.0"
+        self.assertEqual((release / "bundle.sha256").read_text(encoding="utf-8").strip(), digest)  # still checked
+        self.assertTrue((release / "tool-driver-cli-spec-0.9.0" / "VERSION").is_file())
+        self.assertEqual([c.args[0] for c in slept.call_args_list], [2, 4, 8] * 2)  # each link tried four times
+        self.assertEqual(len([u for u in asked if "/releases/download/" in u]), 8)
+
+        def missing(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch("urllib.request.urlopen", missing), \
+                mock.patch("time.sleep") as slept, self.assertRaises(SystemExit) as stop:
+            sync_spec.download("0.8.0", None)
+        self.assertFalse(slept.called)  # a release that does not exist is not asked for again
+        self.assertIn("nor through the GitHub API", str(stop.exception))
+
+    # -------------------------------------------------------------- versions, platforms and the survey
+
+    def test_one_version_everywhere(self):
+        self.edit("package.json", '"version": "0.1.0"', '"version": "0.2.0"')
+        found = self.clauses()
+        self.assertTrue({"DREPO-040", "DREPO-053", "DSKL-030"} <= found, found)
+
+    def test_platforms_follow_the_survey(self):
+        package = json.loads((self.project / "package.json").read_text(encoding="utf-8"))
+        package["optionalDependencies"]["@tool-driver/demo-cli-linux-arm64"] = "0.1.0"
+        package["optionalDependencies"].pop("@tool-driver/demo-cli-darwin-x64")
+        package["optionalDependencies"]["@tool-driver/demo-cli-darwin-arm64"] = "0.1.0"
+        (self.project / "package.json").write_text(json.dumps(package, indent=2), encoding="utf-8")
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-052"]
+        self.assertTrue(any("Linux arm64" in m for m in problems), problems)
+        self.assertTrue(any("needs an x64" in m for m in problems), problems)
+
+    def test_capability_survey(self):
+        self.edit("docs/APPLICATION.md", "| CAP-001 | Move parts | The automation API | provided | - |",
+                  "| CAP-1 | Move parts | The automation API | maybe | - |")
+        found = self.clauses()
+        self.assertIn("DREPO-060", found)
+
+    # -------------------------------------------------------------- Skills
+
+    def test_entry_skill_rules(self):
+        skill = "skills/demo-cli/SKILL.md"
+        self.edit(skill, "name: demo-cli", "name: demo")
+        self.edit(skill, "### Scope refused", "### Scope")
+        self.edit(skill, "## Errors\n", "## Errors\n" + "\nline" * 160 + "\n")
+        (self.project / "skills" / "demo-cli" / "notes.txt").write_text("x", encoding="utf-8")
+        found = self.clauses()
+        self.assertTrue({"DSKL-002", "DSKL-009", "DSKL-003", "DSKL-032"} <= found, found)
+
+    def test_domain_skill_rules(self):
+        folder = self.project / "skills" / "demo-parts"
+        folder.mkdir()
+        (folder / "SKILL.md").write_text("---\nname: demo-parts\ndescription: Parts. 零件。\nmetadata:\n  version: 0.1.0\n"
+                                         "  commands: [part get, part move, part fly]\n---\n\nParts and their values.\n",
+                                         encoding="utf-8")
+        other = self.project / "skills" / "demo-boards"
+        other.mkdir()
+        (other / "SKILL.md").write_text("---\nname: demo-boards\ndescription: Boards. 电路板。\nmetadata:\n  version: 0.1.0\n"
+                                        "  commands: [part get]\n---\n\nRead the demo-cli Skill first.\n",
+                                        encoding="utf-8")
+        found = self.clauses()
+        self.assertTrue({"DSKL-024", "DSKL-026", "DSKL-027"} <= found, found)
+
+    # -------------------------------------------------------------- knowledge
+
+    def test_knowledge_rules(self):
+        self.edit("knowledge/demo-troubleshooting.md", "kind: troubleshooting", "kind: guide")
+        self.edit("knowledge/demo-troubleshooting.md", "id: demo-troubleshooting", "id: demo-basics")
+        self.edit("knowledge/demo-basics.md", "tags: [basics]\n", "")
+        self.edit("knowledge/demo-basics.md", "\n---\n", "\n---\n\nSee [the guide](missing.md).\n" + "word " * 1300)
+        found = self.clauses()
+        self.assertTrue({"DSKL-120", "DSKL-121", "DSKL-126", "DSKL-127"} <= found, found)
+
+    # -------------------------------------------------------------- matrices, evidence and maturity
+
+    def test_matrices(self):
+        (self.project / "tests" / "matrix" / "part-get.json").unlink()
+        self.edit("tests/matrix/part-move.json", '"row": "busy",\n      "applies": false,\n      "reason": "The demo tool drives no real application."',
+                  '"row": "busy",\n      "applies": true,\n      "arguments": [],\n      "expected": {"exit": 7, "code": "E_BUSY"},\n'
+                  '      "actual": {"exit": 0},\n      "evidence": "live:docs/evidence/none.json"')
+        problems = [p.message for p in self.problems() if p.clause in ("DVER-030", "DVER-041")]
+        self.assertTrue(any("needs a behavior matrix" in m for m in problems), problems)
+        self.assertTrue(any("row busy failed" in m for m in problems), problems)
+        self.assertTrue(any("no readable file" in m for m in problems), problems)
+
+    def test_generate_writes_a_first_matrix(self):
+        (self.project / "tests" / "matrix" / "part-get.json").unlink()
+        self.fix()
+        matrix = json.loads((self.project / "tests" / "matrix" / "part-get.json").read_text(encoding="utf-8"))
+        rows = {r["row"]: r for r in matrix["rows"]}
+        self.assertFalse(rows["conflict"]["applies"])
+        self.assertEqual(rows["not_found"]["expected"]["code"], "E_NOT_FOUND")
+        self.assertIn("DREPO-019", self.clauses())
+
+    def test_maturity_needs_current_evidence(self):
+        self.edit("demo_cli/commands/__init__.py", '"maturity": "draft"', '"maturity": "verified"')
+        self.fix()
+        self.expect("DVER-040")
+
+    def test_verified_rests_on_a_passing_run_of_the_command(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("verified", [f"live:{ref}"], f"live:{ref}#normal")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        self.assertIn("maturity-draft", (self.project / "README.md").read_text(encoding="utf-8"))  # part get is draft
+
+    def test_evidence_that_does_not_show_the_run(self):
+        self.authorize("file:///D:/e2e/demo/")
+        cases = {
+            "foreign tool": self.record("2026-11-01-a.json", tool="other-cli"),
+            "older minor": self.record("2026-11-01-b.json", tool_version="0.0.9"),
+            "failed run": self.record("2026-11-01-c.json", runs=[{"command": "part move", "arguments": [], "exit": 1,
+                                                                  "result": "fail", "mode": "session", "matrix_row": "normal"}]),
+            "other command": self.record("2026-11-01-d.json", runs=[{"command": "part get", "arguments": [], "exit": 0,
+                                                                     "result": "pass", "mode": "session", "matrix_row": "normal"}]),
+        }
+        stray = self.project / "tests" / "fixture.json"
+        stray.write_text(json.dumps({"tool_version": "0.1.0"}), encoding="utf-8")
+        cases["not a record"] = "tests/fixture.json"
+        for what, ref in cases.items():
+            with self.subTest(what=what):
+                project = Path(tempfile.mkdtemp(prefix="evidence-", dir=self.work)) / "demo-cli"
+                shutil.copytree(self.project, project)
+                keep, self.project = self.project, project
+                try:
+                    self.mature("verified", [f"live:{ref}"], f"live:{ref}#normal")
+                    self.expect("DVER-040")
+                finally:
+                    self.project = keep
+
+    def test_rows_need_their_own_passing_runs(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("verified", [f"live:{ref}"], None)
+        self.expect("DVER-040")
+
+    def test_the_normal_row_always_applies(self):
+        self.edit("tests/matrix/part-get.json", '"row": "normal",\n      "applies": true,\n      "arguments": [\n        "--session",\n        "{session}",\n        "--doc",\n        "{doc}",\n        "--id",\n        "R1"\n      ],\n      "expected": {\n        "exit": 0\n      }',
+                  '"row": "normal",\n      "applies": false,\n      "reason": "skipped"')
+        self.expect("DVER-030")
+
+    def test_a_row_cannot_apply_when_its_condition_does_not_hold(self):
+        self.edit("tests/matrix/part-get.json", '"row": "conflict",\n      "applies": false,\n      "reason": "The demo tool drives no real application."',
+                  '"row": "conflict",\n      "applies": true,\n      "arguments": [],\n      "expected": {"exit": 6, "code": "E_CONFLICT"}')
+        problems = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("row conflict applies only when writes" in m for m in problems), problems)
+
+    def question(self, name: str, scenario: str, commands: list[str]) -> None:
+        folder = self.project / "tests" / "eval"
+        folder.mkdir(parents=True, exist_ok=True)
+        text = (f'"""A question."""\nSCENARIO = {scenario!r}\nCOMMANDS = {commands!r}\nTURNS = ["Do it."]\n\n\n'
+                'def grade(run):\n    pass\n')
+        (folder / f"{name}.py").write_text(text, encoding="utf-8")
+
+    def report(self, name: str, **change) -> dict:
+        """An evaluation report from the real application of every current question, all passed."""
+        folder = self.project / "tests" / "eval"
+        questions = []
+        for path in sorted(folder.glob("*.py")):
+            commands = ["part move"] if path.stem == "move-r1" else ["part get"]
+            questions.append({"scenario": "scoped_change" if path.stem == "move-r1" else path.stem, "id": path.stem,
+                              "passed": True, "sha256": check_project.digest(path), "commands": commands, "ran": commands})
+        data = {"tool": "demo-cli", "tool_version": "0.1.0", "date": "2026-11-01", "agent": "a", "model": "m",
+                "simulated": False, "platform": "windows", "targets": ["file:///D:/e2e/demo/eval/"], "questions": questions}
+        data.update(change)
+        (self.project / "docs" / "evidence" / name).write_text(json.dumps(data), encoding="utf-8")
+        return data
+
+    def test_stable_needs_an_evaluation(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01.json"], f"live:{ref}#normal")
+        found = self.clauses()
+        self.assertTrue({"DSKL-043", "DREPO-004", "DSKL-042"} <= found, found)
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        data = self.report("eval-2026-11-01.json")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        moved = [dict(q, ran=[]) if q["id"] == "move-r1" else q for q in data["questions"]]
+        cases = {"simulated": {"simulated": True},
+                 "a question failed": {"questions": [dict(q, passed=q["id"] != "read_answer") for q in data["questions"]]},
+                 "a question is missing": {"questions": [q for q in data["questions"] if q["id"] != "separate_save"]},
+                 "a question changed since": {"questions": [dict(q, sha256="0" * 64) if q["id"] == "read_answer" else q
+                                                            for q in data["questions"]]},
+                 "the command never ran": {"questions": moved}}
+        for what, change in cases.items():
+            with self.subTest(what=what):
+                self.report("eval-2026-11-01.json", **change)
+                self.expect("DSKL-043")
+        self.report("eval-2026-11-01.json")
+        self.report("eval-2026-11-02.json", date="2026-11-02",
+                    questions=[dict(q, passed=False) for q in data["questions"]])
+        problems = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("newest current result of" in m for m in problems), problems)  # a newer failure wins
+        (self.project / "docs" / "evidence" / "eval-2026-11-02.json").unlink()
+        self.report("eval-2026-11-01.json", targets=["file:///D:/elsewhere/"])
+        self.expect("DVER-050")
+
+    def fingerprinted(self, run: dict) -> dict:
+        return dict(run, fingerprint=check_project.fingerprint(check_project.gather(self.project), run["command"]))
+
+    def test_a_live_run_counts_until_its_registration_or_the_adapter_changes(self):
+        self.authorize("file:///D:/e2e/demo/")
+        run = self.fingerprinted({"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass",
+                                  "mode": "session", "matrix_row": "normal"})
+        ref = self.record("2026-11-01-move.json", tool_version="0.0.9", runs=[run])  # another minor: the fingerprint decides
+        self.mature("verified", [f"live:{ref}"], f"live:{ref}#normal")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        self.edit("demo_cli/commands/__init__.py", "Move one part.", "Move one part to a new place.")
+        self.edit("README.md", "Filled in by the author\n", "Filled in by the author, again\n")
+        self.fix()
+        self.assertEqual([p.text() for p in self.problems()], [])  # a summary changes nothing the run shows
+        adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "# a change\n", encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("before a change to its registration or to the adapter" in m for m in messages), messages)
+
+    def test_an_evaluation_result_counts_until_what_it_depends_on_changes(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01.json"], f"live:{ref}#normal")
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        facts = check_project.gather(self.project)
+
+        def fingerprinted(data: dict) -> list:
+            return [dict(q, fingerprint=check_project.question_fingerprint(facts, q["sha256"], q["commands"])) for q in data["questions"]]
+
+        data = self.report("eval-2026-11-01.json", tool_version="0.0.9")
+        self.report("eval-2026-11-01.json", tool_version="0.0.9",
+                    questions=[q for q in fingerprinted(data) if q["id"] != "separate_save"])
+        self.report("eval-2026-11-03.json", tool_version="0.0.9", date="2026-11-03",
+                    questions=[q for q in fingerprinted(data) if q["id"] == "separate_save"])
+        self.assertEqual([p.text() for p in self.problems()], [])  # the results of two reports count together
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        start, end = "<!-- driver:command-map:start -->", "<!-- driver:command-map:end -->"
+        skill.write_text(text.replace(end, "| `made up` | generated |\n" + end), encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())  # generated content is not guidance
+        skill.write_text(text.replace(start, "Always read the document first.\n\n" + start), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("no current result" in m and "spec.py eval --stale" in m for m in messages), messages)
+        skill.write_text(text, encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())
+        skill.write_text(re.sub(r"(?m)^(\s*version:).*$", r"\1 9.9.9", text, count=1), encoding="utf-8")
+        adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "# a fix\n", encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())  # a release's version and an adapter fix leave the results standing
+
+    def test_a_new_version_of_a_host_component_keeps_the_fingerprint(self):
+        root = Path(tempfile.mkdtemp(prefix="fingerprint-", dir=self.work))
+        (root / "demo_cli").mkdir()
+        (root / "demo_cli" / "adapter.py").write_text("x = 1\n", encoding="utf-8")
+        (root / "plugin").mkdir()
+
+        def digest(version: str, methods: list[str], readme: str = "", depends: str = "[]") -> str:
+            (root / "plugin" / "manifest.json").write_text(json.dumps({"version": version, "methods": methods}), encoding="utf-8")
+            (root / "plugin" / "README.md").write_text(readme, encoding="utf-8")
+            (root / "pyproject.toml").write_text(f'[project]\nname = "demo"\nversion = "{version}"\ndependencies = {depends}\n',
+                                                 encoding="utf-8")
+            facts = check_project.Facts(root=root, contract={}, pkg="demo_cli")
+            return check_project.adapter_digest(facts)
+
+        first = digest("0.1.0", ["apply"])
+        self.assertEqual(digest("0.2.0", ["apply"], readme="new text"), first)  # the version and the README change nothing
+        self.assertNotEqual(digest("0.2.0", ["apply", "read_back"]), first)  # another method does
+        self.assertNotEqual(digest("0.1.0", ["apply"], depends='["pywin32>=306"]'), first)  # and a dependency
+
+    def test_the_second_report_of_a_day_is_newer_than_the_first(self):
+        self.authorize("file:///D:/e2e/demo/")
+        ref = self.record("2026-11-01-move.json")
+        self.mature("stable", [f"live:{ref}", "eval:docs/evidence/eval-2026-11-01-2.json"], f"live:{ref}#normal")
+        self.question("move-r1", "scoped_change", ["part move"])
+        for scenario in ("read_answer", "knowledge_lookup", "separate_save"):
+            self.question(scenario, scenario, ["part get"])
+        data = self.report("eval-2026-11-01.json")
+        self.report("eval-2026-11-01.json", questions=[dict(q, passed=False) for q in data["questions"]])
+        self.report("eval-2026-11-01-2.json")
+        self.assertEqual([p.text() for p in self.problems()], [])  # the morning's failures were run again and passed
+        self.report("eval-2026-11-01-10.json", questions=[dict(q, passed=False) for q in data["questions"]])
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-043"]
+        self.assertTrue(any("newest current result of" in m for m in messages), messages)  # -10 comes after -2
+
+    def test_the_newest_run_on_each_kind_decides(self):
+        self.authorize("file:///D:/e2e/demo/")
+        self.edit("demo_cli/__init__.py", "doc_kinds=[]", 'doc_kinds=["board", "panel"]')
+        self.edit("demo_cli/commands/__init__.py", '"maturity": "draft", "evidence": []',
+                  '"maturity": "draft", "evidence": [], "doc_kinds": ["board", "panel"] if path == "part move" else []')
+        self.fix()
+        run = {"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass", "mode": "session",
+               "matrix_row": "normal"}
+        board = self.record("2026-11-01-board.json", runs=[self.fingerprinted(dict(run, doc_kind="board"))])
+        panel = self.record("2026-11-01-panel.json", runs=[self.fingerprinted(dict(run, doc_kind="panel"))])
+        self.mature("verified", [f"live:{board}"], f"live:{board}#normal")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        data["rows"][0]["kind_evidence"] = {"board": f"live:{board}#normal", "panel": f"live:{panel}#normal"}
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        data["rows"][0]["kind_evidence"] = {"board": f"live:{board}#normal"}  # the last panel run crashed
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("on a panel" in m for m in messages), messages)  # the older panel pass no longer counts
+        del data["rows"][0]["kind_evidence"]
+        matrix.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
+        self.assertTrue(any("on a panel" in m for m in messages), messages)  # runs with a fingerprint count only through it
+
+    def test_question_files_are_checked(self):
+        self.question("move-r1", "made_up", ["part move"])
+        self.question("get-r1", "read_answer", ["part fly"])
+        messages = [p.message for p in self.problems() if p.clause == "DSKL-044"]
+        self.assertTrue(any("made_up" in m for m in messages), messages)
+        self.assertTrue(any("`part fly`" in m for m in messages), messages)
+
+    def test_corrupt_runtime_manifest(self):
+        (self.project / "demo_cli" / "_driver" / "MANIFEST.json").write_text("garbage", encoding="utf-8")
+        self.expect("DREPO-032")
+
+    def test_a_second_copy_of_the_runtime(self):
+        shutil.copyfile(self.project / "demo_cli" / "_driver" / "writes.py", self.project / "demo_cli" / "writes_copy.py")
+        self.expect("DREPO-034")
+
+    def test_junk_files_and_config_files_are_not_problems(self):
+        for name in (".agent/.DS_Store", "licenses/Thumbs.db", "tox.ini", "requirements-docs.txt"):
+            (self.project / name).write_text("x", encoding="utf-8")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        (self.project / "Makefile").write_text("all:\n", encoding="utf-8")
+        self.expect("DREPO-003")
+
+    def test_install_scripts_and_platform_names(self):
+        package = json.loads((self.project / "package.json").read_text(encoding="utf-8"))
+        package["scripts"] = {"postinstall": "node x.js"}
+        package["optionalDependencies"]["@tool-driver/demo-cli-win32-ia32"] = "0.1.0"
+        (self.project / "package.json").write_text(json.dumps(package, indent=2), encoding="utf-8")
+        found = self.clauses()
+        self.assertTrue({"DSEC-072", "DREPO-051"} <= found, found)
+
+    def test_hand_typed_labels(self):
+        self.edit("README.md", "## About This Tool\n", "## About This Tool\n\nStatus: ✅ verified everywhere.\n")
+        self.edit("README_zh.md", "## 关于本工具\n", '## 关于本工具\n\n<img src="https://img.shields.io/badge/production-ready-green">\n')
+        found = self.clauses()
+        self.assertTrue({"DREPO-022", "DREPO-024"} <= found, found)
+
+    def test_one_line_pitch(self):
+        self.edit("README.md", "Filled in by the author\n", "Filled in by the author\nAnd a second line.\n")
+        self.expect("DREPO-011")
+
+    def test_skill_details(self):
+        skill = "skills/demo-cli/SKILL.md"
+        (self.project / "skills" / "demo-cli" / "references").mkdir()
+        (self.project / "skills" / "demo-cli" / "references" / "deep.md").write_text("x", encoding="utf-8")
+        (self.project / "skills" / "stray.txt").write_text("x", encoding="utf-8")
+        self.edit(skill, "### Scope refused", "### Physical effects\n\nx\n\n### Scope refused")
+        text = (self.project / skill).read_text(encoding="utf-8")
+        start = text.index("description:")
+        end = text.index("metadata:")
+        (self.project / skill).write_text(text[:start] + "description: English only, no other language.\n" + text[end:],
+                                          encoding="utf-8")
+        found = self.clauses()
+        self.assertTrue({"DSKL-003", "DSKL-032", "DSKL-009", "DSKL-001"} <= found, found)
+
+    def test_domain_skill_repeating_the_recipe(self):
+        entry = (self.project / "skills" / "demo-cli" / "SKILL.md").read_text(encoding="utf-8")
+        line = next(x for x in entry.split("\n") if x.startswith("2. When it returns"))
+        folder = self.project / "skills" / "demo-part"
+        folder.mkdir()
+        (folder / "SKILL.md").write_text("---\nname: demo-part\ndescription: Parts. 零件。\nmetadata:\n  version: 0.1.0\n"
+                                         f"  commands: [part move]\n---\n\nRead demo-cli first.\n\n{line}\n",
+                                         encoding="utf-8")
+        self.fix()
+        self.expect("DSKL-023")
+
+    def test_matrices_follow_the_implemented_capabilities(self):
+        # The template's adapter implements only probe, so no standard command needs a matrix yet.
+        self.assertFalse((self.project / "tests" / "matrix" / "doc-list.json").exists())
+        self.edit("demo_cli/adapter/__init__.py", "        return {\"found\": False}",
+                  "        return {\"found\": False}\n\n    def documents(self, request: dict[str, Any]) -> dict[str, Any]:\n"
+                  "        return {\"items\": []}")
+        messages = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("`doc list`" in m for m in messages), messages)
+
+    def test_host_component_manifest(self):
+        self.edit("demo_cli/__init__.py", "host_component=False,",
+                  'host_component=True,\n    plugin_manifest=ROOT / "plugin" / "manifest.json",')
+        (self.project / "plugin").mkdir(exist_ok=True)
+        self.expect("DCLI-240")
+        self.fix()
+        manifest = json.loads((self.project / "plugin" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual((manifest["version"], manifest["files"], manifest["methods"]), ("0.1.0", {}, []))
+        manifest["methods"] = ["read", "apply"]
+        (self.project / "plugin" / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (self.project / "plugin" / "host.py").write_text("print('host')\n", encoding="utf-8")
+        self.expect("DCLI-240")
+        self.fix()
+        manifest = json.loads((self.project / "plugin" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["methods"], ["read", "apply"])
+        self.assertEqual(manifest["files"], {"host.py": check_project.digest(self.project / "plugin" / "host.py")})
+        self.assertNotIn("DCLI-240", self.clauses())
+
+    def test_rename_stubs(self):
+        folder = self.project / "skills" / "demo-part"
+        folder.mkdir()
+        stub = ("---\nname: demo-part\ndescription: Renamed; read demo-cli. 已改名，请读 demo-cli。\nmetadata:\n"
+                "  version: 0.1.0\n  replaced_by: demo-cli\n---\n\n# demo-part\n\nThis Skill was merged into `demo-cli`; read it instead.\n\n"
+                "<!-- driver:command-map:start -->\n<!-- driver:command-map:end -->\n")
+        (folder / "SKILL.md").write_text(stub, encoding="utf-8")
+        self.fix()
+        self.assertEqual([p.text() for p in self.problems() if p.path.startswith("skills/")], [])
+        (folder / "SKILL.md").write_text(stub.replace("replaced_by: demo-cli", "replaced_by: demo-gone"), encoding="utf-8")
+        self.expect("DSKL-028")
+        # A full domain Skill that forgets its commands is not a stub.
+        (folder / "SKILL.md").write_text(stub.replace("  replaced_by: demo-cli\n", ""), encoding="utf-8")
+        self.expect("DSKL-026")
+
+    def test_related_knowledge_must_exist(self):
+        self.edit("demo_cli/commands/__init__.py", '"related_knowledge": []', '"related_knowledge": ["no-such-entry"]')
+        self.fix()
+        self.expect("DSKL-124")
+
+    def test_runtime_parser_reads_knowledge(self):
+        self.edit("knowledge/demo-basics.md", "\nkind: guide", "\n# a comment\nkind: guide")
+        self.assertEqual([p.text() for p in self.problems()], [])
+        self.edit("knowledge/demo-basics.md", "\ntags: [basics]", "\ntags:")
+        self.expect("DSKL-120")
+
+    def test_a_record_keeps_the_envelope_it_was_written_with(self):
+        self.authorize("file:///D:/e2e/demo/")
+        old = {"ok": True, "schema_version": "1.0", "data": {"id": "R1"}, "meta": {"duration_ms": 40}}
+        self.record("2026-11-01-earlier-patch.json",
+                    runs=[{"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass",
+                           "mode": "session", "matrix_row": "normal", "envelope": old, "envelope_sha256": "0" * 64}])
+        self.fix()
+        self.assertNotIn("DVER-042", self.clauses())
+
+    def test_a_tool_that_cannot_report_itself_gets_only_the_root_cause(self):
+        commands = self.project / "demo_cli" / "commands" / "__init__.py"
+        commands.write_text("raise RuntimeError('an unknown field in a registration')\n", encoding="utf-8")
+        found = self.problems()
+        self.assertIn("DREPO-031", {p.clause for p in found}, [p.text() for p in found])
+        self.assertNotIn("DREPO-013", {p.clause for p in found}, [p.text() for p in found])
+
+    def test_kind_arguments_name_kinds_of_the_command(self):
+        self.edit("tests/matrix/part-move.json", '"row": "normal",', '"row": "normal", "kind_arguments": {"assembly": ["--id", "R1"]},')
+        found = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("kind_arguments names assembly" in m for m in found), found)
+
+    def test_evidence_records_validate(self):
+        (self.project / "docs" / "evidence" / "2026-11-01-bad.json").write_text(json.dumps({"kind": "live"}), encoding="utf-8")
+        self.expect("DVER-042")
+
+    # -------------------------------------------------------------- run_matrix
+
+    def git(self) -> None:
+        for args in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *args], cwd=self.project, check=True, capture_output=True, creationflags=NO_WINDOW)
+
+    def test_run_matrix_runs_only_on_authorized_targets(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        argv = [str(self.project), "--command", "part get", "--row", "normal", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0"]
+        with self.assertRaises(SystemExit):
+            run_matrix.main(argv)  # not a git checkout: the record could not name the build
+        self.git()
+        with self.assertRaises(SystemExit):
+            run_matrix.main(argv)  # no authorized target
+        url = target.resolve().as_uri() + "/"
+        self.authorize(url)
+        self.edit("tests/matrix/part-move.json", '"{doc}"', '"C:/production/customer.fake"')
+        with self.assertRaises(SystemExit):
+            run_matrix.main([*argv[:2], "part move", *argv[3:]])  # a target written into the row
+        with mock.patch.dict(os.environ, {"DEMO_CLI_FAKE_HOST": "nowhere"}):
+            code = run_matrix.main(argv)
+        self.assertEqual(code, 1)  # the demo adapter drives no application, so the row fails
+        records = list((self.project / "docs" / "evidence").glob("*-part-get.json"))
+        self.assertEqual(len(records), 1)
+        record = json.loads(records[0].read_text(encoding="utf-8"))
+        self.assertEqual((record["targets"], record["runs"][0]["mode"]), ([url], "session"))
+        self.assertEqual(record["runs"][0]["fingerprint"], check_project.fingerprint(check_project.gather(self.project), "part get"))
+        row = json.loads((self.project / "tests" / "matrix" / "part-get.json").read_text(encoding="utf-8"))["rows"][0]
+        self.assertTrue(row["evidence"].startswith("live:docs/evidence/"))
+        for written in (records[0], self.project / "tests" / "matrix" / "part-get.json"):
+            self.assertNotIn(b"\r\n", written.read_bytes(), written.name)  # LF, like every file in the repository
+        self.fix()
+        problems = [p.message for p in self.problems() if p.clause == "DVER-030"]
+        self.assertTrue(any("row normal failed" in m for m in problems), problems)
+
+    def test_run_matrix_clears_a_row_a_crash_gives_no_result_and_tampers_without_pausing(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        mismatch = next(r for r in data["rows"] if r["row"] == "read_back_mismatch")
+        mismatch.clear()
+        mismatch.update(row="read_back_mismatch", applies=True, arguments=data["rows"][0]["arguments"],
+                        expected={"exit": 1, "code": "E_VERIFY_FAILED"}, actual={"exit": 1, "code": "E_VERIFY_FAILED"},
+                        evidence="live:docs/evidence/earlier.json#read_back_mismatch")  # an earlier run passed
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        self.authorize(target.resolve().as_uri() + "/")
+        argv = [str(self.project), "--command", "part move", "--row", "read_back_mismatch", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0", "--tamper", "echo"]
+        given: list[dict[str, str]] = []
+
+        class Watcher:
+            def __init__(self, pause, root, env, args, notes):
+                given.append(env)
+
+            def start(self):
+                pass
+
+            def finish(self, timeout):
+                pass
+
+        # The tool crashed: it exited 1 and printed no envelope.
+        crashed = mock.Mock(return_value=(1, b"Traceback (most recent call last):"))
+        with mock.patch.object(run_matrix, "_Watcher", Watcher), mock.patch.object(run_matrix, "_confirmed", crashed), \
+                mock.patch.dict(os.environ, {"DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK": "999"}):
+            self.assertEqual(run_matrix.main(argv), 1)
+        self.assertEqual(crashed.call_args.args[2]["DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK"], "120")  # the row's call waits
+        self.assertNotIn("DEMO_CLI_TEST_PAUSE_BEFORE_READ_BACK", given[0])  # a tamper never does
+        row = next(r for r in json.loads(matrix.read_text(encoding="utf-8"))["rows"] if r["row"] == "read_back_mismatch")
+        self.assertEqual({"actual", "evidence"} & set(row), set())  # not run now, and the matrix stays valid
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-move.json")).read_text(encoding="utf-8"))
+        self.assertEqual(record["runs"][0]["result"], "fail")
+        self.assertIn("no error code", record["runs"][0]["notes"])
+
+    def test_run_matrix_writes_the_scope_of_each_run_and_runs_no_scope_with_none(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        row = next(r for r in data["rows"] if r["row"] == "no_scope")
+        row.clear()
+        row.update(row="no_scope", applies=True, arguments=data["rows"][0]["arguments"], expected={"exit": 4, "code": "E_FORBIDDEN"})
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        granted = target.resolve().as_uri() + "/"
+        self.authorize(granted)
+        argv = [str(self.project), "--command", "part move", "--row", "normal,no_scope", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0"]
+        seen: list[tuple[str, dict | None]] = []
+
+        def confirmed(call, root, env, expected_code, notes, timeout=None):
+            path = Path(env["DEMO_CLI_SCOPE_FILE"])
+            seen.append((str(path), json.loads(path.read_text(encoding="utf-8")) if path.exists() else None))
+            return 4, b'{"ok": false, "error": {"code": "E_FORBIDDEN"}}'
+
+        mine = self.work / "my-scope.json"  # a scope file in the runner's environment is not used
+        with mock.patch.object(run_matrix, "_confirmed", side_effect=confirmed), \
+                mock.patch.dict(os.environ, {"DEMO_CLI_SCOPE_FILE": str(mine)}):
+            run_matrix.main(argv)
+        (live_path, live), (_, none) = seen  # the normal row, then the no_scope row
+        effects = [e["effect"] for e in json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))["effects"]]
+        self.assertEqual(live["targets"], [granted, "untitled:s1/"])  # new documents of the named instance only
+        self.assertEqual(live["effects"], [e for e in effects if e != "observe"])
+        self.assertTrue(live["dangerous"])
+        self.assertNotEqual(live_path, str(mine))
+        self.assertIsNone(none)  # no scope file at all
+        self.assertFalse(Path(live_path).exists())  # removed when the run ended
+
+    def test_run_matrix_asks_for_no_target_the_rows_do_not_use(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        matrix = self.project / "tests" / "matrix" / "part-get.json"
+        data = json.loads(matrix.read_text(encoding="utf-8"))
+        row = next(r for r in data["rows"] if r["row"] == "invalid_input")
+        row.clear()
+        row.update(row="invalid_input", applies=True, arguments=["--session", "{session}", "--id", ""],
+                   expected={"exit": 2, "code": "E_USAGE"})
+        matrix.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        self.git()
+        granted = target.resolve().as_uri() + "/"
+        self.authorize(granted)
+        argv = [str(self.project), "--command", "part get", "--row", "invalid_input", "--set", "session=s1",
+                "--application-version", "1.5.0"]
+        with mock.patch.object(run_matrix, "_confirmed", return_value=(2, b'{"ok": false, "error": {"code": "E_USAGE"}}')):
+            self.assertEqual(run_matrix.main(argv), 0)
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-get.json")).read_text(encoding="utf-8"))
+        self.assertEqual(record["targets"], [granted])  # the run's scope held every authorized target
+        with self.assertRaises(SystemExit):
+            run_matrix.main([*argv[:4], "normal", *argv[5:]])  # a row that names the document still needs --set doc=
+
+    def test_run_matrix_keeps_the_normal_row_s_evidence_of_each_kind(self):
+        matrix = self.project / "tests" / "matrix" / "part-move.json"
+        normal = {"row": "normal", "actual": {"exit": 0}}
+        run_matrix._write_back(matrix, [normal], "2026-11-01-a.json", "project")
+        run_matrix._write_back(matrix, [normal], "2026-11-02-b.json", "board")
+        row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
+        self.assertEqual(row["kind_evidence"], {"board": "live:docs/evidence/2026-11-02-b.json#normal",
+                                                "project": "live:docs/evidence/2026-11-01-a.json#normal"})
+        self.assertEqual(row["evidence"], "live:docs/evidence/2026-11-02-b.json#normal")
+        run_matrix._write_back(matrix, [{"row": "normal", "actual": None}], "2026-11-03-c.json", "board")  # a crash
+        row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
+        self.assertEqual(row["kind_evidence"], {"project": "live:docs/evidence/2026-11-01-a.json#normal"})
+        self.assertNotIn("evidence", row)
+
+    def test_a_tamper_command_finishes_its_steps_after_the_row(self):
+        pause = self.work / "pause.json"
+        pause.write_text("{}", encoding="utf-8")  # the tool has paused already
+
+        def watch(seconds: float, timeout: float) -> list[str]:
+            notes: list[str] = []
+            args = argparse.Namespace(tamper=f'{{python}} -c "import time; time.sleep({seconds})"')
+            watcher = run_matrix._Watcher(pause, self.work, dict(os.environ), args, notes)
+            watcher.start()
+            time.sleep(0.5)  # the row ends while the command still runs
+            watcher.finish(timeout)
+            return notes
+
+        self.assertEqual(watch(2, 30), ["--tamper exited 0"])
+        notes = watch(30, 1)
+        self.assertTrue(any("was still running 1 s after the row ended" in n for n in notes), notes)
+
+    def test_covered(self):
+        base = self.work / "e2e"
+        targets = [(base / "demo").resolve().as_uri() + "/", (base / "one.fake").resolve().as_uri(), "device:cnc-01"]
+        target = run_matrix.target_of
+        self.assertEqual(run_matrix.covered(target("doc", str(base / "demo" / "sub" / "board.fake")), targets), targets[0])
+        self.assertEqual(run_matrix.covered(target("doc", str(base / "one.fake")), targets), targets[1])
+        self.assertIsNone(run_matrix.covered(target("doc", str(base / "demo2" / "board.fake")), targets))
+        self.assertEqual(run_matrix.covered(target("device", "cnc-01"), targets), "device:cnc-01")
+        self.assertIsNone(run_matrix.covered(target("device", "cnc-02"), targets))
+
+    def test_run_matrix_masks_secrets_and_never_passes_simulated_results(self):
+        self.assertTrue(run_matrix.simulated({"data": {"receipt": {"simulated": True}}}))
+        self.assertEqual(run_matrix.pairs(["--token=abc", "--id", "R1", "--dry-run"]), [("--token", "abc"), ("--id", "R1")])
+
+
+class TamperCommand(unittest.TestCase):
+    def test_python_stands_for_the_interpreter_of_run_matrix(self):
+        line = run_matrix.tamper_command("{python} tamper.py")
+        self.assertIn(sys.executable, line)
+        self.assertTrue(line.endswith(" tamper.py"))
+
+
+class RunMatrixTest(unittest.TestCase):
+    def tmp(self) -> Path:
+        path = Path(tempfile.mkdtemp(prefix="run-matrix-"))
+        self.addCleanup(shutil.rmtree, path, True)
+        return path
+
+    def test_targets_with_spaces_and_non_ascii_names_match_the_runtime_keys(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.targets import covers, file_key
+
+        contract = json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))
+        folder = self.tmp() / "工作 区"
+        folder.mkdir()
+        board = folder / "板.fake"
+        self.assertEqual(run_matrix.target_of("doc", str(board)), file_key(str(board.resolve())))
+        for listed in (file_key(str(folder.resolve())) + "/", folder.resolve().as_uri() + "/"):  # raw or percent-encoded
+            self.assertEqual(run_matrix.covered(run_matrix.target_of("doc", str(board)), [listed]), listed)
+            scope = json.loads(run_matrix.live_scope(self.tmp(), [listed], "s1", contract).read_text(encoding="utf-8"))
+            self.assertTrue(covers(scope["targets"][0], file_key(str(board.resolve()))), scope["targets"])
+            self.assertEqual(scope["targets"][1:], ["untitled:s1/"])  # only the instance the run names
+        scope = json.loads(run_matrix.live_scope(self.tmp(), [listed], None, contract).read_text(encoding="utf-8"))
+        self.assertFalse(any(t.startswith("untitled:") for t in scope["targets"]))
+
+    def test_a_call_that_does_not_answer_ends_with_every_process_it_started(self):
+        # The child starts a grandchild that holds the output pipe and outlives the child.
+        child = ("import os, subprocess, sys, time\n"
+                 "flags = 0x08000000 if os.name == 'nt' else 0\n"
+                 "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(90)'], creationflags=flags)\n"
+                 "time.sleep(90)\n")
+        notes: list[str] = []
+        started = time.monotonic()
+        code, _ = run_matrix._run([sys.executable, "-c", child], self.tmp(), dict(os.environ), notes, timeout=3)
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertEqual((code, notes), (-1, ["no answer within 3 s"]))
+
+    def test_files_a_command_only_reads_from_tests_inputs_are_not_targets(self):
+        root = self.tmp()
+        inputs = root / "tests" / "inputs"
+        authorized = [(root / "authorized").resolve().as_uri() + "/"]
+        command = {"path": "design import", "effects": ["change"],
+                   "flags": [{"name": "--from", "type": "path"}, {"name": "--to", "type": "path", "output": True}]}
+        run_matrix._check_row("normal", command, ["--from", str(inputs / "design.json")], authorized, inputs)
+        run_matrix._check_row("normal", command, ["--to", str(root / "authorized" / "out.json")], authorized, inputs)
+        for arguments in (["--from", str(root / "elsewhere" / "design.json")],  # read, but not from tests/inputs
+                          ["--to", str(inputs / "out.json")],                   # written
+                          ["--doc", str(inputs / "board.fake")]):               # the document a write changes
+            with self.assertRaises(SystemExit):
+                run_matrix._check_row("normal", command, arguments, authorized, inputs)
+        observe = {**command, "effects": ["observe"]}
+        run_matrix._check_row("normal", observe, ["--doc", str(inputs / "board.fake")], authorized, inputs)
+        with self.assertRaises(SystemExit):
+            run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs)
+        run_matrix._check_row("normal", observe, ["--job", "{job}"], authorized, inputs, job_pending=True)
+
+    def test_two_runs_of_one_matrix_keep_each_other_s_rows(self):
+        root = self.tmp()
+        path = root / "part-move.json"
+        rows = [{"row": "normal", "applies": True, "arguments": ["--id", "R1"], "expected": {"exit": 0}},
+                {"row": "busy", "applies": True, "arguments": ["--id", "R1"], "expected": {"exit": 7, "code": "E_BUSY"}}]
+        path.write_text(json.dumps({"command": "part move", "rows": rows}), encoding="utf-8")
+        # Both runs read the matrix before either wrote it back.
+        normal, busy = json.loads(json.dumps(rows[0])), json.loads(json.dumps(rows[1]))
+        busy["actual"] = {"exit": 7, "code": "E_BUSY"}
+        normal["actual"] = {"exit": 0}
+        run_matrix._write_back(path, [busy], "b.json")
+        run_matrix._write_back(path, [normal], "a.json")
+        written = {r["row"]: r for r in json.loads(path.read_text(encoding="utf-8"))["rows"]}
+        self.assertEqual(written["busy"]["evidence"], "live:docs/evidence/b.json#busy")
+        self.assertEqual(written["normal"]["evidence"], "live:docs/evidence/a.json#normal")
+        self.assertFalse((root / "part-move.json.lock").exists())
+
+    def test_a_job_get_that_fails_ends_the_row(self):
+        contract = json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))
+        started = {"ok": True, "data": {"result": {"job": {"id": "job-1"}}}}
+        answers = [b'{"ok":false,"error":{"code":"E_BUSY","details":{"retry_after_ms":10}}}',
+                   b'{"ok":false,"error":{"code":"E_NOT_FOUND"}}']
+        notes: list[str] = []
+        with mock.patch.object(run_matrix, "_run", side_effect=[(7, answers[0]), (3, answers[1])]) as calls:
+            code, out = run_matrix._job_end(["tool"], self.tmp(), {}, started, contract, notes)
+        self.assertEqual((code, out["error"]["code"], calls.call_count), (3, "E_NOT_FOUND", 2))  # busy, asked again
+        self.assertIn("failed: E_NOT_FOUND", notes[-1])
+
+    def test_runs_started_in_the_same_second_write_their_own_records(self):
+        folder = self.tmp() / "evidence"
+        names = [run_matrix._write_record(folder, "2026-11-06-101010-part-move", {"run": n}) for n in range(3)]
+        self.assertEqual(names, ["2026-11-06-101010-part-move.json", "2026-11-06-101010-part-move-2.json",
+                                 "2026-11-06-101010-part-move-3.json"])
+        self.assertEqual(json.loads((folder / names[2]).read_text(encoding="utf-8")), {"run": 2})
+
+    def test_job_comes_from_the_normal_row_of_a_long_command(self):
+        root = self.tmp()
+        (root / "tests" / "matrix").mkdir(parents=True)
+        row = {"row": "normal", "applies": True, "arguments": ["--session", "{session}"]}
+        (root / "tests" / "matrix" / "route-run.json").write_text(json.dumps({"command": "route run", "rows": [row]}), encoding="utf-8")
+        facts = SimpleNamespace(commands=[{"path": "route run", "long": True, "effects": ["change"], "flags": []},
+                                          {"path": "job get", "effects": ["observe"], "flags": []}])
+        values = {"session": "s1", "inputs": str(root / "tests" / "inputs")}
+        self.assertEqual(run_matrix._job_starter(root, facts, None, values, []), ("route run", ["--session", "s1"]))
+        self.assertEqual(run_matrix._job_starter(root, facts, "route run", values, []), ("route run", ["--session", "s1"]))
+        with self.assertRaises(SystemExit):
+            run_matrix._job_starter(root, facts, "job get", values, [])  # not a long command
+        facts.commands.append({"path": "design check", "long": True, "effects": ["observe"], "flags": []})
+        with self.assertRaises(SystemExit):
+            run_matrix._job_starter(root, facts, None, values, [])  # two long commands: name one
+
+
+class GeneratorTest(unittest.TestCase):
+    def test_command_map(self):
+        commands = [{"path": "reference"}, {"path": "doc save"}, {"path": "doc close", "tier": {"session": "dangerous", "file": "direct"}},
+                    {"path": "part pin list"}]
+        self.assertEqual(check_project.command_map(commands),
+                         "- `reference`\n- `doc`: save, close (dangerous)\n- `part pin`: list")
+
+    def test_front_matter(self):
+        front, body, length = check_project.front_matter("---\nname: x\ndescription: >-\n  one\n  two\nmetadata:\n  version: 1.0.0\n"
+                                                         "  commands: [a b, c d]\n---\nbody\n")
+        self.assertEqual(front, {"name": "x", "description": "one two", "metadata": {"version": "1.0.0", "commands": ["a b", "c d"]}})
+        self.assertEqual((body, length), ("body\n", 9))
+
+    def test_render(self):
+        facts = check_project.Facts(root=Path("."), contract=check_project.load_contract())
+        facts.tool = "x-cli"
+        facts.reference = {"driver": {"modes": ["file"], "host_component": True}}
+        text = "a {{tool}}\n{{#host_component}}\nhost\n{{/host_component}}\n{{^host_component}}\nnone\n{{/host_component}}\n{{#session}}\ns\n{{/session}}\nz"
+        self.assertEqual(check_project.render(text, facts), "a x-cli\nhost\nz")
+
+    def test_leftovers(self):
+        found = [m.group(0) for m in check_project.LEFTOVER.finditer("{{fill: a}} {{tool}} {{#device}} ${{ matrix.os }} {{other}}")]
+        self.assertEqual(found, ["{{fill: a}}", "{{tool}}", "{{#device}}"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,10 @@
+{
+  "entries": [
+    {
+      "id": "rules",
+      "title": "Rules",
+      "kind": "rule",
+      "url": "https://docs.example.com/rules"
+    }
+  ]
+}

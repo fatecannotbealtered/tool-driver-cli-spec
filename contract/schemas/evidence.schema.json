@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/evidence.schema.json",
+  "title": "Live evidence record",
+  "description": "One run on the real application, stored as JSON in docs/evidence/ (DVER-042).",
+  "type": "object",
+  "required": ["kind", "tool", "tool_version", "commit", "application", "os", "platform", "recorded_at", "targets", "runs"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {"const": "live"},
+    "tool": {"type": "string"},
+    "tool_version": {"$ref": "host-protocol.schema.json#/$defs/semver"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"},
+    "application": {"$ref": "host-protocol.schema.json#/$defs/application"},
+    "os": {"type": "string", "minLength": 1},
+    "platform": {"description": "The operating system as the support matrix names it (DREPO-016).", "enum": ["windows", "macos", "linux"]},
+    "recorded_at": {"$ref": "error.schema.json#/$defs/utc"},
+    "targets": {"type": "array", "minItems": 1, "items": {"$ref": "scope.schema.json#/properties/targets/items"}},
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["command", "arguments", "exit", "result", "mode"],
+        "additionalProperties": false,
+        "properties": {
+          "command": {"type": "string"},
+          "arguments": {"type": "array", "items": {"type": "string"}},
+          "exit": {"type": "integer"},
+          "result": {"enum": ["pass", "fail"]},
+          "mode": {"description": "The mode the command ran in (DCLI-201).", "enum": ["file", "session", "device"]},
+          "matrix_row": {"enum": ["normal", "empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog", "disconnect", "unsaved", "read_back_mismatch"]},
+          "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "fingerprint": {"description": "The SHA-256 of what the run depends on: the command's registration, by the fields that change what it does, and the adapter's code. The run counts as evidence while it matches (DVER-043).", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "tampered": {"const": true},
+          "envelope": {
+            "description": "The envelope the tool printed, kept as it was written. It is not checked against the current envelope schema, so a record stays valid as long as its runs count (DVER-043).",
+            "type": "object",
+            "required": ["ok"],
+            "properties": {"ok": {"type": "boolean"}}
+          },
+          "envelope_sha256": {"description": "Not used; accepted so that records which carry it stay valid.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

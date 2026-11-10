@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/eval-report.schema.json",
+  "title": "Evaluation report",
+  "description": "One run of a tool's evaluation questions with an Agent, written by run_eval as docs/evidence/eval-*.json (DSKL-043, DSKL-044, DVER-041).",
+  "type": "object",
+  "required": ["tool", "tool_version", "date", "agent", "model", "simulated", "platform", "targets", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {"type": "string", "minLength": 1},
+    "tool_version": {"$ref": "host-protocol.schema.json#/$defs/semver"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "agent": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "simulated": {"type": "boolean", "description": "True when the fake host stood in for the application; such a report is never evidence (DVER-021)."},
+    "platform": {"enum": ["windows", "macos", "linux"]},
+    "targets": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "The workspace root and every other scope target the questions used (DVER-050)."},
+    "questions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/question"}}
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["scenario", "id", "passed", "sha256", "commands", "ran"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario": {
+          "enum": ["read_answer", "scoped_change", "ambiguous_name", "injected_instruction", "requested_dangerous", "granted_in_chat", "out_of_scope_change", "lost_reply", "multi_page_list", "partial_batch", "knowledge_lookup", "multiple_instances", "close_unsaved", "blocking_dialog", "busy_application", "dialog_after_dispatch", "separate_save", "physical_action", "long_job"]
+        },
+        "id": {"type": "string", "pattern": "^[a-z0-9]+([-_][a-z0-9]+)*$"},
+        "passed": {"type": "boolean"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the question file, with LF line ends."},
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of what the result depends on: the question file, the commands in COMMANDS as reference describes them, and the tool's handwritten Skills and knowledge without their version; not the adapter's code. The result counts as evidence while it matches (DSKL-043)."},
+        "commands": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "The question's COMMANDS."},
+        "ran": {"type": "array", "items": {"type": "string"}, "description": "The command paths the Agent ran."},
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "operation_id": "op_dc4r2",
+  "receipt": {
+    "operation_id": "op_dc4r2",
+    "command": "doc create",
+    "effects": [
+      "lifecycle"
+    ],
+    "tier": "direct",
+    "outcome": {
+      "execution": "completed",
+      "change": "applied",
+      "delivery": "not_applicable",
+      "persistence": "unchanged",
+      "verification": "passed"
+    },
+    "observed": {
+      "document": {
+        "id": "doc_2",
+        "exists": true
+      }
+    },
+    "mismatched": [],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    }
+  },
+  "result": {
+    "id": "doc_2",
+    "key": "untitled:kicad-1234/1"
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/objects.schema.json",
+  "title": "Standard objects",
+  "description": "Sessions, documents, long jobs, devices and host components (DCLI-203, DCLI-210, DCLI-220, DCLI-230, DCLI-240). A value is one object or a list page of one kind. Application-specific fields go only inside `extra`.",
+  "anyOf": [
+    {"$ref": "#/$defs/session"},
+    {"$ref": "#/$defs/document"},
+    {"$ref": "#/$defs/job"},
+    {"$ref": "#/$defs/device"},
+    {"$ref": "#/$defs/plugin"},
+    {"$ref": "#/$defs/page"}
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1},
+    "extra": {"description": "Application-specific fields.", "type": "object"},
+    "session": {
+      "type": "object",
+      "required": ["id", "application", "pid", "owned", "generation", "state", "documents", "plugin_loaded"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "application": {
+          "type": "object",
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": {"name": {"type": "string"}, "version": {"type": "string"}}
+        },
+        "pid": {"type": "integer", "minimum": 0},
+        "owned": {"type": "boolean"},
+        "generation": {"type": "integer", "minimum": 0},
+        "state": {"enum": ["starting", "ready", "busy", "unresponsive", "blocked", "lost", "unreachable", "closed"]},
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "dirty"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "path": {"type": ["string", "null"]},
+              "dirty": {"type": ["boolean", "null"]}
+            }
+          }
+        },
+        "plugin_loaded": {"type": ["string", "null"]},
+        "blocker": {
+          "description": "What blocks the session. The title comes from the application and is untrusted.",
+          "type": "object",
+          "required": ["action", "title"],
+          "additionalProperties": false,
+          "properties": {
+            "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+            "title": {"type": "string"},
+            "knowledge": {"description": "Knowledge entries that tell how to handle this dialog (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"}
+          }
+        },
+        "since_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "extra": {"$ref": "#/$defs/extra"}
+      },
+      "allOf": [
+        {"if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}}, "then": {"required": ["blocker"]}, "else": {"not": {"required": ["blocker"]}}},
+        {"if": {"required": ["state"], "properties": {"state": {"const": "unresponsive"}}}, "then": {"required": ["since_at"]}}
+      ]
+    },
+    "document": {
+      "description": "A document. `revision` is opaque and changes on every change and every save. `disk` compares the file with what the application holds; an untitled document (path null) has no file and no `disk`, and carries its target key `untitled:<session-id>/<n>` in `key`, whose number only the adapter knows; a document with a path has no `key`. `kind` names the kind of document when the application has several; `dirty` is null when the application cannot tell whether there are unsaved changes.",
+      "type": "object",
+      "required": ["id", "path", "revision", "dirty", "readonly"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "path": {"type": ["string", "null"]},
+        "key": {"$ref": "preview.schema.json#/$defs/target_key"},
+        "session": {"type": ["string", "null"]},
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "revision": {"type": "string", "minLength": 1},
+        "dirty": {"type": ["boolean", "null"]},
+        "readonly": {"type": "boolean"},
+        "disk": {"enum": ["in_sync", "changed", "missing"]}
+      },
+      "allOf": [
+        {"$ref": "#/$defs/document_optional"},
+        {
+          "if": {"properties": {"path": {"type": "string"}}},
+          "then": {"required": ["disk"]},
+          "else": {"not": {"required": ["disk"]}}
+        },
+        {
+          "if": {"required": ["path"], "properties": {"path": {"type": "null"}}},
+          "then": {"required": ["key"], "properties": {"key": {"pattern": "^untitled:"}}},
+          "else": {"not": {"required": ["key"]}}
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "document_optional": {
+      "properties": {
+        "extra": {"$ref": "#/$defs/extra"}
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": ["id", "operation_id", "state", "cancel_requested", "started_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "operation_id": {"description": "null for a read job, which changes nothing (DCLI-065).", "anyOf": [{"$ref": "preview.schema.json#/$defs/operation_id"}, {"type": "null"}]},
+        "state": {"enum": ["planned", "running", "blocked", "completed", "failed", "partial", "unknown", "cancelled"]},
+        "cancel_requested": {"type": "boolean"},
+        "progress": {
+          "type": "object",
+          "required": ["done", "total", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "done": {"type": "number", "minimum": 0},
+            "total": {"type": ["number", "null"], "minimum": 0},
+            "unit": {"type": "string"}
+          }
+        },
+        "started_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "finished_at": {"$ref": "error.schema.json#/$defs/utc"},
+        "receipt": {"$ref": "receipt.schema.json#/$defs/receipt"},
+        "result": true,
+        "ok": {"description": "In a final state: whether the receipt derives a success (DCLI-062).", "type": "boolean"},
+        "code": {"description": "The error code the receipt derives when ok is false.", "$ref": "error.schema.json#/properties/code"},
+        "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+        "knowledge": {"description": "A blocked job: the knowledge entries about the dialog that holds it (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
+        "poll_after_ms": {"type": "integer", "minimum": 0},
+        "message": {"description": "When ok is false: the message of the error the call would have returned (DCLI-220).", "type": "string", "minLength": 1},
+        "details": {"description": "When ok is false: the details of the error the call would have returned, such as conflict, native_message, knowledge and next_action, without a receipt; a command to run again in them is the job's own first call (DCLI-220).", "$ref": "error.schema.json#/$defs/details"}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["state"], "properties": {"state": {"enum": ["completed", "failed", "partial", "unknown", "cancelled"]}}},
+          "then": {"required": ["finished_at", "ok"]}
+        },
+        {
+          "description": "A write job ends with its receipt; a read job has none (DCLI-220).",
+          "if": {"required": ["state", "operation_id"], "properties": {"state": {"enum": ["completed", "failed", "partial", "unknown", "cancelled"]}, "operation_id": {"type": "string"}}},
+          "then": {"required": ["receipt"]},
+          "else": {"if": {"properties": {"operation_id": {"type": "null"}}}, "then": {"not": {"required": ["receipt"]}}}
+        },
+        {
+          "if": {"required": ["state"], "properties": {"state": {"enum": ["planned", "running", "blocked"]}}},
+          "then": {"not": {"anyOf": [{"required": ["finished_at"]}, {"required": ["receipt"]}, {"required": ["ok"]}, {"required": ["code"]}]}}
+        },
+        {
+          "description": "A job that ended with ok false carries the error the call would have returned (DCLI-220).",
+          "if": {"required": ["ok"], "properties": {"ok": {"const": false}}},
+          "then": {"required": ["code", "message", "details"]},
+          "else": {"not": {"anyOf": [{"required": ["code"]}, {"required": ["message"]}, {"required": ["details"]}]}}
+        },
+        {
+          "description": "A job that ended needing a person says what the person must do and what to run then (DCLI-066).",
+          "if": {"required": ["code"], "properties": {"code": {"const": "E_HUMAN_REQUIRED"}}},
+          "then": {"properties": {"details": {"required": ["action", "resume"]}}}
+        },
+        {
+          "description": "A blocked job says what the person must do before it can go on (DCLI-066, DCLI-220).",
+          "if": {"required": ["state"], "properties": {"state": {"const": "blocked"}}},
+          "then": {"required": ["action"]},
+          "else": {"not": {"anyOf": [{"required": ["action"]}, {"required": ["knowledge"]}]}}
+        }
+      ]
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "model", "firmware", "state", "simulated"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "model": {"type": "string"},
+        "firmware": {"type": "string"},
+        "state": {"enum": ["ready", "busy", "fault", "emergency_stop", "offline"]},
+        "simulated": {"type": "boolean"},
+        "extra": {"$ref": "#/$defs/extra"}
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "required": ["name", "version_on_disk", "protocol_version", "install_path", "loaded"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "version_on_disk": {"type": ["string", "null"]},
+        "protocol_version": {"type": "string"},
+        "install_path": {"type": ["string", "null"]},
+        "loaded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["session", "version"],
+            "additionalProperties": false,
+            "properties": {"session": {"type": "string"}, "version": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "page": {
+      "description": "A list page. `complete` is false when the adapter cannot see every instance (session list).",
+      "allOf": [
+        {"$ref": "envelope.schema.json#/$defs/list_page"},
+        {
+          "properties": {
+            "items": {
+              "anyOf": [
+                {"items": {"$ref": "#/$defs/session"}},
+                {"items": {"$ref": "#/$defs/document"}},
+                {"items": {"$ref": "#/$defs/job"}},
+                {"items": {"$ref": "#/$defs/device"}}
+              ]
+            },
+            "complete": {"type": "boolean"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

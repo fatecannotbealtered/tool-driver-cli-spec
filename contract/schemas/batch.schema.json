@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/batch.schema.json",
+  "title": "Batch result",
+  "description": "Result of a command run with --ids or --input items (DCLI-064): the data of a successful batch and error.details.batch of a failed one. The batch has its own operation ID; each item is a child operation whose full receipt operation get returns.",
+  "type": "object",
+  "required": ["operation_id", "items", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
+    "more_results": {"description": "Present when some items' results did not fit: the command that gives an item's result from its record.", "type": "string", "minLength": 1},
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["target", "ok"],
+        "additionalProperties": false,
+        "properties": {
+          "target": {"$ref": "preview.schema.json#/$defs/target_key"},
+          "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
+          "ok": {"type": "boolean"},
+          "code": {"$ref": "error.schema.json#/properties/code"},
+          "skipped": {"type": "boolean"},
+          "result": {"description": "What the change of this object produced, as a call of one object returns it, when the response has room (DCLI-064, DCLI-068)."}
+        },
+        "if": {"required": ["skipped"], "properties": {"skipped": {"const": true}}},
+        "then": {"properties": {"ok": {"const": false}}, "not": {"required": ["code"]}},
+        "else": {
+          "required": ["operation_id"],
+          "if": {"properties": {"ok": {"const": true}}},
+          "then": {"not": {"required": ["code"]}},
+          "else": {"required": ["code"]}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "succeeded", "failed", "unknown", "skipped"],
+      "additionalProperties": false,
+      "properties": {
+        "total": {"type": "integer", "minimum": 1},
+        "succeeded": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "unknown": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

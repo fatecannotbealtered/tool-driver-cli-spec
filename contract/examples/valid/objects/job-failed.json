@@ -1,0 +1,42 @@
+{
+  "id": "11",
+  "operation_id": "op_s7q2",
+  "state": "failed",
+  "cancel_requested": false,
+  "started_at": "2026-11-02T10:00:00Z",
+  "finished_at": "2026-11-02T10:00:04Z",
+  "receipt": {
+    "operation_id": "op_s7q2",
+    "command": "doc save",
+    "target": {
+      "key": "file:///D:/proj/bracket.drw",
+      "kind": "document",
+      "label": "bracket.drw"
+    },
+    "effects": [
+      "persist"
+    ],
+    "tier": "two_step",
+    "outcome": {
+      "execution": "failed",
+      "change": "not_applied",
+      "delivery": "not_applicable",
+      "persistence": "not_applicable",
+      "verification": "not_applicable"
+    },
+    "observed": {},
+    "mismatched": [],
+    "notes": [
+      "Long job 11 ended failed."
+    ]
+  },
+  "result": {},
+  "ok": false,
+  "code": "E_CONFLICT",
+  "message": "Save the model bracket.prt first; the drawing refers to its unsaved changes.",
+  "details": {
+    "dispatch_state": "not_started",
+    "conflict": "unsaved_changes",
+    "next_action": "Read the current state again, then decide what to do. To run the write again, start from its first call: `demo-cli doc save --session demo-1 --doc doc_2`."
+  }
+}

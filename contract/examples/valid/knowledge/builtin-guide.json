@@ -1,0 +1,11 @@
+{
+  "id": "save-requires-exit-edit-mode",
+  "title": "Leave edit mode before saving",
+  "kind": "guide",
+  "applies_to": [
+    "doc save"
+  ],
+  "tags": [
+    "save"
+  ]
+}

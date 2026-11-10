@@ -1,0 +1,105 @@
+{
+  "tool": "kicad-cli",
+  "version": "1.2.0",
+  "commands": [
+    {
+      "path": "footprint get",
+      "summary": "Read one footprint.",
+      "effects": [
+        "observe"
+      ],
+      "modes": [
+        "file",
+        "session"
+      ],
+      "target_kind": "footprint",
+      "flags": [
+        {
+          "name": "--id",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "untrusted_fields": [
+        "value",
+        "description"
+      ],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {},
+      "default_fields": [
+        "id",
+        "value",
+        "x_mm",
+        "y_mm"
+      ],
+      "related_knowledge": []
+    },
+    {
+      "path": "footprint move",
+      "summary": "Move one or more footprints.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "file",
+        "session"
+      ],
+      "target_kind": "footprint",
+      "flags": [
+        {
+          "name": "--id",
+          "type": "string",
+          "summary": "Reference designator of the footprint."
+        },
+        {
+          "name": "--x",
+          "type": "quantity",
+          "quantity": "length",
+          "summary": "X position.",
+          "coordinate_system": "board: origin at the page's top-left corner, x right, y down"
+        },
+        {
+          "name": "--y",
+          "type": "quantity",
+          "quantity": "length",
+          "summary": "Y position.",
+          "coordinate_system": "board: origin at the page's top-left corner, x right, y down"
+        }
+      ],
+      "untrusted_fields": [],
+      "irreversible": false,
+      "halt": false,
+      "tolerances": {
+        "x_mm": 0.001,
+        "y_mm": 0.001
+      },
+      "default_fields": [
+        "id",
+        "x_mm",
+        "y_mm"
+      ],
+      "related_knowledge": [
+        "move-locked-footprint"
+      ]
+    },
+    {
+      "path": "route stop",
+      "summary": "Stop the running autorouter.",
+      "effects": [
+        "lifecycle"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "document",
+      "flags": [],
+      "untrusted_fields": [],
+      "irreversible": false,
+      "halt": true,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    }
+  ]
+}

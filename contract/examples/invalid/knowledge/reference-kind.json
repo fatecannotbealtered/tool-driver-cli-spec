@@ -1,0 +1,9 @@
+{
+  "id": "board-coordinates",
+  "title": "Board coordinates and the origin",
+  "kind": "reference",
+  "applies_to": [
+    "footprint move"
+  ],
+  "tags": []
+}

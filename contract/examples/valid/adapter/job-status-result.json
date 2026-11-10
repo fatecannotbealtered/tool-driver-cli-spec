@@ -1,0 +1,13 @@
+{
+  "result": {
+    "job_status": {
+      "state": "blocked",
+      "action": "dismiss_dialog",
+      "progress": {
+        "done": 120,
+        "total": 400,
+        "unit": "nets"
+      }
+    }
+  }
+}

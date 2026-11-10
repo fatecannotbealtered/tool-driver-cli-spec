@@ -1,0 +1,12 @@
+{
+  "scope_id": "x",
+  "effects": [
+    "change"
+  ],
+  "dangerous": false,
+  "targets": [
+    "file:///D:/proj/"
+  ],
+  "expires_at": "2026-11-02T08:30:00Z",
+  "confirm": "never"
+}

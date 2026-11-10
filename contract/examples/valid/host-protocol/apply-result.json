@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "dispatch_state": "dispatched",
+    "change": "applied",
+    "delivery": "not_applicable",
+    "persistence": "unchanged",
+    "result": {
+      "id": "R1",
+      "x_mm": 12.5,
+      "y_mm": 30.0
+    }
+  }
+}

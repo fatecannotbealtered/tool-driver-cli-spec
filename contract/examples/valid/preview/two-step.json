@@ -1,0 +1,59 @@
+{
+  "preview": {
+    "operation_id": "op_9xk2m4qa",
+    "command": "doc save",
+    "action": "Save board.kicad_pcb to its original path.",
+    "target": {
+      "key": "file:///D:/proj/board.kicad_pcb",
+      "kind": "document",
+      "label": "board.kicad_pcb"
+    },
+    "effects": [
+      "persist"
+    ],
+    "tier": "two_step",
+    "summary": {
+      "total": 2,
+      "by_origin": {
+        "tool": 1,
+        "external": 1
+      },
+      "by_kind": {
+        "footprint": 2
+      }
+    },
+    "changes": [
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+        "field": "x_mm",
+        "before": 10.0,
+        "after": 12.5,
+        "origin": "tool"
+      },
+      {
+        "target": "file:///D:/proj/board.kicad_pcb#/footprints/C3",
+        "before": {
+          "angle_deg": 0,
+          "locked": false
+        },
+        "after": {
+          "angle_deg": 90,
+          "locked": true
+        },
+        "origin": "external"
+      }
+    ],
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "document": {
+      "id": "doc_1",
+      "revision": "rev-8",
+      "dirty": true
+    },
+    "can_apply": true
+  },
+  "confirm_token": "tok_3f9a7c1e2b8d4a60",
+  "expires_at": "2026-11-02T08:40:00Z"
+}

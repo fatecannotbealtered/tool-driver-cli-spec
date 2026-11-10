@@ -1,0 +1,10 @@
+{
+  "source": "team",
+  "entry": {
+    "id": "team-layout-rules",
+    "title": "Team PCB layout rules",
+    "kind": "rule",
+    "url": "https://example.feishu.cn/wiki/AbCdEf123456"
+  },
+  "reader": "lark-cli"
+}

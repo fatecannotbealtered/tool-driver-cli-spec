@@ -1,0 +1,10 @@
+{
+  "code": "E_OUTCOME_UNKNOWN",
+  "message": "The connection to KiCad closed after the change was sent; it may have been applied.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "unknown",
+    "next_action": "Do not run the move again. Resolve the operation first.",
+    "lookup": "kicad-cli operation resolve --id op_7mq2xk4v"
+  }
+}

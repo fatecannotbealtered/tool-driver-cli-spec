@@ -1,0 +1,38 @@
+{
+  "result": {
+    "preview": {
+      "action": "Save board.kicad_pcb to its original path.",
+      "targets": [
+        {
+          "key": "file:///D:/proj/board.kicad_pcb",
+          "kind": "document",
+          "label": "board.kicad_pcb"
+        }
+      ],
+      "changes": [
+        {
+          "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+          "field": "x_mm",
+          "before": 10.0,
+          "after": 12.5,
+          "origin": "tool"
+        }
+      ],
+      "external_changes": [
+        {
+          "target": "file:///D:/proj/board.kicad_pcb#/footprints/C3",
+          "before": {
+            "angle_deg": 0,
+            "locked": false
+          },
+          "after": {
+            "angle_deg": 90,
+            "locked": true
+          },
+          "origin": "external"
+        }
+      ],
+      "can_apply": true
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "request": {
+    "plugin_install": {
+      "operation_id": "op_p1n5t",
+      "state_dir": "C:/Users/me/.kicad-cli",
+      "version": "1.0.0"
+    }
+  }
+}

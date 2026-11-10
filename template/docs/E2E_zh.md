@@ -1,0 +1,43 @@
+# 真实软件验收
+
+[English](E2E.md) | 中文
+
+真实软件运行用真实的适配层，在真实的 {{application}} 上执行 {{tool}} 的行为矩阵。它会做出真实的修改，所以只使用下面授权过的目标。
+
+## 授权规则
+
+真实软件运行和在真实 {{application}} 上的评测可以使用的文件、文件夹和设备，唯一的清单在英文版 `docs/E2E.md` 的「Authorized Targets」一节；检查脚本和运行器只读那一份。目标只由人加入，或者在人自己发的消息里授予后由编码 Agent 加入；Agent 加入后把加的那一行告诉人，目标的说明也由它自己保持更新。每个目标占一个列表项，以反引号括起的目标开头，写法与授权范围文件里的目标相同：文件或文件夹的 `file://` URL，或者设备的 `device:<id>`；后面跟一个冒号和对目标的说明。列出的文件夹就是工作目录：编码 Agent 在里面建练习副本、输出文件夹和评测工作目录，不用再问人。{{application}} 的实例没有固定的 ID，所以真实软件运行只使用为这次运行启动的实例，由人或编码 Agent 启动，打开的文档也只来自清单里的文件和文件夹；编码 Agent 只关闭它自己启动的实例。真实软件运行不使用任何其他目标。
+
+真实软件运行所用的授权范围文件只授予清单里的目标，以及为这次运行启动的实例里的新文档。矩阵运行器和评测运行器各自为自己的运行写授权范围文件；其他真实软件工作，比如试一条命令或安装宿主组件，由编码 Agent 自己写，不用问人。评测题的 `SCOPE` 用到的目标也要列在清单里。
+
+## 授权目标
+
+清单以 `docs/E2E.md` 为准，本节不另列目标。
+
+## 步骤
+
+真实软件运行使用这些电脑：
+
+{{fill: 真实软件运行用到的电脑、操作系统、{{application}} 版本和模式}}
+
+<!-- driver:spec-procedure:start -->
+在真实的 {{application}} 上运行行为矩阵：
+
+1. 准备目标，比如在列出的文件夹里专为测试复制的项目、为这次运行启动的实例，或为测试准备好的设备。清单之外的目标，先按「授权规则」列进「授权目标」。
+2. 把 `{{PREFIX}}_STATE_DIR` 设为专供真实软件运行使用的目录。
+3. 运行 `python scripts/spec.py matrix --command "<path>" --set <placeholder>=<value>`，矩阵用到的每个占位符各给一个 `--set`，占位符名不带花括号，如 `--set doc=<file>`：`{session}` 是为这次运行启动的实例，`{doc}` 是授权的文档或文件，`{device}` 是授权的设备，`{dir}` 是授权文件夹里新建的空目录。`{job}` 是作业 ID；不给时，运行器先运行 `--job-from` 指定的长命令（只有一个长命令时就是它）的 `normal` 行，用它启动的作业。`{inputs}` 不用 `--set`：它就是 `tests/inputs/`，里面的文件命令只读取，所以不需要授权。
+4. 运行器执行适用的行，把真实软件记录写进 `docs/evidence/`，并填上每一行的实际结果和 `live:` 证据引用。实际结果与预期不符的行算作失败。
+5. 在真实的 {{application}} 上无法按需制造的行，如 `disconnect`，可以标为 `unrunnable` 并写明原因；`normal`、`dialog` 和 `read_back_mismatch` 这三行不可以。`read_back_mismatch` 用 `--row read_back_mismatch` 运行：工具会在读回之前等一会儿，在这段时间里，到 {{application}} 里改掉它刚写的内容，或删掉它生成的文件。
+6. 运行 `python scripts/spec.py generate` 更新支持矩阵和下面的索引，再把记录和矩阵一起提交。
+
+要在真实的 {{application}} 上运行评测题，用列出的文件夹里的一个文件夹运行 `python scripts/spec.py eval --workspace-root <folder>`。运行器为每道题写好授权范围文件，并把评测报告写进 `docs/evidence/`。
+
+真实软件记录里的运行在命令登记或适配层代码改动之前一直算作证据；只是版本号变了，什么都不影响。记录里从不出现机密，带机密的参数显示为 `***`。
+<!-- driver:spec-procedure:end -->
+
+## 证据记录
+
+`docs/evidence/` 里的真实软件记录，由 `python scripts/spec.py generate` 生成：
+
+<!-- driver:evidence:start -->
+<!-- driver:evidence:end -->

@@ -1,0 +1,12 @@
+{
+  "name": "kicad-cli-host",
+  "version_on_disk": "1.0.0",
+  "protocol_version": "1.0.0",
+  "install_path": "C:/Users/me/AppData/Roaming/kicad/10.0/scripting/plugins/kicad-cli-host/1.0.0",
+  "loaded": [
+    {
+      "session": "kicad-1234",
+      "version": "1.0.0"
+    }
+  ]
+}

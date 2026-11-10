@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/commands.schema.json",
+  "title": "Command registration",
+  "description": "contract/commands.json of a tool, generated from its command registration (DCLI-029, DREPO-031). Never edited by hand.",
+  "type": "object",
+  "required": [
+    "tool",
+    "version",
+    "commands"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "$ref": "host-protocol.schema.json#/$defs/semver"
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "required": [
+        "path",
+        "summary",
+        "effects",
+        "modes",
+        "target_kind",
+        "flags",
+        "untrusted_fields",
+        "irreversible",
+        "halt",
+        "tolerances",
+        "default_fields",
+        "related_knowledge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "preview.schema.json#/$defs/effect"
+          }
+        },
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "reference.schema.json#/$defs/mode"
+          }
+        },
+        "target_kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          }
+        },
+        "untrusted_fields": {
+          "description": "Output fields that hold text from the application or its files.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "irreversible": {
+          "type": "boolean"
+        },
+        "halt": {
+          "type": "boolean"
+        },
+        "tolerances": {
+          "description": "Read-back tolerance per output field, in the field's unit.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "default_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "related_knowledge": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "knowledge.schema.json#/$defs/id"
+          }
+        },
+        "tier_when": {
+          "description": "Conditions of this command that make a call stricter; the adapter's preview names the ones it finds in tier_raises (DCLI-031, DCLI-052).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "when",
+              "tier",
+              "description"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "tier": {
+                "enum": [
+                  "two_step",
+                  "dangerous"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "doc_kinds": {
+          "description": "The kinds of document the command works on, when the application has several (DCLI-210).",
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          }
+        },
+        "verify_after_save": {
+          "description": "In session mode the application shows the change correctly only after a save; doc save verifies it (DCLI-057).",
+          "type": "boolean"
+        },
+        "long": {
+          "description": "The work can take longer than one call may; the runtime runs it as a long job (DCLI-065).",
+          "type": "boolean"
+        },
+        "jobs": {
+          "description": "The application may run the write as a long job: apply reports the job and the runtime follows it with job_status (DCLI-065).",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "description": "A halt command has only the lifecycle effect.",
+          "if": {
+            "properties": {
+              "halt": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "effects": {
+                "const": [
+                  "lifecycle"
+                ]
+              },
+              "irreversible": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "flag": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^--[a-z][a-z0-9-]*$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "type": {
+          "description": "The shared flags of DCLI-026 use list, input and duration.",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "quantity",
+            "path",
+            "json",
+            "list",
+            "input",
+            "duration"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "quantity": {
+          "description": "The physical quantity, from the contract's units table; the flag then takes a value with a unit.",
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "secret": {
+          "type": "boolean"
+        },
+        "output": {
+          "description": "The flag names a file the command creates. For an artifact command, the runtime checks whether that file exists to choose the tier (DCLI-051).",
+          "type": "boolean"
+        },
+        "coordinate_system": {
+          "$ref": "reference.schema.json#/$defs/coordinate_system"
+        },
+        "schema": {
+          "description": "The JSON Schema of a json flag's value, an object or an array (DCLI-026).",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "object",
+                "array"
+              ]
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "description": "A json flag, and only a json flag, has a schema.",
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "json"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "schema"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "schema"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A physical parameter has the type quantity and names its quantity (DCLI-029, DCLI-080).",
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "quantity"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "quantity"
+            ]
+          }
+        },
+        {
+          "description": "Only a quantity flag names a quantity.",
+          "if": {
+            "required": [
+              "quantity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "quantity"
+              }
+            }
+          }
+        },
+        {
+          "description": "A flag that names a file the command creates is a path.",
+          "if": {
+            "required": [
+              "output"
+            ],
+            "properties": {
+              "output": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "path"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

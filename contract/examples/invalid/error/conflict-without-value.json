@@ -1,0 +1,9 @@
+{
+  "code": "E_CONFLICT",
+  "message": "Conflict.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Retry the dry run."
+  }
+}

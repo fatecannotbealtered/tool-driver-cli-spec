@@ -1,0 +1,25 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocol_version": "1.0.0",
+    "plugin_version": "1.0.0",
+    "application": {
+      "name": "KiCad",
+      "version": "10.0.1"
+    },
+    "session": {
+      "id": "kicad-1234",
+      "generation": 3
+    },
+    "methods": [
+      "hello",
+      "documents",
+      "save_doc",
+      "read",
+      "preview",
+      "apply",
+      "read_back"
+    ]
+  }
+}

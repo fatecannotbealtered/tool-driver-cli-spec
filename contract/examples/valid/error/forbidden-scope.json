@@ -1,0 +1,23 @@
+{
+  "code": "E_FORBIDDEN",
+  "message": "The scope does not allow saving board.kicad_pcb.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Show the user the snippet in details.scope and ask them to add it to the scope file. Do not edit the scope file yourself.",
+    "scope": {
+      "missing": {
+        "effects": [
+          "persist"
+        ],
+        "targets": [],
+        "dangerous": false
+      },
+      "snippet": {
+        "effects": [
+          "persist"
+        ]
+      }
+    }
+  }
+}

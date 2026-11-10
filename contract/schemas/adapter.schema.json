@@ -1,0 +1,411 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/adapter.schema.json",
+  "title": "Adapter capability payloads",
+  "description": "The request and the result of every adapter capability (DCLI-260). The in-process adapter interface and the host methods (DCLI-270) use the same payloads; a host request adds deadline_ms. The adapter reports facts; the runtime compares read-back with the preview and derives the receipt. An instance names one capability: {\"request\": {\"<capability>\": {...}}} or {\"result\": {\"<capability>\": {...}}}.",
+  "type": "object",
+  "minProperties": 1,
+  "maxProperties": 1,
+  "additionalProperties": false,
+  "properties": {
+    "request": {"$ref": "#/$defs/requests"},
+    "result": {"$ref": "#/$defs/results"}
+  },
+  "$defs": {
+    "requests": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "probe": {"$ref": "#/$defs/no_input"},
+        "sessions": {"$ref": "#/$defs/no_input"},
+        "open_session": {
+          "type": "object",
+          "required": ["operation_id"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "path": {"description": "A document to open in the new instance.", "type": "string", "minLength": 1},
+            "kind": {"description": "The kind of document the instance is for; the adapter starts the program that handles it.", "type": "string", "minLength": 1},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "close_session": {
+          "type": "object",
+          "required": ["operation_id", "session"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "discard": {"type": "boolean"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "documents": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": {"$ref": "#/$defs/id"},
+            "path": {"description": "File mode: the file or directory to look at.", "type": "string", "minLength": 1},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "create_doc": {
+          "description": "Without session, file mode: the adapter writes the file at path. In a session without path, an untitled document.",
+          "type": "object",
+          "required": ["operation_id"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "kind": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "template": {"type": "string", "minLength": 1},
+            "overwrite": {"type": "boolean"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "open_doc": {
+          "type": "object",
+          "required": ["operation_id", "session", "path"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "path": {"type": "string", "minLength": 1},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "save_doc": {
+          "type": "object",
+          "required": ["operation_id", "session", "document"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "document": {"$ref": "#/$defs/id"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "save_doc_as": {
+          "type": "object",
+          "required": ["operation_id", "session", "document", "path"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "document": {"$ref": "#/$defs/id"},
+            "path": {"type": "string", "minLength": 1},
+            "overwrite": {"type": "boolean"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "close_doc": {
+          "type": "object",
+          "required": ["operation_id", "session", "document"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "document": {"$ref": "#/$defs/id"},
+            "discard": {"type": "boolean"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "undo": {
+          "type": "object",
+          "required": ["operation_id", "session", "document"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "session": {"$ref": "#/$defs/id"},
+            "document": {"$ref": "#/$defs/id"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "read": {"$ref": "#/$defs/command_call", "unevaluatedProperties": false},
+        "preview": {"$ref": "#/$defs/command_call", "unevaluatedProperties": false},
+        "apply": {
+          "$ref": "#/$defs/command_call",
+          "required": ["operation_id"],
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"}
+          },
+          "unevaluatedProperties": false
+        },
+        "read_back": {
+          "description": "Reads back the fields of the targets a write changed. For `doc save`, it reads them from the saved file, or from the instance when the file can be read only after closing and opening the document; the document's field `saved` is true when the fields came from the file, or when the adapter saw the file on disk change (DCLI-057).",
+          "$ref": "#/$defs/command_call",
+          "required": ["operation_id"],
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "targets": {"type": "array", "minItems": 1, "items": {"$ref": "preview.schema.json#/$defs/target_key"}},
+            "fields": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+          },
+          "unevaluatedProperties": false
+        },
+        "job_status": {
+          "type": "object",
+          "required": ["job"],
+          "additionalProperties": false,
+          "properties": {
+            "job": {"$ref": "#/$defs/id"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "cancel": {
+          "type": "object",
+          "required": ["operation_id", "job"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "job": {"$ref": "#/$defs/id"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "devices": {"$ref": "#/$defs/no_input"},
+        "plugin_status": {"$ref": "#/$defs/no_input"},
+        "plugin_install": {
+          "type": "object",
+          "required": ["operation_id", "state_dir"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "state_dir": {"description": "Written into the host component's configuration, so a host started from the desktop writes its discovery file to the same hosts/ directory.", "type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        },
+        "plugin_remove": {
+          "type": "object",
+          "required": ["operation_id"],
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {"$ref": "#/$defs/operation_id"},
+            "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+          }
+        }
+      }
+    },
+    "results": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "probe": {"$ref": "context.schema.json#/properties/application"},
+        "sessions": {
+          "type": "object",
+          "required": ["items", "complete"],
+          "additionalProperties": false,
+          "properties": {
+            "items": {"type": "array", "items": {"$ref": "objects.schema.json#/$defs/session"}},
+            "complete": {"type": "boolean"}
+          }
+        },
+        "open_session": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {"session": {"$ref": "objects.schema.json#/$defs/session"}},
+          "unevaluatedProperties": false
+        },
+        "close_session": {"$ref": "#/$defs/write_facts", "unevaluatedProperties": false},
+        "documents": {
+          "type": "object",
+          "required": ["items"],
+          "additionalProperties": false,
+          "properties": {
+            "items": {"type": "array", "items": {"$ref": "objects.schema.json#/$defs/document"}}
+          }
+        },
+        "create_doc": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}, "files": {"$ref": "#/$defs/files"}},
+          "unevaluatedProperties": false
+        },
+        "open_doc": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}},
+          "unevaluatedProperties": false
+        },
+        "save_doc": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}},
+          "unevaluatedProperties": false
+        },
+        "save_doc_as": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {
+            "document": {"$ref": "objects.schema.json#/$defs/document"},
+            "files": {"$ref": "#/$defs/files"}
+          },
+          "unevaluatedProperties": false
+        },
+        "close_doc": {"$ref": "#/$defs/write_facts", "unevaluatedProperties": false},
+        "undo": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {"document": {"$ref": "objects.schema.json#/$defs/document"}},
+          "unevaluatedProperties": false
+        },
+        "read": {
+          "type": "object",
+          "required": ["result"],
+          "additionalProperties": false,
+          "properties": {"result": true, "notices": {"$ref": "#/$defs/notices"}}
+        },
+        "preview": {
+          "description": "What the change would do. `after` is the value the application will actually store; changes list the direct effects the adapter can foresee, such as two nets joined, as well as the fields set. For a batch, targets lists one target per selected object, in the order of the selection. For doc save, external_changes lists the changes made outside the tool since the last save, one entry per object.",
+          "type": "object",
+          "required": ["changes", "can_apply"],
+          "additionalProperties": false,
+          "properties": {
+            "action": {"type": "string", "minLength": 1},
+            "targets": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/target"}},
+            "changes": {"type": "array", "items": {"$ref": "preview.schema.json#/$defs/change"}},
+            "external_changes": {
+              "type": "array",
+              "items": {"allOf": [{"$ref": "preview.schema.json#/$defs/change"}, {"required": ["origin"], "properties": {"origin": {"const": "external"}}}]}
+            },
+            "can_apply": {"type": "boolean"},
+            "blocked_by": {"type": "array", "items": {"type": "string"}},
+            "knowledge": {"description": "Knowledge entries that tell how to clear what blocks the change (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
+            "tier_raises": {
+              "description": "Conditions the command registers in tier_when that hold for this call; each makes the call as strict as its tier (DCLI-052).",
+              "type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+            }
+          },
+          "if": {"properties": {"can_apply": {"const": false}}},
+          "then": {"required": ["blocked_by"], "properties": {"blocked_by": {"minItems": 1}}}
+        },
+        "apply": {
+          "$ref": "#/$defs/write_facts",
+          "required": ["dispatch_state", "change", "delivery", "persistence"],
+          "properties": {
+            "result": true,
+            "job": {
+              "description": "Set when the work continues as a long job.",
+              "type": "object",
+              "required": ["id", "state"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"$ref": "#/$defs/id"},
+                "state": {"$ref": "objects.schema.json#/$defs/job/properties/state"}
+              }
+            },
+            "files": {"$ref": "#/$defs/files"}
+          },
+          "unevaluatedProperties": false
+        },
+        "read_back": {
+          "type": "object",
+          "required": ["observed"],
+          "additionalProperties": false,
+          "properties": {
+            "observed": {"description": "Each target key mapped to the fields read back, named as in the preview's changes; for create and delete, the field exists.", "type": "object", "additionalProperties": {"type": "object"}},
+            "unreadable": {"description": "Fields that could not be read back.", "type": "array", "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "job_status": {
+          "type": "object",
+          "required": ["state"],
+          "additionalProperties": false,
+          "properties": {
+            "state": {"$ref": "objects.schema.json#/$defs/job/properties/state"},
+            "progress": {"$ref": "objects.schema.json#/$defs/job/properties/progress"},
+            "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
+            "change": {"$ref": "receipt.schema.json#/$defs/outcome/properties/change"},
+            "delivery": {"$ref": "receipt.schema.json#/$defs/outcome/properties/delivery"},
+            "persistence": {"$ref": "receipt.schema.json#/$defs/outcome/properties/persistence"},
+            "result": true,
+            "files": {"$ref": "#/$defs/files"},
+            "native_message": {"type": "string"}
+          },
+          "if": {"properties": {"state": {"const": "blocked"}}},
+          "then": {"required": ["action"]}
+        },
+        "cancel": {"$ref": "#/$defs/write_facts", "unevaluatedProperties": false},
+        "devices": {
+          "type": "object",
+          "required": ["items"],
+          "additionalProperties": false,
+          "properties": {
+            "items": {"type": "array", "items": {"$ref": "objects.schema.json#/$defs/device"}}
+          }
+        },
+        "plugin_status": {"$ref": "objects.schema.json#/$defs/plugin"},
+        "plugin_install": {
+          "$ref": "#/$defs/write_facts",
+          "properties": {
+            "install_path": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1}
+          },
+          "unevaluatedProperties": false
+        },
+        "plugin_remove": {"$ref": "#/$defs/write_facts", "unevaluatedProperties": false}
+      }
+    },
+    "id": {"type": "string", "minLength": 1},
+    "operation_id": {"$ref": "preview.schema.json#/$defs/operation_id"},
+    "deadline_ms": {"type": "integer", "minimum": 1},
+    "no_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"deadline_ms": {"$ref": "#/$defs/deadline_ms"}}
+    },
+    "command_call": {
+      "description": "A domain command for read, preview, apply and read_back: its path and its inputs, already parsed and converted to the standard units by the runtime. inputs has one key for each flag of the command that the call gives: the flag name without the leading --, with - replaced by _ and, for a physical parameter, the unit suffix of DCLI-080 (--x 100mil gives x_mm: 2.54). --ids gives ids as a list and --input gives its object as it is. The target flags --session, --doc and --device go to session, document and device instead. Each use closes the object with unevaluatedProperties.",
+      "type": "object",
+      "required": ["command", "inputs"],
+      "properties": {
+        "command": {"type": "string", "pattern": "^[a-z][a-z0-9-]*( [a-z][a-z0-9-]*)*$"},
+        "inputs": {"type": "object"},
+        "session": {"$ref": "#/$defs/id"},
+        "document": {"$ref": "#/$defs/id"},
+        "device": {"$ref": "#/$defs/id"},
+        "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
+      }
+    },
+    "write_facts": {
+      "description": "Facts a write reports. dispatch_state says whether the request reached the application; change, delivery and persistence say what happened, in the receipt's terms.",
+      "type": "object",
+      "required": ["dispatch_state"],
+      "properties": {
+        "dispatch_state": {"$ref": "error.schema.json#/$defs/details/properties/dispatch_state"},
+        "change": {"$ref": "receipt.schema.json#/$defs/outcome/properties/change"},
+        "delivery": {"$ref": "receipt.schema.json#/$defs/outcome/properties/delivery"},
+        "persistence": {"$ref": "receipt.schema.json#/$defs/outcome/properties/persistence"},
+        "native_message": {"type": "string"},
+        "notices": {"$ref": "#/$defs/notices"}
+      }
+    },
+    "notices": {
+      "description": "Notices for the Agent, such as that a file-only tool made an export from the file on disk while an instance may hold unsaved changes (DCLI-201). The runtime puts them in meta.notices with the type application, their text marked untrusted (DCLI-004).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "severity": {"enum": ["info", "warning"]},
+          "message": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "files": {
+      "description": "Files a write produced. The runtime records existence, size and SHA-256 of each.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "requested_path": {"description": "The path the call gave, when the application wrote this file under another name, such as a numbered version; the file counts for that path (DCLI-057).", "type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

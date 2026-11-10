@@ -1,0 +1,12 @@
+{
+  "result": {
+    "create_doc": {
+      "dispatch_state": "dispatched",
+      "change": "applied",
+      "delivery": "not_applicable",
+      "persistence": "saved",
+      "document": {"id": "doc-2", "path": "D:/work/cover.prt", "kind": "part", "revision": "1", "dirty": false, "readonly": false, "disk": "in_sync"},
+      "files": [{"path": "D:/work/cover.prt.1", "requested_path": "D:/work/cover.prt"}]
+    }
+  }
+}

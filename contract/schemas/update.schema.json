@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/update.schema.json",
+  "title": "update data",
+  "description": "Result of update and update --check (DCLI-070 to DCLI-079).",
+  "type": "object",
+  "required": ["status", "current_version", "update_available", "entry"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {"enum": ["up_to_date", "updated", "available"]},
+    "current_version": {"type": "string"},
+    "target_version": {"type": "string"},
+    "previous_version": {"type": "string"},
+    "update_available": {"type": "boolean"},
+    "provenance_status": {"enum": ["verified", "not_checked"]},
+    "skill_sync_status": {"enum": ["synced", "not_needed", "failed", "skipped"]},
+    "entry": {"enum": ["direct", "launcher"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "updated"}}},
+      "then": {"required": ["target_version", "previous_version", "provenance_status", "skill_sync_status"]}
+    },
+    {
+      "if": {"properties": {"status": {"const": "available"}}},
+      "then": {"required": ["target_version"], "properties": {"update_available": {"const": true}}}
+    }
+  ]
+}

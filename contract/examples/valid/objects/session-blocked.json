@@ -1,0 +1,24 @@
+{
+  "id": "kicad-1234",
+  "application": {
+    "name": "KiCad",
+    "version": "10.0.1"
+  },
+  "pid": 4312,
+  "owned": true,
+  "generation": 3,
+  "state": "blocked",
+  "documents": [
+    {
+      "id": "doc_1",
+      "path": "D:/proj/board.kicad_pcb",
+      "dirty": true
+    }
+  ],
+  "plugin_loaded": "1.0.0",
+  "blocker": {
+    "action": "dismiss_dialog",
+    "title": "Footprint library not found"
+  },
+  "since_at": "2026-11-02T08:31:12Z"
+}

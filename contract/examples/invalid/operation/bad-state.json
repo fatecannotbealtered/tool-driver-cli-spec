@@ -1,0 +1,16 @@
+{
+  "operation_id": "op_1",
+  "command": "footprint move",
+  "target": {
+    "key": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+    "kind": "footprint",
+    "label": "R1"
+  },
+  "effects": [
+    "change"
+  ],
+  "tier": "direct",
+  "scope_id": "s",
+  "state": "done",
+  "planned_at": "2026-11-02T08:30:00Z"
+}

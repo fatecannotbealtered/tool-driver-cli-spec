@@ -1,0 +1,9 @@
+{
+  "id": "7",
+  "operation_id": "op_j7",
+  "state": "blocked",
+  "cancel_requested": false,
+  "started_at": "2026-11-02T08:30:00Z",
+  "action": "dismiss_dialog",
+  "poll_after_ms": 5000
+}

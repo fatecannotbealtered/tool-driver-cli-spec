@@ -1,0 +1,10 @@
+{
+  "code": "E_BUSY",
+  "message": "Busy.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "not_started",
+    "next_action": "Wait.",
+    "retry_after_ms": 1000
+  }
+}

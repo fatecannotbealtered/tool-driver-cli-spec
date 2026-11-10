@@ -1,0 +1,7 @@
+{
+  "name": "@tool-driver/sample-cli",
+  "version": "0.1.0",
+  "description": "The sample driver tool the runtime tests and both conformance suites run against the fake host.",
+  "bin": {"sample-cli": "bin/sample-cli.js"},
+  "license": "Apache-2.0"
+}

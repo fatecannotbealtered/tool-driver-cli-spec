@@ -1,0 +1,37 @@
+{
+  "code": "E_PARTIAL",
+  "message": "1 of 3 footprints moved; 1 failed and 1 was skipped.",
+  "retryable": false,
+  "details": {
+    "dispatch_state": "dispatched",
+    "next_action": "Fix R2's position, then run the move again for R2 and R3 only.",
+    "batch": {
+      "operation_id": "op_b4t9q2",
+      "items": [
+        {
+          "target": "file:///D:/proj/board.kicad_pcb#/footprints/R1",
+          "operation_id": "op_b4t9q2r1",
+          "ok": true
+        },
+        {
+          "target": "file:///D:/proj/board.kicad_pcb#/footprints/R2",
+          "operation_id": "op_b4t9q2r2",
+          "ok": false,
+          "code": "E_VALIDATION"
+        },
+        {
+          "target": "file:///D:/proj/board.kicad_pcb#/footprints/R3",
+          "ok": false,
+          "skipped": true
+        }
+      ],
+      "summary": {
+        "total": 3,
+        "succeeded": 1,
+        "failed": 1,
+        "unknown": 0,
+        "skipped": 1
+      }
+    }
+  }
+}

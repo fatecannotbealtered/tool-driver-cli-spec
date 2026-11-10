@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/changelog.schema.json",
+  "title": "changelog data",
+  "description": "Entries from the bundled CHANGELOG (DCLI-034).",
+  "type": "object",
+  "required": ["current_version", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "current_version": {"type": "string"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["version", "date", "changes"],
+        "additionalProperties": false,
+        "properties": {
+          "version": {"type": "string"},
+          "date": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+          "changes": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "added": {"$ref": "#/$defs/items"},
+              "changed": {"$ref": "#/$defs/items"},
+              "deprecated": {"$ref": "#/$defs/items"},
+              "removed": {"$ref": "#/$defs/items"},
+              "fixed": {"$ref": "#/$defs/items"},
+              "security": {"$ref": "#/$defs/items"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "items": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  }
+}

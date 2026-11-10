@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/doctor.schema.json",
+  "title": "doctor data",
+  "description": "Checks reported by doctor; every fixed check appears once (DCLI-033).",
+  "type": "object",
+  "required": ["checks"],
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "required": ["check", "status", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "check": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "status": {"enum": ["pass", "warn", "fail"]},
+          "message": {"type": "string", "minLength": 1},
+          "fix": {"type": "string"}
+        },
+        "if": {"properties": {"status": {"enum": ["warn", "fail"]}}},
+        "then": {"required": ["fix"]}
+      },
+      "allOf": [
+        {"contains": {"properties": {"check": {"const": "state_store"}}}},
+        {"contains": {"properties": {"check": {"const": "authorization"}}}},
+        {"contains": {"properties": {"check": {"const": "version"}}}},
+        {"contains": {"properties": {"check": {"const": "update"}}}},
+        {"contains": {"properties": {"check": {"const": "application"}}}},
+        {"contains": {"properties": {"check": {"const": "license"}}}},
+        {"contains": {"properties": {"check": {"const": "plugin"}}}},
+        {"contains": {"properties": {"check": {"const": "sessions"}}}},
+        {"contains": {"properties": {"check": {"const": "knowledge"}}}}
+      ]
+    }
+  }
+}

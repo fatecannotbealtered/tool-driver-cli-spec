@@ -1,0 +1,24 @@
+{
+  "tool": "kicad-cli",
+  "version": "1.2.0",
+  "commands": [
+    {
+      "path": "route stop",
+      "summary": "Stop the running autorouter.",
+      "effects": [
+        "change"
+      ],
+      "modes": [
+        "session"
+      ],
+      "target_kind": "document",
+      "flags": [],
+      "untrusted_fields": [],
+      "irreversible": false,
+      "halt": true,
+      "tolerances": {},
+      "default_fields": [],
+      "related_knowledge": []
+    }
+  ]
+}

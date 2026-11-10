@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fatecannotbealtered/tool-driver-cli-spec/contract/schemas/envelope.schema.json",
+  "title": "Envelope",
+  "description": "The single JSON document a driver tool writes to stdout (DCLI-001, DCLI-003, DCLI-004).",
+  "oneOf": [
+    {"$ref": "#/$defs/success"},
+    {"$ref": "#/$defs/failure"}
+  ],
+  "$defs": {
+    "success": {
+      "type": "object",
+      "required": ["ok", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "ok": {"const": true},
+        "data": true,
+        "meta": {"$ref": "#/$defs/meta"}
+      }
+    },
+    "failure": {
+      "type": "object",
+      "required": ["ok", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "ok": {"const": false},
+        "error": {"$ref": "error.schema.json"},
+        "meta": {"$ref": "#/$defs/meta"}
+      }
+    },
+    "meta": {
+      "description": "Present only when it holds notices or untrusted paths.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "notices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["type", "severity", "message"],
+            "additionalProperties": false,
+            "properties": {
+              "type": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+              "severity": {"enum": ["info", "warning"]},
+              "message": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "untrusted": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^\\$(\\.[a-z0-9_]+|\\[[0-9*]+\\])+$"}
+        }
+      }
+    },
+    "list_page": {
+      "type": "object",
+      "required": ["items", "count", "has_more"],
+      "properties": {
+        "items": {"type": "array"},
+        "count": {"type": "integer", "minimum": 0},
+        "has_more": {"type": "boolean"},
+        "total": {"type": "integer", "minimum": 0},
+        "next_offset": {"type": "integer", "minimum": 0}
+      },
+      "if": {"properties": {"has_more": {"const": true}}},
+      "then": {"required": ["next_offset"]}
+    }
+  }
+}
