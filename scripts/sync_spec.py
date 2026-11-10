@@ -33,8 +33,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from check_project import (BUNDLE, FIXED, JUNK, bundle_version, digest, load_contract, pinned_files, read,  # noqa: E402
-                           runtime_manifest, section_body, set_section)
+from check_project import (BUNDLE, FIXED, JUNK, SHARED_REGION, bundle_version, digest, load_contract,  # noqa: E402
+                           pinned_files, read, runtime_manifest, section_body, set_section)
 
 NAME = "tool-driver-cli-spec"
 
@@ -115,7 +115,14 @@ def fetch_old(project: Path, before: str | None, pinned: bool = True) -> str | N
 
 
 def only_fixed_text(rel: str, old: str, new: str) -> bool:
-    """The file differs only in sections whose text generate copies from the template."""
+    """The file differs only in text generate writes from the template: fixed sections and the
+    text inside shared regions (DREPO-036). A region the new release adds still counts."""
+    def blank(text: str) -> str:
+        return SHARED_REGION.sub(lambda m: f"<!-- driver:{m.group(1)}:start --><!-- driver:{m.group(1)}:end -->", text)
+
+    old, new = blank(old), blank(new)
+    if old.replace("\r\n", "\n") == new.replace("\r\n", "\n"):
+        return True
     english = rel[:-6] + ".md" if rel.endswith("_zh.md") else rel
     if english not in FIXED:
         return False

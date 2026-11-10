@@ -6,6 +6,7 @@ English | [中文](SECURITY_zh.md)
 
 ## Supported Versions
 
+<!-- driver:spec-supported-versions:start -->
 Security fixes go into the latest minor version of {{tool}}.
 
 | Version | Security fixes |
@@ -14,12 +15,15 @@ Security fixes go into the latest minor version of {{tool}}.
 | Older versions | No; update with `{{tool}} update` |
 
 A version with a known vulnerability is deprecated on npm. `{{tool}} doctor` and the update notices of the other commands then warn its users, and `{{tool}} update` installs the fixed version.
+<!-- driver:spec-supported-versions:end -->
 
 ## Reporting a Vulnerability
 
+<!-- driver:spec-reporting-a-vulnerability:start -->
 Report a vulnerability privately through GitHub private vulnerability reporting: <https://github.com/{{repo}}/security/advisories/new>. Do not open a public issue or pull request for it.
 
 Include the {{tool}} version (`{{tool}} --version`), the operating system, the {{application}} version and the steps that show the problem. Leave out secrets, license files and project files you may not share.
+<!-- driver:spec-reporting-a-vulnerability:end -->
 
 ## Risk Tier
 
@@ -38,6 +42,7 @@ The tier of {{tool}} and the commands that set it, generated from `{{tool}} refe
 
 ## Authorization
 
+<!-- driver:spec-authorization:start -->
 A person grants writes in a scope file, a JSON file with the fields `scope_id`, `effects`, `dangerous`, `targets`, `expires_at` and, optionally, `confirm`. The Authorization section of the README shows an example.
 
 - **Location.** {{tool}} reads the scope file from the path in `{{PREFIX}}_SCOPE_FILE`, or from `scope.json` in the state directory when the variable is not set. It looks nowhere else: not in the working directory, not in a project and not in command-line flags, so a scope cannot arrive inside a downloaded project.
@@ -47,6 +52,7 @@ A person grants writes in a scope file, a JSON file with the fields `scope_id`, 
 - **Refusals.** A write that no valid scope covers changes nothing and returns `E_FORBIDDEN`, with what is missing and a snippet the person can paste into the file. `{{tool}} context` reports the scope status: `granted`, `missing`, `invalid` or `expired`.
 - **Records and settings.** `operation resolve` needs a scope that covers the effects and targets of the operation it settles. `knowledge create` and `knowledge delete` change only the tool's own list of team knowledge links and need no scope.
 - **Limits.** The scope guards against mistakes by the Agent and against instructions injected through untrusted content. It cannot stop an Agent that ignores its Skills, because the scope file is an ordinary file in the user's account; keep such an Agent away from the file through the permissions you give the Agent itself.
+<!-- driver:spec-authorization:end -->
 
 {{fill: the scope a person typically grants for {{tool}}: the effects and targets of a common task, with an example scope file}}
 

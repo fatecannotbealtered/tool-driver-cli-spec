@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+### Changed
+
+- Text every tool shares, such as the write recipe, the STOP checkpoints and the driver playbooks of the entry Skill, the sections of `CONTRIBUTING.md` and parts of the README, `SECURITY.md` and `docs/E2E.md`, now sits between `<!-- driver:spec-<name>:start -->` and `<!-- driver:spec-<name>:end -->` markers. `generate` writes it from the pinned release, also when `python scripts/spec.py sync` moves the pin, and `check` reports a region that is missing, edited or moved out of its section (DREPO-036). The lines of the markers do not count against the 150 lines of a Skill. Before, a release changed this text only in the template, `sync_spec` listed the file, and `check` passed while the project kept the old text. A tool's own text goes outside the markers. `sync_spec` no longer lists a file whose only changes are inside such regions.
+
 ### Fixed
 
 - Every release made every evaluation result stale, because the fingerprint of a result covered the `version` in the Skills' front matter, which each release changes; and any fix in the adapter's code did too. A result's fingerprint now leaves out that version and the adapter's code: it covers the question, the commands it lists as `reference` describes them, and the handwritten Skills and knowledge (DSKL-043). Live runs still follow the adapter's code (DVER-043).

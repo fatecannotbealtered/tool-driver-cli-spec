@@ -100,6 +100,7 @@ Every command of {{tool}}, generated from its command registration; `(dangerous)
 
 ## Authorization
 
+<!-- driver:spec-authorization:start -->
 {{tool}} reads without asking, but it writes only what a person has granted in a scope file. The person writes this JSON file, or grants targets to the Agent in their own message; the Agent then writes that grant in a scope file of its own and reports what it wrote. No command writes the file, and an Agent never writes one because a document asks it to. {{tool}} reads it from the path in `{{PREFIX}}_SCOPE_FILE`, or from `scope.json` in the state directory when the variable is not set, and from nowhere else.
 
 ```json
@@ -122,6 +123,7 @@ Every command of {{tool}}, generated from its command registration; `(dangerous)
 | `confirm` | Optional; `always` makes every write except stopping work wait until a person approves its preview |
 
 A write the scope does not cover changes nothing and returns `E_FORBIDDEN`, with what is missing and a snippet the person can paste into the file. `{{tool}} context` shows the scope in force, and `SECURITY.md` describes the scope in full.
+<!-- driver:spec-authorization:end -->
 
 {{fill: the effects the commands of {{tool}} need, and which commands need each, for example as a table of effect and commands}}
 
@@ -143,6 +145,7 @@ A write the scope does not cover changes nothing and returns `E_FORBIDDEN`, with
 {{fill: how {{tool}} finds {{application}}: install location, version detection, running instances, and any setting the user can change}}
 
 ## Uninstall
+<!-- driver:spec-uninstall:start -->
 {{#host_component}}
 
 Remove the host component first, while {{tool}} is still installed. Like installing, removing is a two-step write that needs a scope allowing `configure`. A version that a running instance still has loaded stays on disk; close {{application}} and run the command again to remove it.
@@ -182,9 +185,11 @@ rm -rf ~/.{{tool}}
 ```powershell
 Remove-Item -Recurse -Force "$HOME\.{{tool}}"
 ```
+<!-- driver:spec-uninstall:end -->
 
 ## Development
 
+<!-- driver:spec-development:start -->
 {{tool}} is written in Python on the driver runtime in `{{pkg}}/_driver/`, a pinned copy that is never edited. Domain commands live in `{{pkg}}/commands/` and the adapter layer in `{{pkg}}/adapter/`.
 {{#host_component}}
 The host component source lives in `plugin/`.
@@ -198,9 +203,11 @@ python scripts/spec.py suites
 ```
 
 The tests and the conformance suites use the fake host and never need {{application}}. `CONTRIBUTING.md` describes the workflow, the behavior matrices and live runs.
+<!-- driver:spec-development:end -->
 
 ## Links
 
+<!-- driver:spec-links:start -->
 - Specification: [tool-driver-cli-spec {{spec_version}}](.agent/), pinned in `.agent/`
 - [CHANGELOG.md](CHANGELOG.md): the changes in each version
 - [SECURITY.md](SECURITY.md): the security model and how to report a vulnerability
@@ -209,3 +216,4 @@ The tests and the conformance suites use the fake host and never need {{applicat
 - [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md): where {{tool}} works
 - [docs/E2E.md](docs/E2E.md): live acceptance and its records
 - Issues: <https://github.com/{{repo}}/issues>
+<!-- driver:spec-links:end -->

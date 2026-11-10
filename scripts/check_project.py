@@ -613,7 +613,7 @@ def guidance_digest(facts: Facts) -> str:
     and the builtin knowledge (DSKL-043)."""
     if "guidance" not in facts.digests:
         def handwritten(path: Path, text: str) -> str:
-            text = re.sub(r"(<!-- driver:([a-z-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
+            text = re.sub(r"(<!-- driver:([a-z0-9-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
             if text.startswith("---\n") and "\n---" in text[4:]:
                 head, rest = text[4:].split("\n---", 1)
                 text = "---\n" + re.sub(r"(?m)^\s*version:.*\n?", "", head) + "\n---" + rest
@@ -794,6 +794,33 @@ def skill_commands(facts: Facts) -> dict[str, list[dict[str, Any]]]:
     return owned
 
 
+SHARED = ["README.md", "SECURITY.md", "CONTRIBUTING.md", "docs/E2E.md"]
+SHARED_REGION = re.compile(r"<!-- driver:(spec-[a-z0-9-]+):start -->(.*?)<!-- driver:\1:end -->", re.S)
+MARKER = re.compile(r"<!-- driver:[a-z0-9-]+:(start|end) -->")
+
+
+def heading_before(text: str, marker: str) -> str | None:
+    """The `## ` heading of the section a region starts in."""
+    if text.count(marker) != 1:
+        return None
+    heads = re.findall(r"(?m)^## (.+)$", text[:text.index(marker)])
+    return heads[-1].strip() if heads else None
+
+
+def shared_regions(facts: Facts) -> dict[str, tuple[str, dict[str, str]]]:
+    """The text every tool shares, from the template of this release, by project file: the
+    template file it comes from and the text of each of its regions (DREPO-036)."""
+    pairs = [(rel, rel) for english in SHARED for rel in (english, english[:-3] + "_zh.md")]
+    pairs.append(("skills/{{tool}}/SKILL.md", f"skills/{facts.tool}/SKILL.md"))
+    out = {}
+    for source, target in pairs:
+        text = template_text(source, facts)
+        found = {m.group(1): m.group(2).strip("\n") for m in SHARED_REGION.finditer(text or "")}
+        if found:
+            out[target] = (source, found)
+    return out
+
+
 def generate(facts: Facts) -> dict[Path, str]:
     """Every generated file or region, as the full new text of each file."""
     root = facts.root
@@ -815,6 +842,8 @@ def generate(facts: Facts) -> dict[Path, str]:
     owned = skill_commands(facts)
     for path, _, _, _ in skills(facts):
         fills[path.relative_to(root).as_posix()] = {"command-map": command_map(owned.get(path.parent.name, []))}
+    for target, (_, regions) in shared_regions(facts).items():
+        fills.setdefault(target, {}).update(regions)
     project = facts.contract["project"]
     for english, names in FIXED.items():
         for lang_file in (english, english[:-3] + "_zh.md"):
@@ -1189,6 +1218,7 @@ class Checker:
                    "SECURITY.md": "DSEC-002", "SECURITY_zh.md": "DSEC-002", "COMPATIBILITY.md": "DREPO-016",
                    "COMPATIBILITY_zh.md": "DREPO-016", "E2E.md": "DREPO-017", "E2E_zh.md": "DREPO-017",
                    "SKILL.md": "DSKL-006", "manifest.json": "DCLI-240"}
+        shared = shared_regions(self.facts)
         for path, text in generate(self.facts).items():
             name = path.relative_to(self.root).as_posix()
             old = read(path) if path.is_file() else None
@@ -1196,18 +1226,36 @@ class Checker:
                 self.add(clauses.get(path.name, "DREPO-023"), name, "this generated file is missing; run `python scripts/spec.py generate`")
                 continue
             base = name.replace("_zh.md", ".md")
+            source, texts = shared.get(name, ("", {}))
             for region_name in REGIONS.get(base, ["command-map"] if path.name == "SKILL.md" else []):
                 if get_region(old, region_name) is None:
                     self.add(clauses.get(path.name, "DREPO-023"), name, f"the region `{region(region_name)[0]}` ... "
                              f"`{region(region_name)[1]}` must appear once")
+            rendered = template_text(source, self.facts) or ""
+            for region_name in texts:
+                start, end = region(region_name)
+                where = heading_before(rendered, start)
+                if old.count(start) == 0 and old.count(end) == 0:
+                    self.add("DREPO-036", name, f"the text every tool shares, `{start}` ... `{end}`, is missing: put the markers "
+                             f"around that text in section `## {where}` as {BUNDLE / 'template' / source} shows, move the tool's own "
+                             "lines outside them, because generate replaces everything between them, then run "
+                             "`python scripts/spec.py generate`")
+                elif get_region(old, region_name) is None:
+                    self.add("DREPO-036", name, f"the markers `{start}` and `{end}` must each appear once, the start before the end")
+                elif heading_before(old, start) != where:
+                    self.add("DREPO-036", name, f"the region `{region_name}` belongs in section `## {where}`, not "
+                             f"`## {heading_before(old, start)}`; move it there with its markers")
             if old != text:
-                which = [r for r in REGIONS.get(base, ["command-map"]) if get_region(old, r) != get_region(text, r)] \
+                which = [r for r in REGIONS.get(base, ["command-map"]) + list(texts) if get_region(old, r) != get_region(text, r)] \
                     if path.suffix == ".md" else []
                 clause = {"badges": "DREPO-020", "info-card": "DREPO-021", "command-map": "DSKL-006", "risk": "DSEC-002",
                           "support-matrix": "DREPO-016", "evidence": "DREPO-017"}.get(which[0] if which else "",
-                                                                                      clauses.get(path.name, "DREPO-023"))
+                                                                                      "DREPO-036" if which and which[0].startswith("spec-")
+                                                                                      else clauses.get(path.name, "DREPO-023"))
+                shared_note = " (generate replaces everything between the `driver:spec-` markers: first move the tool's own " \
+                    "lines outside them)" if any(w.startswith("spec-") for w in which) else ""
                 self.add(clause, name, f"generated content is out of date ({', '.join(which) or path.name}); "
-                         "run `python scripts/spec.py generate`")
+                         f"run `python scripts/spec.py generate`{shared_note}")
         if self.facts.registration is not None and not self.facts.registration.get("commands"):
             self.add("DCLI-029", "contract/commands.json", f"no domain command is registered yet; register them in "
                      f"{self.facts.pkg}/commands/ (DCLI-029), then run `python scripts/spec.py generate`")
@@ -1442,7 +1490,8 @@ class Checker:
                         self.add("DSKL-003", f"{rel[:-8]}references/{item.name}", "references/ has no subdirectories")
                     elif f"references/{item.name}" not in text:
                         self.add("DSKL-003", rel, f"SKILL.md must link references/{item.name}")
-            if len(text.rstrip("\n").split("\n")) > self.contract["skill"]["max_lines"]:
+            counted = [line for line in text.rstrip("\n").split("\n") if not MARKER.fullmatch(line.strip())]
+            if len(counted) > self.contract["skill"]["max_lines"]:  # the lines of the region markers do not count
                 self.add("DSKL-003", rel, f"SKILL.md is longer than {self.contract['skill']['max_lines']} lines")
             if not front:
                 self.add("DSKL-002", rel, "SKILL.md begins with front matter")
