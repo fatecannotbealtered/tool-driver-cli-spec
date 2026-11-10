@@ -4,6 +4,28 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
+Shared text follows each release, and fixes from the KiCad, Creo and Xpedition tools on 1.1.0. After syncing, `check` names each section whose shared text lacks its `driver:spec-` markers: put the markers around that text as the template shows, move the tool's own lines outside them, and run `python scripts/spec.py generate`; this is needed once. Evaluation results get a new fingerprint, without the Skills' version and the adapter's code, so the questions run once more on 1.2.0 and then stay current across releases and adapter fixes. Anything that reads a batch's items finds each one's `result` there.
+
+### Changed
+
+- Text every tool shares, such as the write recipe, the STOP checkpoints and the driver playbooks of the entry Skill, the sections of `CONTRIBUTING.md` and parts of the README, `SECURITY.md` and `docs/E2E.md`, now sits between `<!-- driver:spec-<name>:start -->` and `<!-- driver:spec-<name>:end -->` markers. `generate` writes it from the pinned release, also when `python scripts/spec.py sync` moves the pin, and `check` reports a region that is missing, edited or moved out of its section (DREPO-036). The lines of the markers do not count against the 150 lines of a Skill. Before, a release changed this text only in the template, `sync_spec` listed the file, and `check` passed while the project kept the old text. A tool's own text goes outside the markers. `sync_spec` no longer lists a file whose only changes are inside such regions.
+
+### Fixed
+
+- Every release made every evaluation result stale, because the fingerprint of a result covered the `version` in the Skills' front matter, which each release changes; and any fix in the adapter's code did too. A result's fingerprint now leaves out that version and the adapter's code: it covers the question, the commands it lists as `reference` describes them, and the handwritten Skills and knowledge (DSKL-043). Live runs still follow the adapter's code (DVER-043).
+- `run_matrix` ended the call of a long job's `job get --wait 600s`, and of a row paused longer than 300 seconds, after 300 seconds, so the row had no result. It now waits as long as the tool may wait.
+- When the tool ended its pause before the read-back early, `run_matrix` stopped a `--tamper` command still running, which could leave the application half changed. The command now finishes its steps; one still running 300 seconds after the row ended is stopped, and the row's notes say so.
+- A batch returned only each item's code, so what a change produced, such as what a moved track end connects to, was lost; `operation get` of an item gave only its receipt. Each item that succeeded now carries its `result`, as a call for that object alone returns it, and its record keeps it; when the results do not fit in the response, `more_results` names the `operation get` command that gives them (DCLI-064).
+- `reference` marked a parameter `required` although `--input`, or `--ids` for `--id`, gives it instead, so an Agent added it beside `--input` and the call was refused. Such a parameter now shows `required_without` with those flags (DCLI-031).
+- The example of `reference` named `session list`, which a tool that works only on files does not have. It names `context` now.
+- The fake host gave every call a fault matched the same injected value, so a value changed in one reply changed the next ones.
+- A flag of a mode the command does not work in, such as `--session` for a command that works only on files, got the hint of a flag with a near name, such as `--json`. The error now says which modes the command works in, and for a command that works on files, to name the file with `--doc`.
+- `spec.py sync` listed the template files that changed only in the run that moved the pin; a second run said nothing. `spec.py sync <version> --since <earlier version>` lists them again, and a run that changes nothing says so.
+- A save read back the fields of an object that a later write in the same session deleted, such as a note created and deleted before the save, and failed with `E_VERIFY_FAILED` although the document was right. A target whose last change deletes it is now checked only for being absent (DCLI-057).
+- The verb table did not say where a computation that only reads goes, such as working out a routing plan. It is `run`, declared `observe` (DCLI-022).
+
 ## [1.1.0] - 2026-11-09
 
 Evidence follows what it depends on, not the version number, from the Xpedition tool's 1.2.0 release. After syncing, new live runs and evaluation results carry fingerprints and keep counting across versions until the command, the adapter's code or the guidance they depend on changes. Records and reports written before keep counting for their minor version; run the matrices and questions once more to give them fingerprints. `python scripts/spec.py check` names what to run again, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs only the questions that need it.

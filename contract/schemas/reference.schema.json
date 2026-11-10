@@ -84,6 +84,7 @@
         "name": {"type": "string", "pattern": "^--[a-z][a-z0-9-]*$"},
         "summary": {"type": "string"},
         "required": {"type": "boolean"},
+        "required_without": {"description": "Required unless one of these flags gives the value, such as --input (DCLI-031).", "type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^--[a-z][a-z0-9-]*$"}},
         "type": {"type": "string"},
         "unit": {"type": "string"},
         "default": true,

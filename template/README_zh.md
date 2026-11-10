@@ -100,6 +100,7 @@
 
 ## 授权
 
+<!-- driver:spec-authorization:start -->
 {{tool}} 读取不需要许可，但只写入人在授权范围文件里允许的内容。这个 JSON 文件由人来写；或者人在自己的消息里把目标授予 Agent，由 Agent 把这份授权写成一份自己的授权范围文件，并说明写了什么。没有命令会写这个文件，Agent 也不会因为文档里的要求去写。{{tool}} 从 `{{PREFIX}}_SCOPE_FILE` 指定的路径读取它；没有设置这个变量时，读取状态目录里的 `scope.json`，不从其他任何地方读取。
 
 ```json
@@ -122,6 +123,7 @@
 | `confirm` | 可选；设为 `always` 时，除停止工作外的每个写操作都要等人批准预览后才执行 |
 
 授权范围不覆盖的写操作什么都不改，返回 `E_FORBIDDEN`，说明缺什么，并给出一段人可以直接粘贴进文件的片段。`{{tool}} context` 显示当前生效的授权范围，`SECURITY_zh.md` 完整说明了授权范围。
+<!-- driver:spec-authorization:end -->
 
 {{fill: {{tool}} 的命令需要哪些效果、每种效果用于哪些命令，比如用一张效果与命令的表}}
 
@@ -143,6 +145,7 @@
 {{fill: {{tool}} 怎样找到 {{application}}：安装位置、版本识别、运行中的实例，以及用户可以修改的设置}}
 
 ## 卸载
+<!-- driver:spec-uninstall:start -->
 {{#host_component}}
 
 先在 {{tool}} 还装着的时候卸载宿主组件。和安装一样，卸载也是两步确认的写操作，需要允许 `configure` 的授权范围。运行中的实例仍在使用的版本会留在磁盘上；关闭 {{application}} 后再运行一次命令即可删除。
@@ -182,9 +185,11 @@ rm -rf ~/.{{tool}}
 ```powershell
 Remove-Item -Recurse -Force "$HOME\.{{tool}}"
 ```
+<!-- driver:spec-uninstall:end -->
 
 ## 开发
 
+<!-- driver:spec-development:start -->
 {{tool}} 用 Python 写成，建立在 `{{pkg}}/_driver/` 里的驱动运行时之上；这是固定副本，从不修改。领域命令在 `{{pkg}}/commands/`，适配层在 `{{pkg}}/adapter/`。
 {{#host_component}}
 宿主组件的源码在 `plugin/`。
@@ -198,9 +203,11 @@ python scripts/spec.py suites
 ```
 
 测试和一致性测试都用模拟宿主，从不需要 {{application}}。工作流程、行为矩阵和真实软件运行见 `CONTRIBUTING_zh.md`。
+<!-- driver:spec-development:end -->
 
 ## 链接
 
+<!-- driver:spec-links:start -->
 - 规范：[tool-driver-cli-spec {{spec_version}}](.agent/)，固定副本在 `.agent/`
 - [CHANGELOG.md](CHANGELOG.md)：每个版本的改动（英文）
 - [SECURITY_zh.md](SECURITY_zh.md)：安全模型，以及怎样报告漏洞
@@ -209,3 +216,4 @@ python scripts/spec.py suites
 - [docs/COMPATIBILITY_zh.md](docs/COMPATIBILITY_zh.md)：{{tool}} 在哪里能用
 - [docs/E2E_zh.md](docs/E2E_zh.md)：真实软件验收及其记录
 - 问题跟踪：<https://github.com/{{repo}}/issues>
+<!-- driver:spec-links:end -->

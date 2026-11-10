@@ -5,10 +5,13 @@ copies it, breaks one rule, and expects check_project to name the clause.
 """
 from __future__ import annotations
 
+import argparse
+import contextlib
 import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -170,6 +173,52 @@ class ProjectTest(unittest.TestCase):
         (self.project / "docs" / "E2E.md").write_text(text[:start] + text[end:], encoding="utf-8")
         self.expect("DREPO-017")  # the structure before Authorization Rules
 
+    def test_shared_text_follows_the_release_and_the_tool_s_own_text_stays(self):
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-stop-checkpoints:start -->", "<!-- driver:spec-stop-checkpoints:end -->"
+        inside = text[text.index(start) + len(start):text.index(end)]
+        old = text.replace(inside, "\n- An older checkpoint.\n").replace(end, end + "\n\n- A checkpoint of this tool only.")
+        skill.write_text(old, encoding="utf-8")
+        problems = [p for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(problems and "spec-stop-checkpoints" in problems[0].message, [p.text() for p in problems])
+        self.fix()
+        fixed = skill.read_text(encoding="utf-8")
+        self.assertIn(inside, fixed)  # the release's text is back
+        self.assertNotIn("An older checkpoint", fixed)
+        self.assertIn("A checkpoint of this tool only.", fixed)  # the tool's own text outside the markers stays
+        self.assertNotIn("DREPO-036", self.clauses())
+        contributing = self.project / "CONTRIBUTING_zh.md"
+        text = contributing.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-security:start -->", "<!-- driver:spec-security:end -->"
+        contributing.write_text(text.replace(start + "\n", "").replace(end + "\n", ""), encoding="utf-8")
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("spec-security" in m and "is missing" in m and "generate replaces" in m for m in problems), problems)
+        contributing.write_text(text.replace(end, end + "\n" + start), encoding="utf-8")
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("must each appear once" in m for m in problems), problems)
+        start, end = "<!-- driver:spec-commands:start -->", "<!-- driver:spec-commands:end -->"
+        region = text[text.index(start):text.index(end) + len(end)]
+        contributing.write_text(text.replace(region, "") + "\n" + region + "\n", encoding="utf-8")  # moved into the last section
+        problems = [p.message for p in self.problems() if p.clause == "DREPO-036"]
+        self.assertTrue(any("belongs in section" in m for m in problems), problems)
+        contributing.write_text(text, encoding="utf-8")
+
+    def test_the_routing_table_and_the_length_are_the_tool_s(self):
+        skill = self.project / "skills" / "demo-cli" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        routed = text.replace("| Every FakeApp task |", "| Placing parts | `demo-layout` |\n| Every FakeApp task |")
+        self.assertNotEqual(routed, text)
+        skill.write_text(routed, encoding="utf-8")
+        self.fix()
+        self.assertIn("| Placing parts | `demo-layout` |", skill.read_text(encoding="utf-8"))  # generate keeps the tool's row
+        lines = skill.read_text(encoding="utf-8").rstrip("\n").split("\n")
+        markers = sum(1 for line in lines if line.startswith("<!-- driver:"))
+        skill.write_text("\n".join(lines + ["filler"] * (150 - (len(lines) - markers))) + "\n", encoding="utf-8")
+        self.assertNotIn("DSKL-003", self.clauses())  # 150 lines of text, the markers not counted
+        skill.write_text("\n".join(lines + ["filler"] * (151 - (len(lines) - markers))) + "\n", encoding="utf-8")
+        self.assertIn("DSKL-003", self.clauses())
+
     def test_changelog(self):
         self.edit("CHANGELOG.md", "### Added", "### 新增")
         self.expect("DREPO-018")
@@ -291,6 +340,41 @@ class ProjectTest(unittest.TestCase):
             self.assertEqual(sync_spec.template_changes(self.project, "0.9.0"), ["docs/E2E.md"])
             self.assertIsNone(sync_spec.template_changes(self.project, "0.8.0"))  # not downloaded
         self.assertEqual(sync_spec.template_changes(self.project, check_project.bundle_version()), [])
+
+    def test_sync_does_not_list_shared_text_generate_writes(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        old = cache / "tool-driver-cli-spec" / "0.9.0" / "tool-driver-cli-spec-0.9.0" / "template"
+        shutil.copytree(REPO / "template", old)
+        contributing = old / "CONTRIBUTING.md"
+        text = contributing.read_text(encoding="utf-8")
+        start, end = "<!-- driver:spec-security:start -->", "<!-- driver:spec-security:end -->"
+        contributing.write_text(text[:text.index(start) + len(start)] + "\nAn older text.\n" + text[text.index(end):], encoding="utf-8")
+        e2e = old / "docs" / "E2E.md"
+        e2e.write_text(re.sub(r"<!-- driver:spec-procedure:(start|end) -->\n?", "", e2e.read_text(encoding="utf-8")), encoding="utf-8")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}):
+            changed = sync_spec.template_changes(self.project, "0.9.0")
+        self.assertNotIn("CONTRIBUTING.md", changed)  # generate writes the new text
+        self.assertIn("docs/E2E.md", changed)  # a region the new release adds needs its markers
+
+    def test_sync_lists_the_template_changes_again_with_since(self):
+        cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
+        (self.project / ".agent" / "SPEC_SHA256").write_text("ab" * 32 + "\n", encoding="utf-8")  # pins this release
+        asked = []
+
+        def download(version, pin):
+            asked.append((version, pin))
+            old = cache / "tool-driver-cli-spec" / version / f"tool-driver-cli-spec-{version}" / "template"
+            shutil.copytree(REPO / "template", old)
+            (old / "docs" / "E2E.md").write_text("an older text\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(cache)}), mock.patch.object(sync_spec, "download", download):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project)]), 0)
+            self.assertIn("--since <earlier version>", out.getvalue())  # the same release again: how to list them
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(sync_spec.main([str(self.project), "--since", "0.9.0"]), 0)
+        self.assertIn("  docs/E2E.md", out.getvalue())
+        self.assertEqual(asked, [("0.9.0", None)])  # checked against its published SHA-256, not this release's pin
 
     def test_sync_downloads_the_release_pinned_before(self):
         cache = Path(tempfile.mkdtemp(prefix="cache-", dir=self.work))
@@ -610,6 +694,10 @@ class ProjectTest(unittest.TestCase):
         self.assertTrue(any("no current result" in m and "spec.py eval --stale" in m for m in messages), messages)
         skill.write_text(text, encoding="utf-8")
         self.assertNotIn("DSKL-043", self.clauses())
+        skill.write_text(re.sub(r"(?m)^(\s*version:).*$", r"\1 9.9.9", text, count=1), encoding="utf-8")
+        adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "# a fix\n", encoding="utf-8")
+        self.assertNotIn("DSKL-043", self.clauses())  # a release's version and an adapter fix leave the results standing
 
     def test_a_new_version_of_a_host_component_keeps_the_fingerprint(self):
         root = Path(tempfile.mkdtemp(prefix="fingerprint-", dir=self.work))
@@ -876,7 +964,7 @@ class ProjectTest(unittest.TestCase):
             def start(self):
                 pass
 
-            def join(self, timeout=None):
+            def finish(self, timeout):
                 pass
 
         # The tool crashed: it exited 1 and printed no envelope.
@@ -909,7 +997,7 @@ class ProjectTest(unittest.TestCase):
                 "--set", "session=s1", "--application-version", "1.5.0"]
         seen: list[tuple[str, dict | None]] = []
 
-        def confirmed(call, root, env, expected_code, notes):
+        def confirmed(call, root, env, expected_code, notes, timeout=None):
             path = Path(env["DEMO_CLI_SCOPE_FILE"])
             seen.append((str(path), json.loads(path.read_text(encoding="utf-8")) if path.exists() else None))
             return 4, b'{"ok": false, "error": {"code": "E_FORBIDDEN"}}'
@@ -962,6 +1050,23 @@ class ProjectTest(unittest.TestCase):
         row = json.loads(matrix.read_text(encoding="utf-8"))["rows"][0]
         self.assertEqual(row["kind_evidence"], {"project": "live:docs/evidence/2026-11-01-a.json#normal"})
         self.assertNotIn("evidence", row)
+
+    def test_a_tamper_command_finishes_its_steps_after_the_row(self):
+        pause = self.work / "pause.json"
+        pause.write_text("{}", encoding="utf-8")  # the tool has paused already
+
+        def watch(seconds: float, timeout: float) -> list[str]:
+            notes: list[str] = []
+            args = argparse.Namespace(tamper=f'{{python}} -c "import time; time.sleep({seconds})"')
+            watcher = run_matrix._Watcher(pause, self.work, dict(os.environ), args, notes)
+            watcher.start()
+            time.sleep(0.5)  # the row ends while the command still runs
+            watcher.finish(timeout)
+            return notes
+
+        self.assertEqual(watch(2, 30), ["--tamper exited 0"])
+        notes = watch(30, 1)
+        self.assertTrue(any("was still running 1 s after the row ended" in n for n in notes), notes)
 
     def test_covered(self):
         base = self.work / "e2e"

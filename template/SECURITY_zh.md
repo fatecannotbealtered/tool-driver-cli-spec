@@ -6,6 +6,7 @@
 
 ## 支持的版本
 
+<!-- driver:spec-supported-versions:start -->
 安全修复只进入 {{tool}} 最新的次版本。
 
 | 版本 | 安全修复 |
@@ -14,12 +15,15 @@
 | 更早的版本 | 没有；请用 `{{tool}} update` 更新 |
 
 有已知漏洞的版本会在 npm 上标为弃用。之后 `{{tool}} doctor` 和其他命令的更新提示会向它的用户发出警告，`{{tool}} update` 会装上修复后的版本。
+<!-- driver:spec-supported-versions:end -->
 
 ## 报告漏洞
 
+<!-- driver:spec-reporting-a-vulnerability:start -->
 请通过 GitHub 的私密漏洞报告功能私下报告漏洞：<https://github.com/{{repo}}/security/advisories/new>。不要为漏洞开公开的 Issue 或合并请求。
 
 报告里写上 {{tool}} 的版本（`{{tool}} --version`）、操作系统、{{application}} 的版本和能重现问题的步骤。不要附上机密、许可证文件和无权分享的项目文件。
+<!-- driver:spec-reporting-a-vulnerability:end -->
 
 ## 风险等级
 
@@ -38,6 +42,7 @@
 
 ## 授权
 
+<!-- driver:spec-authorization:start -->
 人在授权范围文件里授予写权限。这是一个 JSON 文件，字段有 `scope_id`、`effects`、`dangerous`、`targets`、`expires_at`，以及可选的 `confirm`。README 的「授权」一节有示例。
 
 - **位置。** {{tool}} 从 `{{PREFIX}}_SCOPE_FILE` 指定的路径读取授权范围文件；没有设置这个变量时，读取状态目录里的 `scope.json`。它不去别处找：不找工作目录、不找项目、不看命令行参数，所以授权范围不会夹在下载来的项目里进来。
@@ -47,6 +52,7 @@
 - **拒绝。** 没有有效授权范围覆盖的写操作什么都不改，返回 `E_FORBIDDEN`，说明缺什么，并给出一段人可以直接粘贴进文件的片段。`{{tool}} context` 报告授权范围的状态：`granted`、`missing`、`invalid` 或 `expired`。
 - **记录与设置。** `operation resolve` 需要一个授权范围，覆盖它所处理的那次操作的效果和目标。`knowledge create` 和 `knowledge delete` 只改工具自己的团队知识链接列表，不需要授权范围。
 - **局限。** 授权范围防的是 Agent 的失误，以及经不可信内容注入的指令。它拦不住无视 Skill 的 Agent，因为授权范围文件只是用户账户里的一个普通文件；要让这样的 Agent 碰不到这个文件，得靠你给 Agent 本身设定的权限。
+<!-- driver:spec-authorization:end -->
 
 {{fill: 人通常为 {{tool}} 授予的授权范围：一项常见任务需要的效果和目标，附一个授权范围文件示例}}
 

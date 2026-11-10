@@ -1043,4 +1043,4 @@ def _merge(base: dict[str, Any], extra: dict[str, Any]) -> None:
         if isinstance(value, dict) and isinstance(base.get(key), dict):
             _merge(base[key], value)
         else:
-            base[key] = value
+            base[key] = copy.deepcopy(value)  # a rule serves every call; a reply never shares its values

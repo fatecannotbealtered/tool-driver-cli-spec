@@ -253,7 +253,9 @@ def main(argv: list[str] | None = None) -> int:
             watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, env, args, notes)
             watcher.start()
         expected_code = row["expected"].get("code")
-        exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes)
+        # The paused row's call waits for the pause as well (DVER-030).
+        wait = TIMEOUT_S + (int(row_env[pause_env]) if tampered else 0)
+        exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes, wait)
         envelope = _envelope(stdout)
         if command.get("long") and envelope.get("ok") is True:
             exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)
@@ -265,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
             if envelope.get("ok") is True and ((envelope.get("data") or {}).get("result") or {}).get("job"):
                 exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)  # a long doc save
         if watcher is not None:
-            watcher.join(timeout=5)
+            watcher.finish(TIMEOUT_S)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
         code = error.get("code") if error.get("code") in known_codes else None
         shown_exit = exit_code if exit_code in (*range(10), 130) else 1  # the exit codes of DCLI-014
@@ -511,6 +513,7 @@ class _Watcher(threading.Thread):
         super().__init__(daemon=True)
         self.pause, self.root, self.env, self.args, self.notes = pause, root, env, args, notes
         self.stopped = threading.Event()
+        self.proc: subprocess.Popen | None = None
 
     def run(self) -> None:
         end = time.monotonic() + TIMEOUT_S + JOB_WAIT_S
@@ -524,24 +527,31 @@ class _Watcher(threading.Thread):
         except (OSError, ValueError):
             info = {}
         if self.args.tamper:
-            done = subprocess.run(tamper_command(self.args.tamper), shell=True, cwd=self.root,
-                                  env={**self.env, "TOOL_DRIVER_PAUSE_FILE": str(self.pause)}, creationflags=NO_WINDOW)
-            self.notes.append(f"--tamper exited {done.returncode}")
+            self.proc = subprocess.Popen(tamper_command(self.args.tamper), shell=True, cwd=self.root,
+                                         env={**self.env, "TOOL_DRIVER_PAUSE_FILE": str(self.pause)}, creationflags=NO_WINDOW)
+            self.notes.append(f"--tamper exited {self.proc.wait()}")
         else:
             print(f"Now change {', '.join(info.get('fields') or ['the result'])} of {', '.join(info.get('targets', []))} "
                   f"in the application, or delete the file it made; the tool waits up to {info.get('seconds')} s.",
                   file=sys.stderr, flush=True)
 
-    def join(self, timeout: float | None = None) -> None:
+    def finish(self, timeout: float) -> None:
+        """After the row: a --tamper command still running, such as after the tool saw the change
+        and ended its pause early, finishes its steps, so it never leaves the application half
+        changed; one that does not end in ``timeout`` seconds is stopped, and the row says so."""
         self.stopped.set()
-        super().join(timeout)
+        self.join(timeout)
+        if self.proc is not None and self.proc.poll() is None:
+            kill_tree(self.proc)
+            self.notes.append(f"--tamper was still running {int(timeout)} s after the row ended and was stopped; "
+                              "the application may be left half changed")
 
 
 def _confirmed(argv: list[str], root: Path, env: dict[str, str], expected_code: str | None,
-               notes: list[str]) -> tuple[int, bytes]:
+               notes: list[str], timeout: float = TIMEOUT_S) -> tuple[int, bytes]:
     """Run a row; a two-step or dangerous write is confirmed with its token, unless the row
     expects the confirmation itself (DCLI-053)."""
-    exit_code, stdout = _run(argv, root, env, notes)
+    exit_code, stdout = _run(argv, root, env, notes, timeout)
     out = _envelope(stdout)
     details = (out.get("error") or {}).get("details") or {}
     if (out.get("error") or {}).get("code") == "E_CONFIRMATION_REQUIRED" and expected_code != "E_CONFIRMATION_REQUIRED" \
@@ -549,7 +559,7 @@ def _confirmed(argv: list[str], root: Path, env: dict[str, str], expected_code: 
         extra = ["--confirm", details["confirm_token"]]
         if (details.get("preview") or {}).get("tier") == "dangerous":
             extra.append("--dangerous")
-        exit_code, stdout = _run(argv + extra, root, env, notes)
+        exit_code, stdout = _run(argv + extra, root, env, notes, timeout)
     return exit_code, stdout
 
 
@@ -565,7 +575,8 @@ def _job_end(tool: list[str], root: Path, env: dict[str, str], envelope: dict[st
     end = time.monotonic() + JOB_WAIT_S
     view: dict[str, Any] = {}
     while time.monotonic() < end:
-        out = _envelope(_run(tool + ["job", "get", "--job", job["id"], "--wait", "600s"], root, env, notes)[1])
+        # job get may wait its whole 600 s; the runner waits a little longer for its answer.
+        out = _envelope(_run(tool + ["job", "get", "--job", job["id"], "--wait", "600s"], root, env, notes, 660)[1])
         error = out.get("error") if isinstance(out.get("error"), dict) else None
         if error is not None and error.get("code") == "E_BUSY":
             time.sleep(max(1.0, ((error.get("details") or {}).get("retry_after_ms") or 0) / 1000))

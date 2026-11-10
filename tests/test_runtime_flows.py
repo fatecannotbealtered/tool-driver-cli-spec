@@ -186,6 +186,55 @@ class OddReplies(unittest.TestCase):
             self.assertEqual(resolved.code, "E_UNSUPPORTED", resolved.stdout[:400])
 
 
+class BatchResults(unittest.TestCase):
+    """Each item of a batch says what its change produced, as a call for that object alone does (DCLI-064)."""
+
+    def batch(self, case: Case, ids: list[str]):
+        argv = [*MOVE, "--ids", ",".join(ids), "--x", "3mm", "--y", "4mm"]
+        out = case.run(*argv)
+        if out.code == "E_CONFIRMATION_REQUIRED":
+            out = case.run(*argv, "--confirm", out.details["confirm_token"])
+        return out
+
+    def test_each_item_carries_its_result_and_its_record_keeps_it(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result",
+                                        "result": {"result": {"nearest": "U1"}}, "times": 0})
+            out = self.batch(case, ["R1", "R2"])
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual([i["result"] for i in out.data["items"]], [{"nearest": "U1"}] * 2)
+            self.assertNotIn("more_results", out.data)
+            got = case.run("operation", "get", "--id", out.data["items"][1]["operation_id"])
+            self.assertEqual(got.data["result"], {"nearest": "U1"})
+            self.assertEqual(schemas.errors(got.data, "operation.schema.json"), [])
+
+    def test_results_that_do_not_fit_stay_in_the_records(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result",
+                                        "result": {"result": {"note": "x" * 400}}, "times": 0})
+            out = self.batch(case, [f"R{n}" for n in range(1, 31)])
+            self.assertTrue(out.ok, out.stdout[:400])
+            items = out.data["items"]
+            self.assertIn("operation get --id", out.data["more_results"])
+            self.assertTrue(0 < sum("result" in i for i in items) < len(items))
+            self.assertLessEqual(len(out.stdout), 8000)
+            last = case.run("operation", "get", "--id", items[-1]["operation_id"])
+            self.assertEqual(last.data["result"], {"note": "x" * 400})
+
+
+class FlagHints(unittest.TestCase):
+    def test_a_mode_flag_the_command_does_not_take_names_its_modes(self):
+        with Case(subject()) as case:
+            out = case.run("part", "update", "--session", "fake-1", "--doc", "board.fake", "--id", "R1")
+            self.assertEqual(out.code, "E_USAGE", out.stdout[:400])
+            self.assertIn("works only in file mode", out.envelope["error"]["message"])
+            self.assertIn("--doc <path>", out.details["next_action"])
+            self.assertNotIn("Did you mean", out.details["next_action"])
+            out = case.run("axis", "move", "--session", "fake-1")
+            self.assertIn("works only in device mode", out.envelope["error"]["message"])
+            self.assertNotIn("--doc", out.details["next_action"])
+
+
 class Undo(unittest.TestCase):
     def test_a_second_undo_takes_the_change_before(self):
         with Case(subject()) as case:

@@ -20,6 +20,7 @@ Live runs are made on these machines:
 
 {{fill: the machines, operating systems, {{application}} versions and modes used for live runs}}
 
+<!-- driver:spec-procedure:start -->
 To run a behavior matrix on the real {{application}}:
 
 1. Prepare the targets, such as a copy of a project made for testing in a listed folder, an instance started for the run or a device set up for testing. A target outside the listed ones is added under Authorized Targets first, as Authorization Rules says.
@@ -32,6 +33,7 @@ To run a behavior matrix on the real {{application}}:
 To run the evaluation questions on the real {{application}}, run `python scripts/spec.py eval --workspace-root <folder>` with a folder inside a listed folder. The runner writes each question's scope file and writes the evaluation report to `docs/evidence/`.
 
 A run in a live record counts as evidence until the command's registration or the adapter's code changes; a new version number alone changes nothing. Records never hold secrets, and arguments that carry secrets show as `***`.
+<!-- driver:spec-procedure:end -->
 
 ## Evidence Records
 

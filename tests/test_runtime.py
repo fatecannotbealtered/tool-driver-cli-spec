@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import shlex
 import os
 import subprocess
 import sys
@@ -79,6 +80,20 @@ class Units(unittest.TestCase):
         for bad in ("60", "1m", "-1s", "s"):
             with self.assertRaises(DriverError):
                 duration_seconds(bad, "--wait", ["ms", "s", "min", "h"])
+
+
+class SaveReadBack(unittest.TestCase):
+    def test_an_object_deleted_before_the_save_is_read_only_for_being_gone(self):
+        from _driver.standard import still_there
+
+        doc = "file:///D:/e2e/drawing.drw"
+        note, leader, other = f"{doc}#/notes/SPARE", f"{doc}#/notes/SPARE/leader", f"{doc}#/notes/SPARE_2"
+        fields = [{"target": note, "field": "text", "after": "SPARE"}, {"target": leader, "field": "x_mm", "after": 1.0},
+                  {"target": other, "field": "text", "after": "kept"}, {"target": note, "field": "exists", "after": False}]
+        self.assertEqual([(c["target"], c["field"]) for c in still_there(fields)],
+                         [(other, "text"), (note, "exists")])  # SPARE_2 only shares the prefix of the name
+        again = [dict(c, after=True) if c["field"] == "exists" else c for c in fields]  # created again: all are read
+        self.assertEqual(still_there(again), again)
 
 
 class TargetKeys(unittest.TestCase):
@@ -476,6 +491,22 @@ class InProcess(unittest.TestCase):
         records = (self.tmp / "state" / "operations")
         for path in records.glob("*.json"):
             self.assertNotIn("s3cret", path.read_text(encoding="utf-8"), "a secret reached an operation record")
+
+    def test_reference_says_what_input_and_ids_can_replace(self):
+        reg = registration(path="part update", modes=["file"], flags=[
+            {"name": "--id", "type": "string", "required": True}, {"name": "--value", "type": "string", "required": True},
+            {"name": "--ids", "type": "list"}, {"name": "--input", "type": "input"}], tolerances={})
+        self.tool = Tool(root=SAMPLE, adapter=SampleAdapter, commands=[reg], application="Files", versions="any",
+                         modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        code, env = self.run_tool("reference", "--command", "part update")
+        self.assertEqual(code, 0, env)
+        flags = {f["name"]: f for f in env["data"]["flags"]}
+        self.assertEqual((flags["--id"].get("required"), flags["--id"]["required_without"]), (None, ["--ids", "--input"]))
+        self.assertEqual((flags["--value"].get("required"), flags["--value"]["required_without"]), (None, ["--input"]))
+        self.assertTrue(flags["--doc"].get("required") or "required_without" not in flags["--doc"])
+        code, env = self.run_tool("reference", "--command", "reference")
+        for example in env["data"]["examples"]:
+            self.assertEqual(self.run_tool(*shlex.split(example)[1:])[0], 0, example)  # a file-mode tool runs its own examples
 
     def test_adapter_errors_keep_the_native_message_untrusted(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "missing", "--value", "x")
