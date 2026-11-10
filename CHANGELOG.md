@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
+Shared text follows each release, and fixes from the KiCad, Creo and Xpedition tools on 1.1.0. After syncing, `check` names each section whose shared text lacks its `driver:spec-` markers: put the markers around that text as the template shows, move the tool's own lines outside them, and run `python scripts/spec.py generate`; this is needed once. Evaluation results get a new fingerprint, without the Skills' version and the adapter's code, so the questions run once more on 1.2.0 and then stay current across releases and adapter fixes. Anything that reads a batch's items finds each one's `result` there.
+
 ### Changed
 
 - Text every tool shares, such as the write recipe, the STOP checkpoints and the driver playbooks of the entry Skill, the sections of `CONTRIBUTING.md` and parts of the README, `SECURITY.md` and `docs/E2E.md`, now sits between `<!-- driver:spec-<name>:start -->` and `<!-- driver:spec-<name>:end -->` markers. `generate` writes it from the pinned release, also when `python scripts/spec.py sync` moves the pin, and `check` reports a region that is missing, edited or moved out of its section (DREPO-036). The lines of the markers do not count against the 150 lines of a Skill. Before, a release changed this text only in the template, `sync_spec` listed the file, and `check` passed while the project kept the old text. A tool's own text goes outside the markers. `sync_spec` no longer lists a file whose only changes are inside such regions.
