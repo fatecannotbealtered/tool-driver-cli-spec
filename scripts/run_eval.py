@@ -251,6 +251,18 @@ def file_key(path: Path) -> str:
     return "file:///" + str(path).replace("\\", "/").lstrip("/")
 
 
+def place_target(target: str, places: dict[str, Path]) -> str | None:
+    """A scope target that starts with {documents} or {workspace} as the key of what it names,
+    with `..` resolved; None for a target that names no such folder (DSKL-044)."""
+    for name, folder in places.items():
+        marker = "{" + name + "}"
+        if target.startswith(marker):
+            rest = target[len(marker):].lstrip("/")
+            path = Path(os.path.normpath(folder / rest)) if rest else folder
+            return file_key(path) + ("/" if not rest or target.endswith("/") or path.is_dir() else "")
+    return None
+
+
 def dangerous(command: dict[str, Any]) -> bool:
     tiers = command.get("tier")
     tiers = list(tiers.values()) if isinstance(tiers, dict) else [tiers]
@@ -329,8 +341,7 @@ class Session:
         scope = {**self.default_scope(), **self.question.scope}
         if not scope["effects"]:
             return None  # a question that only reads runs without a scope file
-        documents = file_key(self.documents) + "/"
-        scope["targets"] = [t.replace("{documents}", documents) for t in scope.get("targets", [])]
+        scope["targets"] = [place_target(t, self.places) or t for t in scope.get("targets", [])]
         text = json.dumps(scope, indent=2) + "\n"
         self.scope_file.write_text(text, encoding="utf-8")
         return text
@@ -340,7 +351,7 @@ class Session:
         never limited by the scope the Agent is evaluated under."""
         effects = [e["effect"] for e in self.facts.contract["effects"] if e["effect"] != "observe"]
         documents = file_key(self.documents) + "/"
-        extra = [t for t in (self.question.scope or {}).get("targets", []) if not t.startswith("{documents}")]
+        extra = [place_target(t, self.places) or t for t in (self.question.scope or {}).get("targets", [])]
         targets = [documents] + extra + (["untitled:", "device:"] if self.fake else [])
         path = self.tmp / "harness-scope.json"
         path.write_text(json.dumps({"scope_id": "evaluation-harness", "effects": effects, "dangerous": True,
@@ -348,12 +359,16 @@ class Session:
                         encoding="utf-8")
         return path
 
+    @property
+    def places(self) -> dict[str, Path]:
+        """The folders {documents} and {workspace} stand for in scope targets (DSKL-044)."""
+        return {"documents": self.documents, "workspace": self.workspace}
+
     def targets(self) -> list[str]:
-        """The scope targets, with the documents folder written as {documents}."""
+        """The targets of the scope the Agent got, as written in its scope file."""
         if self.scope_text is None:
             return []
-        documents = file_key(self.documents) + "/"
-        return [t.replace(documents, "{documents}") for t in json.loads(self.scope_text)["targets"]]
+        return list(json.loads(self.scope_text)["targets"])
 
     def _write_shim(self) -> None:
         self.bin.mkdir()
@@ -756,7 +771,8 @@ def evaluate(project: Path, facts: check_project.Facts, questions: list[Question
                         "notes": "; ".join(failures)[:2000] if failures else question.title,
                         "sha256": question.sha256, "commands": question.commands, "ran": session.ran,
                         "fingerprint": fingerprints[question.id]})
-        for target in [base] + [t for t in session.targets() if t != "{documents}"]:
+        # Everything inside the workspace root, such as the documents and the workspace, is covered by it.
+        for target in [base] + [t for t in session.targets() if not check_project.target_covered(t, base)]:
             if target not in targets:
                 targets.append(target)
         data["model"] = ", ".join(agent.models) or agent.requested or "default"
@@ -791,9 +807,14 @@ def authorize(project: Path, questions: list[Question], root: Path | None) -> No
     key = file_key(root.resolve()) + "/"
     if not any(check_project.target_covered(key, a) for a in authorized):
         raise EvalError(f"the workspace root {key} is not listed under Authorized Targets in docs/E2E.md, nor inside a listed folder")
+    # Where a question's folders will be: <root>/<question folder>/documents and .../work.
+    places = {"documents": root.resolve() / "question" / "documents", "workspace": root.resolve() / "question" / "work"}
     for question in questions:
         for target in (question.scope or {}).get("targets", []):
-            if target.startswith("{documents}"):
+            placed = place_target(target, places)
+            if placed is not None:
+                if not check_project.target_covered(placed, key):
+                    raise EvalError(f"{question.id}: the scope target {target} leads outside the workspace root")
                 continue
             if not any(check_project.target_covered(target, a) for a in authorized):
                 raise EvalError(f"{question.id}: the scope target {target} is not listed under Authorized Targets in docs/E2E.md, nor inside a listed folder")

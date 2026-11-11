@@ -41,7 +41,7 @@ def grade(run):
 ```
 
 - The grader decides from the real result, never from what the Agent says it did (DSKL-042). What the Agent told the person is judged from its messages, by meaning, in English and Chinese; the `_report.py` helper of the worked examples does this for changed, saved and verified. The Evaluation paragraph of `CONTRIBUTING.md` lists everything `run` gives.
-- `{documents}` in `TURNS` and in scope targets stands for the documents folder, which the Agent reaches only through the tool.
+- `{documents}` in `TURNS` and in scope targets stands for the documents folder, which the Agent reaches only through the tool. `{workspace}` in scope targets stands for the Agent's workspace: grant it when the Agent writes a file it then looks at, such as a rendered picture. A target written from either stays inside the workspace root.
 - For `knowledge_lookup`, ask for a fact that only your entry gives, never common knowledge.
 - The runner writes the Agent's scope file from `COMMANDS` and `SCOPE`; never write a scope file yourself. `run.tool(...)` in a grader or hook runs under a scope of its own that grants every effect on the documents folder and the `SCOPE` targets, so a hook can open and close documents.
 - Add `right(agent, turn)`, which does what the scenario requires, and one or more `wrong_<name>(agent, turn)`, each making a mistake the grader must catch. Give `FAKE_HOST` the world they need on the fake host; when it opens files of several document kinds, give `kinds`, such as `{".prj": "project", ".pcb": "board"}`. Set `FAKE_HOST = None` for a question the fake host cannot answer, such as one that reads values from a real file.

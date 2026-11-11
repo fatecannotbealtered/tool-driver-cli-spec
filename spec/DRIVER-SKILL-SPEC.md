@@ -430,7 +430,7 @@ Each evaluation question MUST be one Python file named after the question's ID: 
 The evaluation runner `run_eval`, which comes with this specification, runs the questions with an Agent. For each question it MUST:
 
 - make a fresh workspace, the Agent's working folder, with the tool's Skills and the scope file;
-- keep the question's documents in a folder beside the workspace, so that the Agent reaches them only through the tool; `{documents}` in `TURNS` and in scope targets stands for that folder;
+- keep the question's documents in a folder beside the workspace, so that the Agent reaches them only through the tool; `{documents}` in `TURNS` and in scope targets stands for that folder, and `{workspace}` in scope targets for the Agent's workspace, such as for a file the Agent makes to look at. A scope target written from them MUST stay inside the workspace root;
 - write the scope file. By default it grants the documents folder, the effects of the commands in `COMMANDS`, and `dangerous` only when one of them needs it; `SCOPE` replaces any of these fields. A question whose commands only read gets no scope file;
 - put the tool on `PATH` behind a shim that records every run, hand the turns to the Agent one by one, call `before` before each turn and `grade` after the last, and always call `after`;
 - let the Agent run nothing but the tool in its shell, and use its file tools only inside the workspace.
