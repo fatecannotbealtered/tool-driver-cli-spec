@@ -313,10 +313,13 @@ class RunTest(unittest.TestCase):
         checker = check_project.Checker(self.facts)
         self.assertEqual(checker.validate(data, "eval-report.schema.json"), [])
         self.assertEqual((data["agent"], data["model"], data["simulated"]), ("Stub Agent 1.0", "stub-model", True))
-        fingerprint = check_project.question_fingerprint(self.facts, loaded.sha256, ["part get"])
+        guidance = data["questions"][0]["guidance"]
+        self.assertIn("skills/", guidance)  # every Skill counts, also one added later
+        fingerprint = check_project.question_fingerprint(self.facts, loaded.sha256, ["part get"], guidance)
         self.assertEqual(data["questions"], [{"scenario": "read_answer", "id": "read_r1", "passed": True,
                                               "notes": "Read the value of R1.", "sha256": loaded.sha256,
-                                              "commands": ["part get"], "ran": ["part get"], "fingerprint": fingerprint}])
+                                              "commands": ["part get"], "ran": ["part get"], "guidance": guidance,
+                                              "fingerprint": fingerprint}])
         self.assertEqual(loaded.sha256, check_project.digest(self.questions / "read_r1.py"))
 
     def test_a_question_whose_right_answer_fails_stops_the_run_before_the_agent(self):

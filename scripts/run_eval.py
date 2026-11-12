@@ -294,6 +294,7 @@ class Session:
         self.messages: list[str] = []
         self.denied: list[str] = []
         self.ran: list[str] = []
+        self.output = ""  # the tool's calls and what it printed during the question, kept when the session closes
         for folder in (self.workspace / ".claude" / "skills", self.workspace / ".agents" / "skills"):
             shutil.copytree(project / "skills", folder)
         self.host = self.client = None
@@ -704,7 +705,9 @@ def attempt(project: Path, facts: check_project.Facts, question: Question, agent
                 question.after(run)
             except Exception as exc:  # noqa: BLE001
                 error = error or f"after: {type(exc).__name__}: {exc}"
-        session.ran = sorted({c.command for c in session.calls() if c.command})
+        calls = session.calls()
+        session.ran = sorted({c.command for c in calls if c.command})
+        session.output = "\n".join(" ".join(c.args) + "\n" + c.stdout for c in calls)
         session.close()
     return run.problems, error, session
 
@@ -760,17 +763,19 @@ def evaluate(project: Path, facts: check_project.Facts, questions: list[Question
             "agent": agent.name, "model": "", "simulated": fake_host, "platform": PLATFORMS.get(sys.platform, "linux"),
             "targets": targets, "questions": results}
     base = file_key(root or Path(tempfile.gettempdir()).resolve()) + "/"
-    # What each result depends on, taken before the Agent runs (DSKL-043).
-    fingerprints = {q.id: check_project.question_fingerprint(facts, q.sha256, q.commands) for q in questions}
     for question in questions:
+        before = check_project.guidance_snapshot(facts)  # the guidance as the question finds it (DSKL-043)
         problems, error, session = attempt(project, facts, question, agent.fresh(), fake_host, root, keep)
         failures = problems + ([error] if error else [])
         if failures and session.denied:
             failures.append("refused: " + ", ".join(session.denied))
+        # What the result depends on: the Skills, and the knowledge its commands name or that
+        # showed in its calls and the tool's output (DSKL-043).
+        guidance = check_project.question_guidance(facts, question.commands, session.output)
         results.append({"scenario": question.scenario, "id": question.id, "passed": not failures,
                         "notes": "; ".join(failures)[:2000] if failures else question.title,
-                        "sha256": question.sha256, "commands": question.commands, "ran": session.ran,
-                        "fingerprint": fingerprints[question.id]})
+                        "sha256": question.sha256, "commands": question.commands, "ran": session.ran, "guidance": guidance,
+                        "fingerprint": check_project.question_fingerprint(facts, question.sha256, question.commands, guidance, before)})
         # Everything inside the workspace root, such as the documents and the workspace, is covered by it.
         for target in [base] + [t for t in session.targets() if not check_project.target_covered(t, base)]:
             if target not in targets:

@@ -10,6 +10,7 @@ import io
 import json
 import shlex
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -80,6 +81,42 @@ class Units(unittest.TestCase):
         for bad in ("60", "1m", "-1s", "s"):
             with self.assertRaises(DriverError):
                 duration_seconds(bad, "--wait", ["ms", "s", "min", "h"])
+
+
+class TraceOfAPackage(unittest.TestCase):
+    """What a live run used of its package, in the cases a function call alone does not show (DVER-043)."""
+
+    def test_code_before_the_runtime_source_read_as_text_and_a_started_script_count(self):
+        tmp = Path(tempfile.mkdtemp(prefix="trace-pkg-"))
+        try:
+            pkg = tmp / "pkg"
+            (pkg / "_driver").mkdir(parents=True)
+            shutil.copyfile(REPO / "sdk" / "python" / "_driver" / "trace.py", pkg / "_driver" / "trace.py")
+            (pkg / "_driver" / "__init__.py").write_text("from . import trace\ntrace.start()\n", encoding="utf-8")
+            (pkg / "early.py").write_text("def setup():\n    return 1\n", encoding="utf-8")
+            (pkg / "__init__.py").write_text("from . import early\nX = early.setup()\nfrom . import _driver\nfrom . import a, b, c\n",
+                                             encoding="utf-8")
+            (pkg / "a.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+            (pkg / "b.py").write_text("def unused():\n    return 2\n", encoding="utf-8")
+            (pkg / "c.py").write_text("def remote():\n    return 3\n", encoding="utf-8")
+            (pkg / "script.py").write_text("print('the application runs this')\n", encoding="utf-8")
+            traces = tmp / "traces"
+            traces.mkdir()
+            program = ("import inspect, subprocess, sys, pkg\n"
+                       "pkg.a.run()\n"
+                       "inspect.getsource(pkg.c.remote)\n"
+                       "subprocess.run([sys.executable, str(pkg.__path__[0]) + '/script.py'], capture_output=True)\n")
+            env = {**os.environ, "TOOL_DRIVER_TRACE_DIR": str(traces), "PYTHONPATH": str(tmp)}
+            subprocess.run([sys.executable, "-c", program], env=env, cwd=tmp, check=True, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            [trace] = [json.loads(p.read_text(encoding="utf-8")) for p in traces.glob("trace-*.json")]
+            self.assertTrue(trace["complete"])
+            for used in ("pkg/early.py", "pkg/a.py", "pkg/c.py", "pkg/script.py"):
+                self.assertIn(used, trace["ran"], used)  # ran before the runtime, called, read as text, started
+            self.assertIn("pkg/b.py", trace["imported"])
+            self.assertFalse([f for f in trace["ran"] + trace["imported"] if "_driver" in f])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class SaveReadBack(unittest.TestCase):

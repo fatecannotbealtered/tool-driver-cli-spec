@@ -128,7 +128,7 @@ def grade(run):
 | `verified` | 当前有效的真实软件记录，矩阵中适用的每一行都通过，标为 `unrunnable` 的行除外 |
 | `stable` | 另加当前有效的评测结果 |
 
-证据在它依赖的东西没变时一直算数，与版本号无关：真实运行在命令登记或适配层代码改动之前有效，评测结果在它的题目、它列出的命令或手写的 Skill 和知识改动之前有效。有了这样的改动，只重跑它涉及的矩阵和评测题：`python scripts/spec.py check` 会列出它们，`python scripts/spec.py eval --workspace-root <folder> --stale` 只跑需要重跑的题。证据引用的格式是 `live:docs/evidence/<file>.json#<row>` 或 `eval:docs/evidence/eval-<date>.json`。
+证据在它依赖的东西没变时一直算数，与版本号无关：真实运行在命令登记或这次运行用到的适配层代码改动之前有效，评测结果在它的题目、它列出的命令或它用到的 Skill 和知识改动之前有效。有了这样的改动，只重跑它涉及的矩阵和评测题：`python scripts/spec.py check` 会列出它们，`python scripts/spec.py eval --workspace-root <folder> --stale` 只跑需要重跑的题。证据引用的格式是 `live:docs/evidence/<file>.json#<row>` 或 `eval:docs/evidence/eval-<date>.json`。
 <!-- driver:spec-tests-and-evidence:end -->
 
 ## 新增或修改命令

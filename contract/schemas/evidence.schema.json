@@ -31,7 +31,8 @@
           "mode": {"description": "The mode the command ran in (DCLI-201).", "enum": ["file", "session", "device"]},
           "matrix_row": {"enum": ["normal", "empty", "invalid_input", "not_found", "ambiguous", "conflict", "no_scope", "busy", "dialog", "disconnect", "unsaved", "read_back_mismatch"]},
           "doc_kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-          "fingerprint": {"description": "The SHA-256 of what the run depends on: the command's registration, by the fields that change what it does, and the adapter's code. The run counts as evidence while it matches (DVER-043).", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "fingerprint": {"description": "The SHA-256 of what the run depends on: the command, by what changes what it does, and the adapter's code the run used. The run counts as evidence while it matches (DVER-043).", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "sources": {"description": "The tool's Python files whose code ran during the run, and the other modules of its package it imported, relative to the project; the fingerprint covers these instead of the whole package (DVER-043).", "type": "object", "required": ["ran", "imported"], "additionalProperties": false, "properties": {"ran": {"type": "array", "items": {"type": "string", "minLength": 1}}, "imported": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
           "tampered": {"const": true},
           "envelope": {
             "description": "The envelope the tool printed, kept as it was written. It is not checked against the current envelope schema, so a record stays valid as long as its runs count (DVER-043).",

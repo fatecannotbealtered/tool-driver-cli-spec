@@ -128,7 +128,7 @@ Optional `right(agent, turn)` and `wrong(agent, turn)` scripted agents use `agen
 | `verified` | A current live record in which every matrix row that applies passed, except rows marked `unrunnable` |
 | `stable` | Also current evaluation results |
 
-Evidence counts while what it depends on is unchanged, whatever the version number: a live run until the command's registration or the adapter's code changes, an evaluation result until its question, a command it lists, or the handwritten Skills and knowledge change. After such a change, run again only the matrices and questions it touches; `python scripts/spec.py check` names them, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs just the questions that need it. Evidence references have the form `live:docs/evidence/<file>.json#<row>` or `eval:docs/evidence/eval-<date>.json`.
+Evidence counts while what it depends on is unchanged, whatever the version number: a live run until the command's registration or the adapter code that run used changes, an evaluation result until its question, a command it lists, or the Skills and knowledge it used change. After such a change, run again only the matrices and questions it touches; `python scripts/spec.py check` names them, and `python scripts/spec.py eval --workspace-root <folder> --stale` runs just the questions that need it. Evidence references have the form `live:docs/evidence/<file>.json#<row>` or `eval:docs/evidence/eval-<date>.json`.
 <!-- driver:spec-tests-and-evidence:end -->
 
 ## Adding or Changing a Command

@@ -247,6 +247,24 @@ class JobOutputs(unittest.TestCase):
             self.assertEqual(again.code, "E_USAGE")  # a new file only
 
 
+class Trace(unittest.TestCase):
+    def test_a_traced_call_notes_the_code_of_the_tool_it_used(self):
+        with Case(subject()) as case:
+            folder = case.dir / "trace"
+            folder.mkdir()
+            # Without the fake host the sample's own adapter answers, so its code runs.
+            out = case.run("part", "get", "--doc", str(case.dir / "board.fake"), "--id", "R1",
+                           env={"TOOL_DRIVER_TRACE_DIR": str(folder), "SAMPLE_CLI_FAKE_HOST": ""})
+            self.assertEqual(out.code, "E_BACKEND_UNAVAILABLE", out.stdout[:400])
+            [trace] = [json.loads(p.read_text(encoding="utf-8")) for p in folder.glob("trace-*.json")]
+            self.assertTrue(trace["complete"])
+            self.assertIn("sample_cli/adapter.py", trace["ran"])
+            self.assertFalse([f for f in trace["ran"] + trace["imported"] if "_driver" in f])
+            plain = case.run("part", "get", "--session", "fake-1", "--doc", "doc-1", "--id", "R1")
+            self.assertTrue(plain.ok)
+            self.assertEqual(len(list(folder.glob("trace-*.json"))), 1)  # no trace without the folder
+
+
 class FlagHints(unittest.TestCase):
     def test_a_windows_path_that_lost_its_backslashes_says_so(self):
         with Case(subject()) as case:

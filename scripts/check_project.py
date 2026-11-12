@@ -21,11 +21,13 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import tokenize
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -112,7 +114,7 @@ class Facts:
     registration: dict[str, Any] | None = None
     reference: dict[str, Any] | None = None
     tool_error: str | None = None
-    digests: dict[str, str] = field(default_factory=dict, repr=False)  # computed once per gather
+    digests: dict[str, Any] = field(default_factory=dict, repr=False)  # computed once per gather
 
     @property
     def driver(self) -> dict[str, Any]:
@@ -581,49 +583,185 @@ def files_digest(root: Path, files: list[Path], text: Any = None) -> str:
     return total.hexdigest()
 
 
+def _adapter_files(facts: Facts) -> list[Path]:
+    """The adapter's files: the package without the pinned runtime and the command registrations,
+    and the host component source without its README."""
+    skip = (f"{facts.pkg}/_driver/", f"{facts.pkg}/commands/", "plugin/README.md")
+    return [p for p in project_files(facts.root, facts.pkg, "plugin") if not p.relative_to(facts.root).as_posix().startswith(skip)]
+
+
+def _manifest_methods(path: Path, text: str) -> str:
+    """plugin/manifest.json is generated, with the tool version: only the methods the author lists count."""
+    if path.name != "manifest.json" or path.parent.name != "plugin":
+        return text
+    try:
+        return json.dumps(json.loads(text).get("methods", []))
+    except (ValueError, AttributeError):
+        return text
+
+
+def _dependencies(facts: Facts) -> str:
+    try:
+        import tomllib
+        depends = tomllib.loads(read(facts.root / "pyproject.toml")).get("project", {}).get("dependencies", [])
+    except (OSError, ValueError, ImportError):
+        depends = []
+    return json.dumps(sorted(map(str, depends)))
+
+
 def adapter_digest(facts: Facts) -> str:
-    """The code the tool's commands run on the application: its package without the pinned
-    runtime and the command registrations, the host component source with the methods its
-    manifest lists, and the Python packages the tool depends on (DVER-043)."""
+    """The code the tool's commands run on the application, all of it: the adapter's files and the
+    Python packages the tool depends on. A run that noted the code it used counts only that
+    (``sources_digest``); this covers a run that did not (DVER-043)."""
     if "adapter" not in facts.digests:
-        skip = (f"{facts.pkg}/_driver/", f"{facts.pkg}/commands/", "plugin/README.md")
-        files = [p for p in project_files(facts.root, facts.pkg, "plugin")
-                 if not p.relative_to(facts.root).as_posix().startswith(skip)]
-
-        def code(path: Path, text: str) -> str:
-            if path.relative_to(facts.root).as_posix() != "plugin/manifest.json":
-                return text
-            try:  # generated, with the tool version: only the methods the author lists count
-                return json.dumps(json.loads(text).get("methods", []))
-            except (ValueError, AttributeError):
-                return text
-
-        try:
-            import tomllib
-            depends = tomllib.loads(read(facts.root / "pyproject.toml")).get("project", {}).get("dependencies", [])
-        except (OSError, ValueError, ImportError):
-            depends = []
-        facts.digests["adapter"] = files_digest(facts.root, files, code) + json.dumps(sorted(map(str, depends)))
+        facts.digests["adapter"] = files_digest(facts.root, _adapter_files(facts), _manifest_methods) + _dependencies(facts)
     return facts.digests["adapter"]
 
 
-def guidance_digest(facts: Facts) -> str:
-    """What the Agent reads about the tool besides its output: the Skills without the content
-    check_project generates and without the version every release writes into them (DSKL-030),
-    and the builtin knowledge (DSKL-043)."""
-    if "guidance" not in facts.digests:
-        def handwritten(path: Path, text: str) -> str:
-            text = re.sub(r"(<!-- driver:([a-z0-9-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
-            if text.startswith("---\n") and "\n---" in text[4:]:
-                head, rest = text[4:].split("\n---", 1)
-                text = "---\n" + re.sub(r"(?m)^\s*version:.*\n?", "", head) + "\n---" + rest
-            return text
+def _code(text: str, functions: bool) -> str:
+    """Python source as its tokens, without comments and layout, so the same code gives the same
+    text on every Python version. Without ``functions``, the body of every function and method is
+    left out and its name, parameters and decorators stay: a run that did not call it never used it."""
+    if not functions:
+        try:
+            tree: ast.AST | None = ast.parse(text)
+        except (SyntaxError, ValueError):
+            tree = None  # syntax this Python cannot read: the whole file counts
+        if tree is not None:
+            lines = text.splitlines(keepends=True)
+            bodies = sorted((n.body[0].lineno, n.end_lineno) for n in ast.walk(tree)
+                            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.body and n.body[0].lineno > n.lineno)
+            last = 0
+            for first, final in bodies:
+                if first > last and final is not None:  # an outer function's body holds the inner ones
+                    for number in range(first, final + 1):
+                        lines[number - 1] = "\n"
+                    indent = len(lines[first - 2]) - len(lines[first - 2].lstrip()) + 4 if first > 1 else 4
+                    lines[first - 1] = " " * indent + "...\n"
+                    last = final
+            text = "".join(lines)
+    try:
+        words = ["<indent>" if tok.type == tokenize.INDENT else tok.string for tok in tokenize.generate_tokens(io.StringIO(text).readline)
+                 if tok.type not in (tokenize.COMMENT, tokenize.NL, tokenize.ENCODING)]
+    except (tokenize.TokenError, SyntaxError, ValueError):
+        return text
+    return " ".join(words)
 
-        facts.digests["guidance"] = files_digest(facts.root, project_files(facts.root, "skills", "knowledge"), handwritten)
+
+def loose_files(facts: Facts) -> set[str]:
+    """The package's Python files that no module of the package imports by name: a script the
+    application runs, one started on its own, or one imported by a name built at run time. A trace
+    cannot tell whether a run used them, so they always count whole (DVER-043)."""
+    modules: dict[str, str] = {}
+    for path in project_files(facts.root, facts.pkg):
+        rel = path.relative_to(facts.root).as_posix()
+        if path.suffix == ".py" and not rel.startswith(f"{facts.pkg}/_driver/"):
+            parts = rel[:-3].split("/")
+            modules[".".join(parts[:-1] if parts[-1] == "__init__" else parts)] = rel
+    imported: set[str] = set()
+    for name, rel in modules.items():
+        try:
+            tree = ast.parse(read(facts.root / rel))
+        except (OSError, ValueError, SyntaxError):
+            continue
+        base = name if rel.endswith("/__init__.py") else name.rpartition(".")[0]
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                targets = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                prefix = ".".join(base.split(".")[: len(base.split(".")) - node.level + 1]) if node.level else ""
+                module = ".".join(p for p in (prefix, node.module or "") if p)
+                targets = [module] + [f"{module}.{a.name}" for a in node.names]
+            else:
+                continue
+            for target in targets:
+                parts = target.split(".")
+                imported.update(modules[m] for m in (".".join(parts[:i]) for i in range(1, len(parts) + 1)) if m in modules)
+    return {rel for rel in modules.values() if rel not in imported and not rel.startswith(f"{facts.pkg}/commands/")}
+
+
+def code_snapshot(facts: Facts) -> dict[str, Any]:
+    """The package's Python files as a run may use them, whole and without function bodies, and
+    the rest of the adapter, taken before the run so that a change during it cannot pass (DVER-043)."""
+    python: dict[str, list[str]] = {}
+    loose = loose_files(facts)
+    for path in _adapter_files(facts):
+        rel = path.relative_to(facts.root).as_posix()
+        if path.suffix == ".py" and not rel.startswith("plugin/") and rel not in loose:
+            try:
+                text = read(path)
+            except (OSError, ValueError):
+                text = "unreadable"
+            python[rel] = [hashlib.sha256(_code(text, functions).encode("utf-8")).hexdigest() for functions in (True, False)]
+    others = [p for p in _adapter_files(facts) if p.suffix != ".py" or p.relative_to(facts.root).parts[0] == "plugin"
+              or p.relative_to(facts.root).as_posix() in loose]
+    return {"python": python, "others": files_digest(facts.root, others, _manifest_methods) + _dependencies(facts)}
+
+
+def sources_digest(facts: Facts, sources: dict[str, Any], snapshot: dict[str, Any] | None = None) -> str:
+    """The code a run used (DVER-043): the package's Python files whose code ran, whole; the other
+    modules it imported, without the bodies of their functions; and, since their use is not noted,
+    the package's files that are not Python, the host component source and the Python packages the
+    tool depends on. ``snapshot`` is the code as it was when the run began; by default as it is now."""
+    if snapshot is None:
+        if "snapshot" not in facts.digests:
+            facts.digests["snapshot"] = code_snapshot(facts)
+        snapshot = facts.digests["snapshot"]
+    total = hashlib.sha256()
+    for kind, which in (("ran", 0), ("imported", 1)):
+        for rel in sorted(set(sources.get(kind) or [])):
+            hashes = snapshot["python"].get(rel)
+            total.update(f"{kind}:{rel}\0{hashes[which] if hashes else 'missing'}\n".encode("utf-8"))
+    return total.hexdigest() + snapshot["others"]
+
+
+def _handwritten(path: Path, text: str) -> str:
+    """Guidance as its author wrote it: without the content check_project generates or writes from
+    the release, and without the version every release writes into a Skill (DSKL-030)."""
+    text = re.sub(r"(<!-- driver:([a-z0-9-]+):start -->).*?(<!-- driver:\2:end -->)", r"\1\3", text, flags=re.S)
+    if text.startswith("---\n") and "\n---" in text[4:]:
+        head, rest = text[4:].split("\n---", 1)
+        text = "---\n" + re.sub(r"(?m)^\s*version:.*\n?", "", head) + "\n---" + rest
+    return text
+
+
+def guidance_digest(facts: Facts) -> str:
+    """All the guidance of the tool, its Skills and builtin knowledge, for a result that did not
+    note the guidance it depended on (DSKL-043)."""
+    if "guidance" not in facts.digests:
+        facts.digests["guidance"] = files_digest(facts.root, project_files(facts.root, "skills", "knowledge"), _handwritten)
     return facts.digests["guidance"]
 
 
-def command_digest(facts: Facts, command: str, described: bool = False) -> str:
+def guidance_snapshot(facts: Facts) -> dict[str, str]:
+    """Each file of the tool's Skills and builtin knowledge as its author wrote it, taken before a
+    question runs so that a change during it cannot pass (DSKL-043)."""
+    out = {}
+    for path in project_files(facts.root, "skills", "knowledge"):
+        try:
+            text = _handwritten(path, read(path).replace("\r\n", "\n"))
+        except (OSError, ValueError):
+            text = "unreadable"
+        out[path.relative_to(facts.root).as_posix()] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return out
+
+
+def question_guidance(facts: Facts, commands: list[str], seen: str) -> list[str]:
+    """The guidance an evaluation result depends on (DSKL-043), a folder written with a final `/`:
+    all of skills/, since the Agent may load any Skill, even one added later; all of knowledge/
+    when the run listed or searched it, since the answer depends on every entry; else the
+    knowledge entries the question's commands name or whose ID showed in the run's calls or the
+    tool's output, ``seen``."""
+    if re.search(r"\bknowledge (list|search)\b", seen):
+        return ["knowledge/", "skills/"]
+    named = {k for c in facts.commands if c["path"] in commands for k in c.get("related_knowledge") or []}
+    entries = [path.relative_to(facts.root).as_posix() for path, front, _ in knowledge_entries(facts)
+               if str(front.get("id") or "") and (str(front["id"]) in named or str(front["id"]) in seen)]
+    return sorted(entries) + ["skills/"]
+
+
+def command_digest(facts: Facts, command: str, described: bool = False, sources: dict[str, Any] | None = None,
+                   snapshot: dict[str, Any] | None = None) -> str:
     """A command as the tool registers and reports it. ``described``: as an Agent reads it, with
     its summary and examples, and without the adapter's code, which an evaluation does not
     measure (DSKL-043); else only what changes what the command does, with the adapter's code
@@ -638,22 +776,41 @@ def command_digest(facts: Facts, command: str, described: bool = False) -> str:
         for name, key in (("flags", "summary"), ("tier_when", "description")):
             if isinstance(kept.get(name), list):
                 kept[name] = [{k: v for k, v in i.items() if k != key} if isinstance(i, dict) else i for i in kept[name]]
-    text = json.dumps(kept, sort_keys=True, ensure_ascii=False) + ("" if described else adapter_digest(facts))
+    code = "" if described else sources_digest(facts, sources, snapshot) if sources is not None else adapter_digest(facts)
+    text = json.dumps(kept, sort_keys=True, ensure_ascii=False) + code
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def fingerprint(facts: Facts, command: str) -> str:
+def fingerprint(facts: Facts, command: str, sources: dict[str, Any] | None = None,
+                snapshot: dict[str, Any] | None = None) -> str:
     """What a live run of the command depends on: the command, by what changes what it does, and
-    the adapter's code. The runtime is the same for every tool, and the conformance suites check
-    it at each sync, so it is not part of it (DVER-043)."""
-    return command_digest(facts, command)
+    the adapter's code the run used, or all of it when the run noted none; ``snapshot``, the code as
+    it was when the run began. The runtime is the same for every tool, and the conformance suites
+    check it at each sync, so it is not part of it (DVER-043)."""
+    return command_digest(facts, command, sources=sources, snapshot=snapshot)
 
 
-def question_fingerprint(facts: Facts, sha256: str, commands: list[str]) -> str:
+def question_fingerprint(facts: Facts, sha256: str, commands: list[str], guidance: list[str] | None = None,
+                         snapshot: dict[str, str] | None = None) -> str:
     """What an evaluation result depends on: the question file, the commands it lists as an
-    Agent reads them, and the tool's handwritten guidance. A fix in the adapter's code leaves it
-    standing; the behavior matrices check the adapter (DSKL-043)."""
-    text = json.dumps([sha256, sorted(command_digest(facts, c, described=True) for c in commands), guidance_digest(facts)])
+    Agent reads them, and the handwritten guidance it depended on, ``guidance``, or all of it for
+    a result that noted none; ``snapshot``, the guidance as it was when the question began. A fix in
+    the adapter's code leaves it standing; the behavior matrices check the adapter (DSKL-043)."""
+    if guidance is None:
+        read = guidance_digest(facts)
+    else:
+        if snapshot is None:
+            if "guidance_snapshot" not in facts.digests:
+                facts.digests["guidance_snapshot"] = guidance_snapshot(facts)
+            snapshot = facts.digests["guidance_snapshot"]
+        lines = []
+        for g in sorted(set(guidance)):
+            if g.endswith("/"):  # a whole folder: every file in it, also one added later
+                lines += [f"{rel}\0{digest}\n" for rel, digest in sorted(snapshot.items()) if rel.startswith(g)]
+            else:
+                lines.append(f"{g}\0{snapshot.get(g, 'missing')}\n")
+        read = hashlib.sha256("".join(lines).encode("utf-8")).hexdigest()
+    text = json.dumps([sha256, sorted(command_digest(facts, c, described=True) for c in commands), read])
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -667,7 +824,7 @@ def report_order(path: Path, data: dict[str, Any]) -> tuple[str, int, str]:
 def run_counts(facts: Facts, record: dict[str, Any], run: dict[str, Any]) -> bool:
     """A run of a live record is evidence while nothing it depends on changed (DVER-043)."""
     if "fingerprint" in run:
-        return run["fingerprint"] == fingerprint(facts, run.get("command", ""))
+        return run["fingerprint"] == fingerprint(facts, run.get("command", ""), run.get("sources"))
     return current(record.get("tool_version"), facts.version)
 
 
@@ -677,7 +834,7 @@ def result_counts(facts: Facts, report: dict[str, Any], result: dict[str, Any], 
     if digest_now is None or result.get("sha256") != digest_now:
         return False
     if "fingerprint" in result:
-        return result["fingerprint"] == question_fingerprint(facts, digest_now, result.get("commands", []))
+        return result["fingerprint"] == question_fingerprint(facts, digest_now, result.get("commands", []), result.get("guidance"))
     return current(report.get("tool_version"), facts.version)
 
 

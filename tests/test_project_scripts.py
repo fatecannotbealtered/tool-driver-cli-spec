@@ -666,6 +666,42 @@ class ProjectTest(unittest.TestCase):
         messages = [p.message for p in self.problems() if p.clause == "DVER-040"]
         self.assertTrue(any("before a change to its registration or to the adapter" in m for m in messages), messages)
 
+    def test_a_live_run_counts_until_the_code_it_used_changes(self):
+        self.authorize("file:///D:/e2e/demo/")
+        package = self.project / "demo_cli"
+        helper = "from . import other\n\nLIMIT = {limit}\n\n\n{decorator}def unused({params}):\n    return {value}\n"
+        (package / "helpers.py").write_text(helper.format(limit=5, decorator="", params="", value=1), encoding="utf-8")
+        (package / "other.py").write_text("def elsewhere():\n    return 2\n", encoding="utf-8")
+        (package / "app_script.py").write_text("print('run by the application')\n", encoding="utf-8")  # imported by nothing
+        (package / "table.json").write_text("{}", encoding="utf-8")
+        adapter = package / "adapter" / "__init__.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "\nfrom .. import helpers  # noqa: E402,F401\n", encoding="utf-8")
+        sources = {"ran": ["demo_cli/adapter/__init__.py"], "imported": ["demo_cli/helpers.py"]}
+        facts = check_project.gather(self.project)
+        run = {"command": "part move", "arguments": ["--session", "s1"], "exit": 0, "result": "pass", "mode": "session",
+               "matrix_row": "normal", "sources": sources, "fingerprint": check_project.fingerprint(facts, "part move", sources)}
+        ref = self.record("2026-11-01-move.json", runs=[run])
+        self.mature("verified", [f"live:{ref}"], f"live:{ref}#normal")
+        self.assertEqual([p.text() for p in self.problems()], [])
+
+        def stale_after(path: Path, text: str) -> bool:
+            before = path.read_text(encoding="utf-8")
+            path.write_text(text, encoding="utf-8")
+            stale = "DVER-040" in self.clauses()
+            path.write_text(before, encoding="utf-8")
+            return stale
+
+        helpers = package / "helpers.py"
+        self.assertFalse(stale_after(package / "other.py", "def elsewhere():\n    return 3\n"))  # imported, never used here
+        self.assertFalse(stale_after(helpers, helper.format(limit=5, decorator="", params="", value=2)))  # a body not called
+        self.assertFalse(stale_after(adapter, adapter.read_text(encoding="utf-8") + "\n# a comment\n"))  # no code changed
+        self.assertTrue(stale_after(helpers, helper.format(limit=6, decorator="", params="", value=1)))  # a value it imported
+        self.assertTrue(stale_after(helpers, helper.format(limit=5, decorator="", params="limit=2", value=1)))  # a signature
+        self.assertTrue(stale_after(helpers, helper.format(limit=5, decorator="@staticmethod\n", params="", value=1)))  # a decorator
+        self.assertTrue(stale_after(adapter, adapter.read_text(encoding="utf-8") + "\nX = 1\n"))  # code that ran
+        self.assertTrue(stale_after(package / "table.json", '{"a": 1}'))  # a file whose use is not noted
+        self.assertTrue(stale_after(package / "app_script.py", "print('changed')\n"))  # a script the application may run
+
     def test_an_evaluation_result_counts_until_what_it_depends_on_changes(self):
         self.authorize("file:///D:/e2e/demo/")
         ref = self.record("2026-11-01-move.json")
@@ -694,6 +730,19 @@ class ProjectTest(unittest.TestCase):
         self.assertTrue(any("no current result" in m and "spec.py eval --stale" in m for m in messages), messages)
         skill.write_text(text, encoding="utf-8")
         self.assertNotIn("DSKL-043", self.clauses())
+        self.assertEqual(check_project.question_guidance(facts, ["part move"], "no entry named"), ["skills/"])
+        self.assertEqual(check_project.question_guidance(facts, ["part move"], "demo-cli knowledge search --query x"),
+                         ["knowledge/", "skills/"])  # a search depends on every entry
+        entry = next(p for p in (self.project / "knowledge").glob("*.md"))
+        named = check_project.question_guidance(facts, ["part move"], f"... {entry.stem} ...")
+        self.assertIn(entry.relative_to(self.project).as_posix(), named)  # an entry whose ID showed in the output
+        result = dict(fingerprinted(data)[0], guidance=[g for g in named if not g.startswith("knowledge/")])
+        result["fingerprint"] = check_project.question_fingerprint(facts, result["sha256"], result["commands"], result["guidance"])
+        self.assertTrue(check_project.result_counts(facts, data, result, result["sha256"]))
+        original = entry.read_text(encoding="utf-8")
+        entry.write_text(original + "\nAnother point.\n", encoding="utf-8")
+        self.assertTrue(check_project.result_counts(check_project.gather(self.project), data, result, result["sha256"]))  # not used
+        entry.write_text(original, encoding="utf-8")
         skill.write_text(re.sub(r"(?m)^(\s*version:).*$", r"\1 9.9.9", text, count=1), encoding="utf-8")
         adapter = self.project / "demo_cli" / "adapter" / "__init__.py"
         adapter.write_text(adapter.read_text(encoding="utf-8") + "# a fix\n", encoding="utf-8")
@@ -930,7 +979,8 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         record = json.loads(records[0].read_text(encoding="utf-8"))
         self.assertEqual((record["targets"], record["runs"][0]["mode"]), ([url], "session"))
-        self.assertEqual(record["runs"][0]["fingerprint"], check_project.fingerprint(check_project.gather(self.project), "part get"))
+        run = record["runs"][0]
+        self.assertEqual(run["fingerprint"], check_project.fingerprint(check_project.gather(self.project), "part get", run.get("sources")))
         row = json.loads((self.project / "tests" / "matrix" / "part-get.json").read_text(encoding="utf-8"))["rows"][0]
         self.assertTrue(row["evidence"].startswith("live:docs/evidence/"))
         for written in (records[0], self.project / "tests" / "matrix" / "part-get.json"):
@@ -1067,6 +1117,41 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual(watch(2, 30), ["--tamper exited 0"])
         notes = watch(30, 1)
         self.assertTrue(any("was still running 1 s after the row ended" in n for n in notes), notes)
+
+    def test_run_matrix_notes_the_code_each_run_used(self):
+        target = self.work / "authorized"
+        target.mkdir(exist_ok=True)
+        (target / "board.fake").write_text("x", encoding="utf-8")
+        self.git()
+        self.authorize(target.resolve().as_uri() + "/")
+        argv = [str(self.project), "--command", "part get", "--row", "normal", "--set", f"doc={target / 'board.fake'}",
+                "--set", "session=s1", "--application-version", "1.5.0"]
+        with mock.patch.dict(os.environ, {"DEMO_CLI_FAKE_HOST": "nowhere"}):
+            run_matrix.main(argv)
+        record = json.loads(next((self.project / "docs" / "evidence").glob("*-part-get.json")).read_text(encoding="utf-8"))
+        run = record["runs"][0]
+        self.assertIn("demo_cli/adapter/__init__.py", run["sources"]["ran"] + run["sources"]["imported"])
+        self.assertFalse([s for s in run["sources"]["ran"] + run["sources"]["imported"] if "/_driver/" in s or "/commands/" in s])
+        facts = check_project.gather(self.project)
+        self.assertEqual(run["fingerprint"], check_project.fingerprint(facts, "part get", run["sources"]))
+
+    def test_a_trace_a_process_did_not_finish_leaves_the_whole_adapter(self):
+        folder = self.work / "traces"
+        folder.mkdir()
+        snapshot = {"python": {"demo_cli/adapter/__init__.py": ["a", "b"]}, "others": ""}
+        (folder / "trace-1.json").write_text(json.dumps({"complete": True, "ran": ["demo_cli/adapter/__init__.py"], "imported": []}),
+                                             encoding="utf-8")
+        self.assertEqual(run_matrix._sources(folder, snapshot, 0), {"ran": ["demo_cli/adapter/__init__.py"], "imported": []})
+        (folder / "trace-2.json").write_text(json.dumps({"complete": False}), encoding="utf-8")  # a worker still ending
+        self.assertIsNone(run_matrix._sources(folder, snapshot, 0))
+        (folder / "trace-2.json").write_text(json.dumps({"complete": True, "ran": ["DEMO_CLI/Adapter/__init__.py", "x.py"],
+                                                         "imported": []}), encoding="utf-8")
+        found = run_matrix._sources(folder, snapshot, 0)
+        self.assertEqual(found["ran"], ["demo_cli/adapter/__init__.py"] if os.name == "nt" else found["ran"])
+        self.assertNotIn("x.py", found["ran"])  # a file git does not list is left out
+        empty = self.work / "empty"
+        empty.mkdir()
+        self.assertIsNone(run_matrix._sources(empty, snapshot, 0))
 
     def test_covered(self):
         base = self.work / "e2e"

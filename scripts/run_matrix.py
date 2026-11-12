@@ -234,7 +234,10 @@ def main(argv: list[str] | None = None) -> int:
     no_scope = str(Path(scratch.name) / "none.json")  # never written: the no_scope row runs with no scope file
     known_codes = {e["code"] for e in facts.contract["error_codes"]}
     # What the runs depend on, taken before they start: the evidence counts until it changes (DVER-043).
+    # A runtime that notes the code each run used narrows it to that code, from a snapshot taken
+    # before the row.
     fingerprint = check_project.fingerprint(facts, args.command)
+    trace_env = facts.contract["matrix"]["trace_env"]
     tool = [sys.executable, "-m", facts.pkg]
     app_version = args.application_version or _context_version(tool, root, env)
     job_note = None
@@ -248,6 +251,11 @@ def main(argv: list[str] | None = None) -> int:
         tampered = row["row"] == "read_back_mismatch"
         row_env = {**env, scope_env: no_scope} if row["row"] == "no_scope" else env
         watcher = None
+        traces = Path(scratch.name) / f"trace-{row['row']}"
+        traces.mkdir()
+        snapshot = check_project.code_snapshot(facts)
+        row_env = {**row_env, trace_env: str(traces)}
+        follow_env = {**env, trace_env: str(traces)}  # the calls that follow the row's work, without its pause
         if tampered:
             row_env = {**row_env, pause_env: str(min(args.pause, int(facts.contract["matrix"]["max_pause_seconds"])))}
             watcher = _Watcher(state_dir / facts.contract["matrix"]["pause_file"], root, env, args, notes)
@@ -258,14 +266,14 @@ def main(argv: list[str] | None = None) -> int:
         exit_code, stdout = _confirmed(tool + args.command.split(" ") + arguments, root, row_env, expected_code, notes, wait)
         envelope = _envelope(stdout)
         if command.get("long") and envelope.get("ok") is True:
-            exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)
+            exit_code, envelope = _job_end(tool, root, follow_env, envelope, facts.contract, notes)
         if tampered and command.get("verify_after_save") and mode == "session" and envelope.get("ok") is True:
             # The change is verified at the save, so the mismatch is caused there (DVER-030).
             exit_code, stdout = _confirmed(tool + ["doc", "save", "--session", values.get("session", ""), "--doc", values.get("doc", "")],
                                            root, row_env, expected_code, notes)
             envelope = _envelope(stdout)
             if envelope.get("ok") is True and ((envelope.get("data") or {}).get("result") or {}).get("job"):
-                exit_code, envelope = _job_end(tool, root, env, envelope, facts.contract, notes)  # a long doc save
+                exit_code, envelope = _job_end(tool, root, follow_env, envelope, facts.contract, notes)  # a long doc save
         if watcher is not None:
             watcher.finish(TIMEOUT_S)
         error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
@@ -279,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
             actual = None
         passed = actual is not None and exit_code >= 0 and check_project.same_result(actual, row["expected"])
         if passed and row["row"] == "normal" and command.get("verify_after_save") and mode == "session":
-            passed = _save_verifies(tool, root, env, values, notes, facts.contract)
+            passed = _save_verifies(tool, root, follow_env, values, notes, facts.contract)
         if simulated(envelope):
             passed = False
             notes.append("the result is simulated, so it is not evidence (DVER-021)")
@@ -292,8 +300,12 @@ def main(argv: list[str] | None = None) -> int:
                 shown.append("***")
             else:
                 shown.append(argument)
+        sources = _sources(traces, snapshot)
         entry = {"command": args.command, "arguments": shown, "exit": exit_code, "result": "pass" if passed else "fail",
-                 "matrix_row": row["row"], "mode": mode, "fingerprint": fingerprint}
+                 "matrix_row": row["row"], "mode": mode,
+                 "fingerprint": check_project.fingerprint(facts, args.command, sources, snapshot) if sources else fingerprint}
+        if sources:
+            entry["sources"] = sources
         if args.kind:
             entry["doc_kind"] = args.kind
         if tampered:
@@ -328,6 +340,32 @@ def live_scope(folder: Path, authorized: list[str], session: str | None, contrac
     path = folder / "scope.json"
     path.write_text(json.dumps(scope, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def _sources(folder: Path, snapshot: dict[str, Any], wait_s: float = 15) -> dict[str, list[str]] | None:
+    """The package's Python files the row's processes used, from the traces they wrote (DVER-043).
+    None, so that the whole adapter counts, when a process has not finished its trace within
+    ``wait_s``, such as a worker still ending or one that was stopped, or when none was written."""
+    end = time.monotonic() + wait_s
+    while True:
+        traces = []
+        for path in sorted(folder.glob("trace-*.json")):
+            try:
+                traces.append(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                traces.append({})
+        if traces and all(t.get("complete") for t in traces):
+            break
+        if not traces or time.monotonic() > end:
+            return None
+        time.sleep(0.2)
+    # The paths as git lists them; a file it does not list, such as a generated one, is left out.
+    known = {os.path.normcase(rel): rel for rel in snapshot["python"]}
+    ran = {known[os.path.normcase(r)] for t in traces for r in t.get("ran") or [] if os.path.normcase(r) in known}
+    imported = {known[os.path.normcase(r)] for t in traces for r in t.get("imported") or [] if os.path.normcase(r) in known}
+    if not ran and not imported:
+        return None  # nothing of the package was seen: the trace did not work
+    return {"ran": sorted(ran), "imported": sorted(imported - ran)}
 
 
 def _write_back(path: Path, rows: list[dict[str, Any]], name: str, kind: str | None = None) -> None:

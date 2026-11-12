@@ -62,6 +62,11 @@ class Tool:
         if not modes or any(m not in modes_known for m in modes):
             raise RegistrationError(f"modes must be among {modes_known}")
         self.adapter_class = adapter
+        top = sys.modules.get(adapter.__module__.split(".")[0])
+        if top is not None and getattr(top, "__file__", None):
+            from . import trace
+
+            trace.locate(self.root, Path(top.__file__).parent)  # where a live run's trace looks (DVER-043)
         self.application = application
         self.versions = versions
         self.modes = list(modes)
