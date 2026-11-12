@@ -222,7 +222,39 @@ class BatchResults(unittest.TestCase):
             self.assertEqual(last.data["result"], {"note": "x" * 400})
 
 
+class JobOutputs(unittest.TestCase):
+    """A long command's job stays reachable, and its whole result can go to a file (DCLI-007, DCLI-008)."""
+
+    def test_fields_keep_the_job_handle(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND", "--fields", "routed")
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertIn("id", out.data["result"]["job"])
+            self.assertIn("receipt", out.data)
+
+    def test_job_get_output_writes_the_whole_job(self):
+        with Case(subject()) as case:
+            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND")
+            job = out.data["result"]["job"]["id"]
+            path = case.dir / "job.json"
+            got = case.run("job", "get", "--job", job, "--wait", "60s", "--output", str(path))
+            self.assertTrue(got.ok, got.stdout[:400])
+            self.assertEqual(got.data["output"], str(path))
+            self.assertNotIn("result", got.data)
+            written = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual((written["id"], written["state"]), (job, got.data["state"]))
+            self.assertIn("result", written)
+            again = case.run("job", "get", "--job", job, "--output", str(path))
+            self.assertEqual(again.code, "E_USAGE")  # a new file only
+
+
 class FlagHints(unittest.TestCase):
+    def test_a_windows_path_that_lost_its_backslashes_says_so(self):
+        with Case(subject()) as case:
+            out = case.run("part", "get", "--doc", "D:projectsboard.fake", "--id", "R1")
+            self.assertEqual(out.code, "E_NOT_FOUND", out.stdout[:400])
+            self.assertIn("forward slashes", out.details["next_action"])
+
     def test_a_mode_flag_the_command_does_not_take_names_its_modes(self):
         with Case(subject()) as case:
             out = case.run("part", "update", "--session", "fake-1", "--doc", "board.fake", "--id", "R1")

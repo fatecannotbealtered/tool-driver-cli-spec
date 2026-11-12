@@ -6,10 +6,14 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ### Added
 
+- `job get --output <path>` writes a job, its result included, to a new file, so a result longer than one response is no longer lost (DCLI-008, DCLI-220).
 - `{workspace}` in a question's scope targets stands for the Agent's workspace, for a file the Agent makes and then looks at, such as a rendered picture (DSKL-044).
 
 ### Fixed
 
+- `--fields` on a long command's call left out the job handle, so the job could not be followed. `--fields` on a write now selects fields of its `result` and always keeps `job` (DCLI-007).
+- `reference` could not list a tool with many commands within 8000 characters. When the summaries do not fit, the index lists the paths alone and `summaries` says how to get one command's description (DCLI-031).
+- A document path whose backslashes a POSIX shell removed, such as `D:projectsboard.pcb`, gave only "no document". The error now says so and asks for forward slashes (DCLI-011).
 - A scope target written from `{documents}`, such as `{documents}../work`, passed `run_eval` but stayed literal in the report, so `check_project` refused the report (DVER-050); and `run_eval` did not check where such a target led. Targets written from `{documents}` or `{workspace}` are now resolved, must stay inside the workspace root, and the report lists only the targets outside it beside the root.
 - The report checks of the worked examples missed "the part and the drawing are both saved", `都存了盘` and other ways of saying it, and took "Nothing was saved" for saved.
 

@@ -508,6 +508,21 @@ class InProcess(unittest.TestCase):
         for example in env["data"]["examples"]:
             self.assertEqual(self.run_tool(*shlex.split(example)[1:])[0], 0, example)  # a file-mode tool runs its own examples
 
+    def test_a_long_index_lists_the_paths_alone(self):
+        nouns = [f"thing{n:02d}" for n in range(60)]
+        regs = [registration(path=f"{noun} move", modes=["file"], summary="Move one thing to a new place, keeping its links and its labels.")
+                for noun in nouns]
+        self.tool = Tool(root=SAMPLE, adapter=SampleAdapter, commands=regs, application="Files", versions="any",
+                         modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        out = io.StringIO()
+        self.assertEqual(self.tool.run(["reference"], env=self.env, stdout=out), 0)
+        text = out.getvalue().strip()
+        data = json.loads(text)["data"]
+        self.assertLessEqual(len(text), CONTRACT["envelope"]["limits"]["reference_index_chars"])
+        self.assertIn("reference --command", data["summaries"])
+        self.assertEqual({tuple(i) for i in data["index"]}, {("path",)})
+        self.assertIn({"path": "thing59 move"}, data["index"])
+
     def test_adapter_errors_keep_the_native_message_untrusted(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "missing", "--value", "x")
         self.assertEqual((code, env["error"]["code"]), (3, "E_NOT_FOUND"))
@@ -714,7 +729,7 @@ class RenamedFilesAndLongResults(unittest.TestCase):
         job = too_long_hint("demo", tool.commands["job get"], {"id": "7", "operation_id": "op_1", "state": "completed"})
         self.assertNotIn("--limit", job)
         self.assertIn("--fields", job)
-        self.assertIn("demo operation get --id op_1 --output", job)
+        self.assertIn("the full result in a file with --output", job)  # job get --output writes the whole job
         listing = too_long_hint("demo", tool.commands["job list"], {"items": []})
         self.assertEqual(listing, "Ask for fewer fields with --fields or a smaller page with --limit.")
         record = too_long_hint("demo", tool.commands["operation get"], {"operation_id": "op_1"})

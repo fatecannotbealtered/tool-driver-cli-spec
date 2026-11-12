@@ -125,6 +125,7 @@
         "code": {"description": "The error code the receipt derives when ok is false.", "$ref": "error.schema.json#/properties/code"},
         "action": {"$ref": "error.schema.json#/$defs/details/properties/action"},
         "knowledge": {"description": "A blocked job: the knowledge entries about the dialog that holds it (DSKL-124).", "$ref": "error.schema.json#/$defs/details/properties/knowledge"},
+        "output": {"description": "The new file job get --output wrote the whole job to, its result included; the response then leaves the result out (DCLI-008).", "type": "string", "minLength": 1},
         "poll_after_ms": {"type": "integer", "minimum": 0},
         "message": {"description": "When ok is false: the message of the error the call would have returned (DCLI-220).", "type": "string", "minLength": 1},
         "details": {"description": "When ok is false: the details of the error the call would have returned, such as conflict, native_message, knowledge and next_action, without a receipt; a command to run again in them is the job's own first call (DCLI-220).", "$ref": "error.schema.json#/$defs/details"}

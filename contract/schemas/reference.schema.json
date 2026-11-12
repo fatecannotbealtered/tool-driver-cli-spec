@@ -19,15 +19,19 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["path", "summary"],
+            "required": ["path"],
             "additionalProperties": false,
             "properties": {
               "path": {"$ref": "#/$defs/command/properties/path"},
               "summary": {"type": "string"}
             }
           }
-        }
-      }
+        },
+        "summaries": {"description": "Present when the summaries were left out to keep the index within its limit: how to get one command's description (DCLI-031).", "type": "string", "minLength": 1}
+      },
+      "if": {"not": {"required": ["summaries"]}},
+      "then": {"properties": {"index": {"items": {"required": ["summary"]}}}},
+      "else": {"properties": {"index": {"items": {"not": {"required": ["summary"]}}}}}
     },
     {
       "description": "The file written by reference --all --output <path>.",

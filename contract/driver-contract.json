@@ -518,7 +518,7 @@
       "effect": "observe",
       "modes": ["file", "session", "device"],
       "tier": "none",
-      "flags": ["--wait"]
+      "flags": ["--wait", "--output"]
     },
     {
       "path": "job cancel",

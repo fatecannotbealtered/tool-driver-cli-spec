@@ -321,6 +321,14 @@ def _fields(result: Result, call: Call) -> Result:
     data = result.data
     if isinstance(data.get("items"), list):
         data = {**data, "items": [{k: v for k, v in i.items() if k in wanted} if isinstance(i, dict) else i for i in data["items"]]}
+    elif call.fields is not None and "receipt" in data and isinstance(data.get("result"), dict):
+        # A write: the fields are those of its result, and its operation and receipt stay.
+        data = {**data, "result": _kept(data["result"], wanted)}
     elif call.fields is not None:
-        data = {k: v for k, v in data.items() if k in wanted}
+        data = _kept(data, wanted)
     return Result(data, result.untrusted, result.offset, result.raw)
+
+
+def _kept(data: dict[str, Any], wanted: Any) -> dict[str, Any]:
+    """The named fields, and always a long job's handle: without it the work cannot be followed (DCLI-065)."""
+    return {k: v for k, v in data.items() if k in wanted or k == "job"}
