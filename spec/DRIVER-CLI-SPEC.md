@@ -162,7 +162,7 @@ Check: 🤖 General conformance test R04 checks the list keys; the "empty" row o
 
 ### DCLI-007 Default fields
 
-Each list command MUST declare its default fields in its registration (DCLI-029), chosen for the questions Agents most often ask about that object. `--fields a,b` MUST return only the named fields; on a write it names fields of the `result`, and it MUST NOT leave out a long job's `job` handle (DCLI-065). `--fields all` MUST return every field.
+Each list command MUST declare its default fields in its registration (DCLI-029), chosen for the questions Agents most often ask about that object. `--fields a,b` MUST return only the named fields, but MUST NOT leave out the `job` handle of a read that runs as a long job (DCLI-065). `--fields all` MUST return every field.
 
 Why: Short default answers save the Agent's context; `--fields` fetches more only when needed.
 Check: 👀 Review of the default fields in `reference`.

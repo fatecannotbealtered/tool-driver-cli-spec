@@ -227,10 +227,9 @@ class JobOutputs(unittest.TestCase):
 
     def test_fields_keep_the_job_handle(self):
         with Case(subject()) as case:
-            out = case.run("route", "run", "--session", "fake-1", "--doc", "doc-1", "--net", "GND", "--fields", "routed")
+            out = case.run("design", "check", "--session", "fake-1", "--doc", "doc-1", "--fields", "violations")
             self.assertTrue(out.ok, out.stdout[:400])
-            self.assertIn("id", out.data["result"]["job"])
-            self.assertIn("receipt", out.data)
+            self.assertIn("id", out.data["job"])  # the read runs as a long job: its handle stays
 
     def test_job_get_output_writes_the_whole_job(self):
         with Case(subject()) as case:

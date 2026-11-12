@@ -321,9 +321,6 @@ def _fields(result: Result, call: Call) -> Result:
     data = result.data
     if isinstance(data.get("items"), list):
         data = {**data, "items": [{k: v for k, v in i.items() if k in wanted} if isinstance(i, dict) else i for i in data["items"]]}
-    elif call.fields is not None and "receipt" in data and isinstance(data.get("result"), dict):
-        # A write: the fields are those of its result, and its operation and receipt stay.
-        data = {**data, "result": _kept(data["result"], wanted)}
     elif call.fields is not None:
         data = _kept(data, wanted)
     return Result(data, result.untrusted, result.offset, result.raw)
