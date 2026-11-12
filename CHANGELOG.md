@@ -4,6 +4,10 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-12
+
+Evidence follows the code and guidance it used, and fixes from the Xpedition and Creo tools on 1.2.0. After syncing, run the matrices once more: the new runs note the code they used, so a later fix in one adapter module sends only the commands that used it to run again. Run the evaluation questions once more with `--stale` too: the new results note the knowledge they read. Records and results from before keep counting as they did.
+
 ### Changed
 
 - Evidence goes stale only when the code or guidance it used changes. From the moment the runtime is imported, a live run notes the Python files of the tool's package it used (a function started, imported before the runtime, opened other than by an import, or named on a command line or copied) and the modules it imported, and `run_matrix` keeps them in the run's `sources`; the run's fingerprint covers those files, the imported ones without their function bodies, and still all of the package's non-Python files, its Python files no module imports, the host component and the dependencies, whose use cannot be noted (DVER-043). A run whose processes did not all finish their notes counts the whole package. An evaluation result keeps in `guidance` all of `skills/`, and the knowledge entries its commands name or whose ID showed in its calls or output, or all of `knowledge/` when it listed or searched it, and its fingerprint covers only those (DSKL-043). Both fingerprints come from the files as they were when the run or question began. So a fix in one adapter module or one knowledge entry no longer sends every command and every question to run again. Runs and results recorded before keep counting the whole adapter and all the guidance.
