@@ -114,8 +114,9 @@
     },
     "bare_numbers": {"const": "rejected"},
     "sample_placeholders": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^\\{[a-z_]+\\}$"}},
-    "matrix": {"type": "object", "required": ["pause_env", "pause_file", "max_pause_seconds"], "additionalProperties": false,
-      "properties": {"pause_env": {"type": "string"}, "pause_file": {"type": "string"}, "max_pause_seconds": {"type": "integer", "minimum": 1}}},
+    "matrix": {"type": "object", "required": ["pause_env", "pause_file", "max_pause_seconds", "trace_env"], "additionalProperties": false,
+      "properties": {"pause_env": {"type": "string"}, "pause_file": {"type": "string"}, "max_pause_seconds": {"type": "integer", "minimum": 1},
+                     "trace_env": {"type": "string", "description": "Names the folder where the tool notes the code a live run used (DVER-043)."}}},
     "registration_fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z_]+$"}},
     "registration_optional_fields": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z_]+$"}}
   },

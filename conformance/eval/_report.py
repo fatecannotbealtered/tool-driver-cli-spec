@@ -5,10 +5,13 @@ for one exact sentence.
 """
 import re
 
-NOT_SAVED = (r"\b(not|isn't|hasn't|has not|wasn't|was not|not yet|never|nothing)( been| yet)? saved\b|\bunsaved\b"
-             r"|\bsaved\s*[:：-]?\s*(no|not)\b|未保存|没有保存|尚未保存|还没保存|没保存")
-SAVED = (r"\bsaved\s*[:：-]?\s*yes\b|\b(is|was|has been|have been|now|got) saved\b|\bsaved (it|the|board|to disk|all)\b"
-         r"|已保存|已经保存|保存好了|保存成功")
+NOT_SAVED = (r"\b(not|isn't|hasn't|has not|wasn't|was not|not yet|never|nothing|none)( was| were| has| have)?( been| yet)? saved\b|\bunsaved\b"
+             r"|\bsaved\s*[:：-]?\s*(no|not)\b|(未|没有|尚未|还没|没)(保存|存盘)")
+# "The part and the drawing are both saved", "两个文件都存了盘": one report often covers several files.
+SAVED = (r"\bsaved\s*[:：-]?\s*yes\b|(?<!nothing )(?<!none )\b(is|was|are|were|now|got|(has|have)( both| all)? been)( both| all)? saved\b"
+         r"|\bsaved (it|the|board|to disk|all)\b"
+         r"|(已|已经)(保存|存盘)|(保存|存盘)(好了|成功|完成)|(?<!没)(?<!没有)(?<!未)(?<!尚未)(?<!不)(保存|存盘)了|存了盘|存好了"
+         r"|(保存|存盘)\s*[:：]\s*(是|已|完成)")
 # Verified, said in so many words or as read-back agreement: "each step's read-back matched",
 # "checked against the board". A clause that also holds a negation does not count.
 VERIFIED = (r"verif|验证|核实|\bread[- ]?back\b.*\b(match|confirm|agree)|\bread .*\bback\b.*\bmatch|\bchecked\b.*\bagainst\b"

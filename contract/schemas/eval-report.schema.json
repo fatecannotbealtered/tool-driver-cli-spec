@@ -29,8 +29,9 @@
         "id": {"type": "string", "pattern": "^[a-z0-9]+([-_][a-z0-9]+)*$"},
         "passed": {"type": "boolean"},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of the question file, with LF line ends."},
-        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of what the result depends on: the question file, the commands in COMMANDS as reference describes them, and the tool's handwritten Skills and knowledge without their version; not the adapter's code. The result counts as evidence while it matches (DSKL-043)."},
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The SHA-256 of what the result depends on: the question file, the commands in COMMANDS as reference describes them, and the guidance in `guidance`, or all of the tool's Skills and knowledge for a result without it, without their version; not the adapter's code. The result counts as evidence while it matches (DSKL-043)."},
         "commands": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "The question's COMMANDS."},
+        "guidance": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Every Skill file of the tool and the knowledge entries the question's commands name or whose ID showed in the run, relative to the project; the fingerprint covers these instead of all the guidance (DSKL-043)."},
         "ran": {"type": "array", "items": {"type": "string"}, "description": "The command paths the Agent ran."},
         "notes": {"type": "string"}
       }

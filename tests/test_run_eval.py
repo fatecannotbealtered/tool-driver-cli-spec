@@ -173,6 +173,25 @@ class AuthorizeTest(unittest.TestCase):
         self.targets(run_eval.file_key(root.resolve()) + "/", "device:cnc-01")
         run_eval.authorize(self.project, [self.question], root)
 
+    def test_targets_written_from_the_question_s_folders_stay_inside_the_root(self):
+        root = (self.project / "ws").resolve()
+        self.targets(run_eval.file_key(root) + "/")
+        for target, ok in (("{documents}../work", True), ("{workspace}", True), ("{documents}sub/", True),
+                           ("{documents}../../..", False), ("{workspace}../../../elsewhere/", False)):
+            question = mock.Mock(id="q", scope={"targets": [target]})
+            if ok:
+                run_eval.authorize(self.project, [question], root)
+            else:
+                with self.assertRaisesRegex(run_eval.EvalError, "leads outside the workspace root"):
+                    run_eval.authorize(self.project, [question], root)
+        work, documents = root / "q" / "work", root / "q" / "documents"
+        work.mkdir(parents=True)
+        places = {"documents": documents, "workspace": work}
+        self.assertEqual(run_eval.place_target("{documents}../work", places), run_eval.file_key(work) + "/")
+        self.assertEqual(run_eval.place_target("{workspace}", places), run_eval.file_key(work) + "/")
+        self.assertEqual(run_eval.place_target("{documents}board.fake", places), run_eval.file_key(documents / "board.fake"))
+        self.assertIsNone(run_eval.place_target("device:cnc-01", places))
+
 
 class RunTest(unittest.TestCase):
     """Whole runs against the sample tool and the fake host."""
@@ -294,10 +313,13 @@ class RunTest(unittest.TestCase):
         checker = check_project.Checker(self.facts)
         self.assertEqual(checker.validate(data, "eval-report.schema.json"), [])
         self.assertEqual((data["agent"], data["model"], data["simulated"]), ("Stub Agent 1.0", "stub-model", True))
-        fingerprint = check_project.question_fingerprint(self.facts, loaded.sha256, ["part get"])
+        guidance = data["questions"][0]["guidance"]
+        self.assertIn("skills/", guidance)  # every Skill counts, also one added later
+        fingerprint = check_project.question_fingerprint(self.facts, loaded.sha256, ["part get"], guidance)
         self.assertEqual(data["questions"], [{"scenario": "read_answer", "id": "read_r1", "passed": True,
                                               "notes": "Read the value of R1.", "sha256": loaded.sha256,
-                                              "commands": ["part get"], "ran": ["part get"], "fingerprint": fingerprint}])
+                                              "commands": ["part get"], "ran": ["part get"], "guidance": guidance,
+                                              "fingerprint": fingerprint}])
         self.assertEqual(loaded.sha256, check_project.digest(self.questions / "read_r1.py"))
 
     def test_a_question_whose_right_answer_fails_stops_the_run_before_the_agent(self):
@@ -389,7 +411,7 @@ class RunTest(unittest.TestCase):
             scope = json.loads(session.scope_file.read_text(encoding="utf-8"))
             self.assertEqual((scope["effects"], scope["dangerous"]), (["change"], True))
             self.assertEqual(scope["targets"], [run_eval.file_key(session.documents) + "/"])
-            self.assertEqual(session.targets(), ["{documents}"])
+            self.assertEqual(session.targets(), [run_eval.file_key(session.documents) + "/"])
         finally:
             session.close()
 
@@ -448,6 +470,18 @@ class ReportWords(unittest.TestCase):
                      "Verification failed.", "验证失败。", "未能验证。", "无法核实。", "| Verified | No — waits for the save |",
                      "Verification is deferred until the save."]:
             self.assertFalse(says_verified(text), text)
+
+    def test_saved_in_the_agent_s_own_words(self):
+        sys.path.insert(0, str(ROOT / "conformance" / "eval"))
+        from _report import says_not_saved, says_saved
+
+        for text in ["The part and the drawing are both saved, and the PDF is exported.", "Both files were saved.",
+                     "They have both been saved.", "board.fake is saved.", "- Saved: yes", "零件和图纸都存了盘。", "已存盘。",
+                     "两个文件都保存了。", "存盘：已完成", "保存成功。"]:
+            self.assertTrue(says_saved(text), text)
+        for text in ["The files are not saved yet.", "Nothing was saved.", "还没存盘。", "还没保存了。", "尚未存盘。", "没有保存。"]:
+            self.assertFalse(says_saved(text), text)
+            self.assertTrue(says_not_saved(text), text)
 
 
 if __name__ == "__main__":
