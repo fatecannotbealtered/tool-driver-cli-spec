@@ -57,6 +57,7 @@ COMMANDS = [
 ]
 
 MOVE = {"command": "footprint move", "inputs": {"id": "R1", "x_mm": 12.5, "y_mm": 30.0}, "session": "fake-1", "document": "doc-1"}
+UNDOES_OP_1 = {"operation_id": "op_1", "command": "footprint move"}
 
 
 def _validator():
@@ -438,7 +439,7 @@ class MainAddressTest(HostTestCase):
         c = self.client()
         c.call("apply", {**MOVE, "operation_id": "op_1"})
         c.control("edit", document="doc-1", object="C3", field="value", value="10nF")
-        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_2"})
+        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_2", "undoes": UNDOES_OP_1})
         objects = next(d for d in self.state()["documents"] if d["id"] == "doc-1")["objects"]
         self.assertEqual((objects["R1"], objects["C3"]), ({}, {"value": "10nF"}))
         save = {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"}
@@ -449,6 +450,17 @@ class MainAddressTest(HostTestCase):
         self.assertFalse(saved["document"]["dirty"])
         preview = c.call("preview", save)
         self.assertEqual((preview["changes"], preview["external_changes"]), ([], []))
+
+    def test_undo_takes_back_only_the_last_change_and_a_write_that_changed_nothing_has_no_step(self):
+        c = self.client()
+        c.call("apply", {**MOVE, "operation_id": "op_1"})
+        same = c.call("apply", {**MOVE, "operation_id": "op_2"})
+        self.assertEqual(same["change"], "not_applied")
+        with self.assertRaises(HostCallError) as ctx:
+            c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_3",
+                            "undoes": {"operation_id": "op_9", "command": "footprint move"}})
+        self.assertEqual((ctx.exception.data["code"], ctx.exception.data["dispatch_state"]), ("E_CONFLICT", "not_started"))
+        self.valid("undo", c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_4", "undoes": UNDOES_OP_1}))
 
     def test_a_finished_job_keeps_its_facts(self):
         c = self.client()
@@ -474,7 +486,7 @@ class MainAddressTest(HostTestCase):
         c = self.client()
         c.call("apply", {**MOVE, "operation_id": "op_1"})
         c.call("save_doc", {"session": "fake-1", "document": "doc-1", "operation_id": "op_2"})
-        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_3"})
+        c.call("undo", {"session": "fake-1", "document": "doc-1", "operation_id": "op_3", "undoes": UNDOES_OP_1})
         preview = c.call("preview", {"command": "doc save", "inputs": {}, "session": "fake-1", "document": "doc-1"})
         self.assertEqual(sorted((ch["field"], ch["before"], ch["after"]) for ch in preview["changes"]),
                          [("x_mm", 12.5, None), ("y_mm", 30.0, None)])

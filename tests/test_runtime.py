@@ -560,6 +560,31 @@ class InProcess(unittest.TestCase):
         self.assertEqual({tuple(i) for i in data["index"]}, {("path",)})
         self.assertIn({"path": "thing59 move"}, data["index"])
 
+    def test_fields_keep_the_short_index(self):
+        regs = [registration(path=f"thing{n:03d} move", modes=["file"], summary="Move one thing to a new place, keeping its links and its labels.")
+                for n in range(100)]
+        self.tool = Tool(root=SAMPLE, adapter=SampleAdapter, commands=regs, application="Files", versions="any",
+                         modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        out = io.StringIO()
+        self.assertEqual(self.tool.run(["reference", "--fields", "index"], env=self.env, stdout=out), 0, out.getvalue()[:400])
+        data = json.loads(out.getvalue())["data"]
+        self.assertEqual(set(data), {"index"})
+        self.assertIn({"path": "thing099 move"}, data["index"])
+
+    def test_an_index_that_fits_keeps_its_summaries(self):
+        summary = "Move one thing to a new place, keeping its links and its labels."
+        regs = [registration(path=f"thing{n:02d} move", modes=["file"], summary=summary) for n in range(52)]
+        self.tool = Tool(root=SAMPLE, adapter=SampleAdapter, commands=regs, application="Files", versions="any",
+                         modes=["file"], contract=REPO / "contract" / "driver-contract.json")
+        out = io.StringIO()
+        self.assertEqual(self.tool.run(["reference"], env=self.env, stdout=out), 0)
+        text = out.getvalue().strip()
+        self.assertGreater(len(text), CONTRACT["envelope"]["limits"]["reference_index_chars"] - 1500)  # near the limit
+        self.assertLessEqual(len(text), CONTRACT["envelope"]["limits"]["reference_index_chars"])
+        data = json.loads(text)["data"]
+        self.assertNotIn("summaries", data)
+        self.assertEqual(data["index"][-1], {"path": "thing51 move", "summary": summary})
+
     def test_adapter_errors_keep_the_native_message_untrusted(self):
         code, env = self.run_tool("part", "update", "--doc", str(self.doc), "--id", "missing", "--value", "x")
         self.assertEqual((code, env["error"]["code"]), (3, "E_NOT_FOUND"))
