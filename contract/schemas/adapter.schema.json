@@ -115,12 +115,22 @@
         },
         "undo": {
           "type": "object",
-          "required": ["operation_id", "session", "document"],
+          "required": ["operation_id", "session", "document", "undoes"],
           "additionalProperties": false,
           "properties": {
             "operation_id": {"$ref": "#/$defs/operation_id"},
             "session": {"$ref": "#/$defs/id"},
             "document": {"$ref": "#/$defs/id"},
+            "undoes": {
+              "description": "The change the undo takes back: the tool's most recent change to the document that took effect since the tool last opened or closed it (DCLI-067). An adapter that cannot match it with the application's last change refuses the undo, with nothing sent to the application.",
+              "type": "object",
+              "required": ["operation_id", "command"],
+              "additionalProperties": false,
+              "properties": {
+                "operation_id": {"$ref": "#/$defs/operation_id"},
+                "command": {"type": "string", "minLength": 1}
+              }
+            },
             "deadline_ms": {"$ref": "#/$defs/deadline_ms"}
           }
         },

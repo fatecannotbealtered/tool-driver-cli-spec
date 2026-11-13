@@ -42,6 +42,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "files": [{"id": "file-1", "name": "file-1.fake"}],
     "devices": [{"id": "dev-1", "model": "FakeDevice", "firmware": "1.0.0", "state": "ready", "simulated": True}],
     "kinds": {},  # file extension -> the kind of a document opened from such a file, such as {".prj": "project"}
+    "missing_methods": [],  # instance-side methods the host component does not have, such as ["undo"]
 }
 
 
@@ -356,7 +357,7 @@ class World:
                 raise Refused("hello needs protocol_version and cli_version")
             return (lambda p: self._hello(endpoint)), params
         known = method in self.cli_side or method in self.instance_side
-        if not known or (endpoint is not None and method not in self.instance_side):
+        if not known or (endpoint is not None and method not in self._methods()):
             raise HostError("E_UNSUPPORTED", f"{method} is not a method of this host")
         if endpoint is not None:
             if params.get("session", endpoint) != endpoint:
@@ -407,8 +408,11 @@ class World:
             "plugin_version": self.plugin["version"],
             "application": dict(self.config["application"]),
             "session": session,
-            "methods": ["hello", *self.instance_side],
+            "methods": ["hello", *self._methods()],
         }
+
+    def _methods(self) -> list[str]:
+        return [m for m in self.instance_side if m not in self.config["missing_methods"]]
 
     # ------------------------------------------------------------------ faults
 
@@ -631,10 +635,12 @@ class World:
         changes = self._changes(plan)
         snapshot = copy.deepcopy(doc.objects) if doc is not None else None
         undo = []
+        moved = False
         for target in plan["targets"]:
             values = self._store(plan, target, create=True)
             for name, value in self._fields(plan, target).items():
                 undo.append((target["object"] or "", name, values.get(name)))
+                moved = moved or name not in values or values[name] != stored.get(name, value)
                 values[name] = stored.get(name, value)
         if doc is not None and doc.session is None:
             try:
@@ -654,6 +660,9 @@ class World:
             return {"dispatch_state": "dispatched", "change": "not_applicable", "delivery": "not_applicable",
                     "persistence": "saved", "files": files}
         made_files = {"files": files} if files else {}
+        if doc is not None and doc.session is not None and plan["targets"] and not made and not moved:
+            # Every field already held its value: the application changed nothing and keeps no step to undo.
+            return {"dispatch_state": "dispatched", "change": "not_applied", "delivery": "not_applicable", "persistence": "unchanged"}
         if doc is not None:
             doc.history.append({"operation_id": op, "undo": undo})
             doc.revision += 1
@@ -883,6 +892,10 @@ class World:
         assert doc is not None
         if not doc.history:
             raise HostError("E_NATIVE_FAILURE", "nothing to undo")
+        if doc.history[-1]["operation_id"] != params["undoes"]["operation_id"]:
+            # The application's last change is not the one the tool means: undoing would take back another.
+            raise HostError("E_CONFLICT", f"the last change is {doc.history[-1]['operation_id']}, not {params['undoes']['operation_id']}",
+                            conflict="application_state")
         last = doc.history.pop()
         unsaved = any(c["operation_id"] == last["operation_id"] for c in doc.tool_changes)
         reverse = []

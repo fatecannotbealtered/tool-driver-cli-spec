@@ -707,7 +707,8 @@ def attempt(project: Path, facts: check_project.Facts, question: Question, agent
                 error = error or f"after: {type(exc).__name__}: {exc}"
         calls = session.calls()
         session.ran = sorted({c.command for c in calls if c.command})
-        session.output = "\n".join(" ".join(c.args) + "\n" + c.stdout for c in calls)
+        # A knowledge list shows the index, not an entry's body; the index counts on its own (DSKL-043).
+        session.output = "\n".join(" ".join(c.args) + "\n" + ("" if c.command == "knowledge list" else c.stdout) for c in calls)
         session.close()
     return run.problems, error, session
 

@@ -4,6 +4,25 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-13
+
+Fixes from the tools on 1.3.0. After syncing, an adapter that can see which change the application would undo checks the new `undoes` of the `undo` request and refuses an undo that would take back another change; other adapters keep working unchanged. Records, reports and evaluation results from before keep counting.
+
+### Added
+
+- `missing_methods` in the fake host's configuration leaves methods out of its host component, to test an instance that lacks a capability.
+
+### Fixed
+
+- `doc undo` could take back the wrong change. It counted a write that changed nothing, which leaves no step in the application's history, so the undo took back the change before it; and it reached back past a reopened document, whose earlier changes the application no longer holds. It now takes back the tool's latest change that took effect, also one `operation resolve` settled or a cancelled long job left partial, since the document was last opened, created or closed in that instance or the instance closed; blocks the preview when only older changes are left, or while a change has an unknown outcome or still runs as a long job; and names the change in the request's new `undoes`, so that an adapter can refuse when the application's last change is another one (DCLI-067). The fake host leaves no undo step for a write that changed nothing and refuses an undo whose `undoes` is not its last step.
+- A write on an instance without the capability it needs showed a preview and gave a token, then failed when confirmed. It now returns `E_UNSUPPORTED` before the preview, for the instance the write targets (DCLI-260).
+- `operation get` and `job get` refused a record or a job too long for one response, and `operation list` and `job list` could not page past one. They now shorten it: first the preview's changes, then the receipt, the result and the targets of a batch, with a notice that names `operation get --output` or `job get --output`, which write the whole of it. `operation get --output` and `job get --output` return the shortened data beside the file's path (DCLI-008, DCLI-035, DCLI-220).
+- `--fields` could not name a field inside another, and dropped a name the result does not hold without a word. A dotted name such as `receipt.outcome` now names a field inside another; a missing name gets a notice that lists the fields the result holds; `--fields` on a write gets a notice that a write returns its whole receipt; and `reference --command` lists `--fields` among the flags of a read (DCLI-007, DCLI-031).
+- A document an instance was still opening gave `E_NOT_FOUND`, so the Agent opened it a second time. A call that names a document an instance does not list while it is not ready, or one a long job of the tool is still opening or closing, now gets the reaction of the instance's state; and when a long job of the tool keeps the instance, the device or the document busy, the `next_action` of `E_BUSY` is `job get` on that job (DCLI-204).
+- `reference` left out the summaries of an index that came within 1500 characters of its limit, even with no notices to fit. It now leaves them out only when the index and the call's notices do not fit together (DCLI-031).
+- An evaluation result whose run listed or searched the knowledge depended on every entry's body, so a fix in any entry made it stale. It now depends on the knowledge index instead, the ID, title, kind, `applies_to` and `tags` of every entry, which is what a list shows, besides the entries the run named or read (DSKL-043). Results that noted all of `knowledge/` keep counting it whole.
+- `run_matrix` read every Python file of the tool as code again before each row. A file whose text did not change is now read once.
+
 ## [1.3.0] - 2026-11-12
 
 Evidence follows the code and guidance it used, and fixes from the Xpedition and Creo tools on 1.2.0. After syncing, run the matrices once more: the new runs note the code they used, so a later fix in one adapter module sends only the commands that used it to run again. Run the evaluation questions once more with `--stale` too: the new results note the knowledge they read. Records and results from before keep counting as they did.

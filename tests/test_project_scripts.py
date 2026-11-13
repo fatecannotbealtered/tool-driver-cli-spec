@@ -732,8 +732,26 @@ class ProjectTest(unittest.TestCase):
         self.assertNotIn("DSKL-043", self.clauses())
         self.assertEqual(check_project.question_guidance(facts, ["part move"], "no entry named"), ["skills/"])
         self.assertEqual(check_project.question_guidance(facts, ["part move"], "demo-cli knowledge search --query x"),
-                         ["knowledge/", "skills/"])  # a search depends on every entry
+                         ["knowledge index", "skills/"])  # a search depends on what a list shows of every entry
         entry = next(p for p in (self.project / "knowledge").glob("*.md"))
+        original = entry.read_text(encoding="utf-8")
+
+        def counts(guidance: list[str]) -> bool:
+            result = dict(fingerprinted(data)[0], guidance=guidance)
+            result["fingerprint"] = check_project.question_fingerprint(facts, result["sha256"], result["commands"], guidance)
+            entry.write_text(changed, encoding="utf-8")
+            try:
+                return check_project.result_counts(check_project.gather(self.project), data, result, result["sha256"])
+            finally:
+                entry.write_text(original, encoding="utf-8")
+
+        changed = original + "\nAnother point.\n"
+        self.assertTrue(counts(["knowledge index", "skills/"]))  # the body of an entry the run did not read
+        self.assertFalse(counts(["knowledge/", "skills/"]))  # a result that counted all of knowledge/ keeps doing so
+        changed = re.sub(r"(?m)^title:.*$", "title: Another title", original, count=1)
+        self.assertNotEqual(changed, original)
+        self.assertFalse(counts(["knowledge index", "skills/"]))  # what a list shows of it
+
         named = check_project.question_guidance(facts, ["part move"], f"... {entry.stem} ...")
         self.assertIn(entry.relative_to(self.project).as_posix(), named)  # an entry whose ID showed in the output
         result = dict(fingerprinted(data)[0], guidance=[g for g in named if not g.startswith("knowledge/")])

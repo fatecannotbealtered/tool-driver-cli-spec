@@ -1300,5 +1300,253 @@ class SaveTolerances(unittest.TestCase):
             self.assertEqual(record["_tolerances"], {"x_mm": 0.001, "y_mm": 0.001})
 
 
+class Fixes131(unittest.TestCase):
+    """What the tools found on 1.3.0."""
+
+    def test_a_call_on_a_document_still_opening_waits_for_the_job(self):
+        long = {"SAMPLE_CLI_LONG": "doc open"}
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "big.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            case.control("fault", rule={"method": "open_doc", "action": "slow", "ms": 4000})
+            out = case.run("doc", "open", "--session", "fake-1", "--doc", path, env=long)
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            case.control("set_session", session="fake-1", state="busy")
+            for argv in (["doc", "get", "--session", "fake-1", "--doc", path], ["doc", "get", "--doc", path],
+                         ["part", "delete", "--session", "fake-1", "--doc", path, "--id", "R1"]):
+                early = case.run(*argv, env=long)
+                self.assertEqual(early.code, "E_BUSY", early.stdout[:400])
+                self.assertIn(f"job get --job {job}", early.details["next_action"])
+            case.control("set_session", session="fake-1", state="ready")
+            done = case.run("job", "get", "--job", job, "--wait", "60s", env=long)
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+            self.assertTrue(case.run("doc", "get", "--session", "fake-1", "--doc", path).ok)
+
+    def test_paging_goes_past_a_record_too_long_for_a_page(self):
+        with Case(subject()) as case:
+            for x in ("1mm", "3mm"):
+                out = case.run(*Fixes104.MOVE_R1[:-4], "--x", x, "--y", "2mm")
+                self.assertTrue(out.ok, out.stdout[:400])
+            listed = case.run("operation", "list")
+            self.assertEqual(len(listed.data["items"]), 2, listed.stdout[:400])
+            older = listed.data["items"][1]["operation_id"]
+            path = case.state_dir / "operations" / f"{older}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            change = record["preview"]["changes"][0]
+            record["preview"]["changes"] = [dict(change, field=f"note{n}", after="x" * 40) for n in range(300)]
+            path.write_text(json.dumps(record), encoding="utf-8")
+            seen, offset = [], 0
+            while offset is not None:
+                page = case.run("operation", "list", "--offset", str(offset))
+                self.assertTrue(page.ok, page.stdout[:400])
+                seen += [i["operation_id"] for i in page.data["items"]]
+                offset = page.data.get("next_offset")
+            self.assertEqual(seen, [i["operation_id"] for i in listed.data["items"]])
+            for argv in (["operation", "list", "--offset", "1"], ["operation", "list", "--state", "completed", "--offset", "1"]):
+                page = case.run(*argv)
+                long = page.data["items"][0]
+                self.assertEqual(long["operation_id"], older)
+                self.assertTrue(long["preview"]["changes_truncated"])
+                self.assertEqual(schemas.errors(long, "operation.schema.json"), [])
+                notice = [n for n in page.envelope["meta"]["notices"] if n["type"] == "shortened"]
+                self.assertIn(older, notice[0]["message"])
+                self.assertIn("operation get --id <id> --output <file>", notice[0]["message"])
+            shown = case.run("operation", "get", "--id", older)
+            self.assertTrue(shown.ok, shown.stdout[:400])
+            self.assertTrue(shown.data["preview"]["changes_truncated"])
+            notice = [n for n in shown.envelope["meta"]["notices"] if n["type"] == "shortened"]
+            self.assertIn(f"operation get --id {older} --output <file>", notice[0]["message"])
+            path = os.path.join(case.tmp, "op.json")
+            whole = case.run("operation", "get", "--id", older, "--output", path)
+            self.assertTrue(whole.ok, whole.stdout[:400])
+            self.assertEqual(whole.data["output"], path)
+            self.assertEqual(schemas.errors(whole.data, "operation.schema.json"), [])
+            self.assertEqual(len(json.loads(Path(path).read_text(encoding="utf-8"))["preview"]["changes"]), 300)
+
+    def test_a_job_too_long_to_show_is_shortened_and_written_whole(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "analysis run", "action": "job", "steps": 1})
+            rows = [f"row {n} " + "x" * 40 for n in range(300)]
+            case.control("fault", rule={"method": "job_status", "action": "result", "result": {"result": {"rows": rows}}, "times": 0})
+            out = case.run("analysis", "run", "--session", "fake-1", "--doc", "doc-1", "--depth", "3")
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            done = case.run("job", "get", "--job", job, "--wait", "60s")
+            self.assertTrue(done.ok, done.stdout[:400])
+            self.assertEqual(done.data["state"], "completed")
+            self.assertNotIn("result", done.data)
+            notice = [n for n in done.envelope["meta"]["notices"] if n["type"] == "shortened"]
+            self.assertIn(f"job get --job {job} --output <file>", notice[0]["message"])
+            listed = case.run("job", "list")
+            self.assertTrue(listed.ok, listed.stdout[:400])
+            self.assertEqual([i["id"] for i in listed.data["items"]], [job])
+            path = os.path.join(case.tmp, "job.json")
+            whole = case.run("job", "get", "--job", job, "--output", path)
+            self.assertTrue(whole.ok, whole.stdout[:400])
+            self.assertEqual(whole.data["output"], path)
+            self.assertEqual(json.loads(Path(path).read_text(encoding="utf-8"))["result"]["rows"], rows)
+
+    def test_fields_reach_inside_a_field_and_say_what_they_miss(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "analysis run", "action": "job", "steps": 1})
+            out = case.run("analysis", "run", "--session", "fake-1", "--doc", "doc-1", "--depth", "3")
+            job = out.data["result"]["job"]["id"]
+            done = case.run("job", "get", "--job", job, "--wait", "60s", "--fields", "id,state,receipt.outcome")
+            self.assertEqual(set(done.data), {"id", "state", "receipt"}, done.stdout[:400])
+            self.assertEqual(set(done.data["receipt"]), {"outcome"})
+            self.assertEqual(done.data["receipt"]["outcome"]["execution"], "completed")
+            self.assertEqual([n for n in done.envelope["meta"]["notices"] if n["type"] == "fields"], [])
+            listed = case.run("operation", "list", "--fields", "operation_id,receipt.outcome.change")
+            self.assertEqual(listed.data["items"][0], {"operation_id": out.data["operation_id"],
+                                                       "receipt": {"outcome": {"change": "applied"}}}, listed.stdout[:400])
+            wrong = case.run("job", "get", "--job", job, "--fields", "id,receipt.outcom")
+            notice = [n for n in wrong.envelope["meta"]["notices"] if n["type"] == "fields"]
+            self.assertIn("receipt.outcom", notice[0]["message"])
+            moved = case.run(*Fixes104.MOVE_R1, "--fields", "operation_id")
+            self.assertIn("receipt", moved.data, moved.stdout[:400])
+            self.assertTrue([n for n in moved.envelope["meta"]["notices"] if n["type"] == "fields"])
+            flags = [f["name"] for f in case.run("reference", "--command", "job get").data["flags"]]
+            self.assertIn("--fields", flags)
+            flags = [f["name"] for f in case.run("reference", "--command", "part move").data["flags"]]
+            self.assertNotIn("--fields", flags)
+
+    def test_an_instance_without_undo_refuses_it_before_the_preview(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"SAMPLE_CLI_VARIANT": "host"}):
+            sub = Subject([sys.executable, "-m", "sample_cli"], REPO / "tests" / "sample")
+            with Case(sub, config={"missing_methods": ["undo"]}) as case:
+                self.assertTrue(case.run(*Fixes104.MOVE_R1).ok)
+                for extra in (["--dry-run"], []):
+                    out = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1", *extra)
+                    self.assertEqual(out.code, "E_UNSUPPORTED", out.stdout[:400])
+                    self.assertEqual(out.details["dispatch_state"], "not_started")
+                self.assertEqual(case.calls("undo"), [])
+
+    def test_an_undo_names_the_change_it_takes_back_and_passes_over_one_that_changed_nothing(self):
+        with Case(subject()) as case:
+            first = case.run(*Fixes104.MOVE_R1)
+            again = case.run(*Fixes104.MOVE_R1)
+            self.assertTrue(first.ok and again.ok, again.stdout[:400])
+            self.assertEqual(again.data["receipt"]["outcome"]["change"], "not_applied")
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:600])
+            sent = case.calls("undo")[0]["params"]["undoes"]
+            self.assertEqual(sent, {"operation_id": first.data["operation_id"], "command": "part move"})
+
+    def test_an_undo_does_not_reach_past_a_reopen(self):
+        with Case(subject()) as case:
+            moved = case.run(*Fixes104.MOVE_R1)
+            path = case.doc_path("doc-1")
+            first = case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(case.run("doc", "save", "--session", "fake-1", "--doc", "doc-1", "--confirm", first.details["confirm_token"]).ok)
+            self.assertTrue(case.run("doc", "close", "--session", "fake-1", "--doc", "doc-1").ok)
+            opened = case.run("doc", "open", "--session", "fake-1", "--doc", path)
+            self.assertTrue(opened.ok, opened.stdout[:400])
+            new_id = opened.data["result"]["id"]
+            # An application that gives a document the same ID when it is opened again.
+            record_path = case.state_dir / "operations" / f"{moved.data['operation_id']}.json"
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["receipt"]["document"]["id"] = new_id
+            record_path.write_text(json.dumps(record), encoding="utf-8")
+            dry = case.run("doc", "undo", "--session", "fake-1", "--doc", new_id, "--dry-run")
+            self.assertTrue(dry.ok, dry.stdout[:400])
+            self.assertFalse(dry.data["preview"]["can_apply"])
+            self.assertIn("before it was last opened or closed", dry.data["preview"]["blocked_by"][0])
+
+    def test_a_document_a_ready_instance_does_not_list_is_still_missing(self):
+        with Case(subject()) as case:
+            out = case.run("doc", "get", "--session", "fake-1", "--doc", "doc-9")
+            self.assertEqual(out.code, "E_NOT_FOUND", out.stdout[:400])
+
+    def test_a_document_an_instance_still_starting_with_waits_for_the_job(self):
+        long = {"SAMPLE_CLI_LONG": "session open"}
+        with Case(subject(), config={"instances": []}) as case:
+            path = os.path.join(case.tmp, "big.fake")
+            Path(path).write_text("{}", encoding="utf-8")
+            case.control("fault", rule={"method": "open_session", "action": "slow", "ms": 4000})
+            out = case.run("session", "open", "--doc", path, env=long)
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            early = case.run("doc", "get", "--doc", path, env=long)
+            self.assertEqual(early.code, "E_BUSY", early.stdout[:400])
+            self.assertIn(f"job get --job {job}", early.details["next_action"])
+            done = case.run("job", "get", "--job", job, "--wait", "60s", env=long)
+            self.assertEqual(done.data["state"], "completed", done.stdout[:600])
+
+    def test_an_undo_waits_for_a_change_whose_outcome_is_unknown_and_takes_it_back_once_settled(self):
+        with Case(subject()) as case:
+            self.assertTrue(case.run(*Fixes104.MOVE_R1).ok)
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "close", "apply_first": True})
+            lost = case.run(*Fixes104.MOVE_R1[:-4], "--x", "3mm", "--y", "2mm")
+            self.assertEqual(lost.code, "E_OUTCOME_UNKNOWN", lost.stdout[:400])
+            op = lost.details["lookup"].split()[-1]
+            dry = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1", "--dry-run")
+            self.assertFalse(dry.data["preview"]["can_apply"], dry.stdout[:400])
+            self.assertIn(f"operation resolve --id {op}", dry.data["preview"]["blocked_by"][0])
+            self.assertTrue(case.run("operation", "resolve", "--id", op).ok)
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:600])
+            self.assertEqual(case.calls("undo")[0]["params"]["undoes"]["operation_id"], op)
+
+    def test_an_undo_takes_back_a_change_that_took_effect_in_part(self):
+        with Case(subject()) as case:
+            self.assertTrue(case.run(*Fixes104.MOVE_R1).ok)
+            stopped = case.run(*Fixes104.MOVE_R1[:-4], "--x", "3mm", "--y", "2mm")
+            self.assertTrue(stopped.ok, stopped.stdout[:400])
+            # A long job cancelled half way: the record failed, the change took effect in part.
+            path = case.state_dir / "operations" / f"{stopped.data['operation_id']}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["state"] = "failed"
+            record["receipt"]["outcome"].update(execution="interrupted", change="partial")
+            path.write_text(json.dumps(record), encoding="utf-8")
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:600])
+            self.assertEqual(case.calls("undo")[0]["params"]["undoes"]["operation_id"], stopped.data["operation_id"])
+
+    def test_opening_the_document_in_another_instance_leaves_the_undo_alone(self):
+        with Case(subject()) as case:
+            moved = case.run(*Fixes104.MOVE_R1)
+            self.assertTrue(moved.ok, moved.stdout[:400])
+            case.control("add_session", session="fake-2")
+            other = case.run("doc", "open", "--session", "fake-2", "--doc", case.doc_path("doc-1"))
+            self.assertTrue(other.ok, other.stdout[:400])
+            undo = case.run("doc", "undo", "--session", "fake-1", "--doc", "doc-1")
+            self.assertTrue(undo.ok, undo.stdout[:600])
+            self.assertEqual(case.calls("undo")[0]["params"]["undoes"]["operation_id"], moved.data["operation_id"])
+
+    def test_a_record_or_job_of_any_shape_is_shortened_to_fit(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.writes import shorten_record
+
+        class Run:
+            contract = {"receipt": {"listed_files": 20}}
+
+            def cmd(self, path, flags):
+                return path
+
+        targets = [{"key": f"fake://doc-1/part/R{n}", "kind": "part", "label": f"R{n}"} for n in range(120)]
+        record = {"operation_id": "op_1", "command": "part move", "effects": ["change"], "tier": "direct", "scope_id": "",
+                  "state": "completed", "planned_at": "2026-11-13T00:00:00Z", "target": list(targets),
+                  "preview": {"target": list(targets), "action": "Move.", "changes": []},
+                  "receipt": {"operation_id": "op_1", "target": list(targets), "outcome": {"change": "applied"}}}
+        self.assertTrue(shorten_record(Run(), record, 6000))
+        self.assertLessEqual(len(json.dumps(record, ensure_ascii=False, separators=(",", ":"))), 6000)
+        self.assertEqual((record["state"], record["receipt"]["outcome"]), ("completed", {"change": "applied"}))
+        files = {f"file:///out/f{n}.gbr": {"exists": True, "bytes": 1000 + n, "sha256": "0" * 64} for n in range(40)}
+        receipt = {"operation_id": "op_2", "outcome": {"change": "partial"}, "observed": files}
+        job = {"id": "job_1", "operation_id": "op_2", "state": "failed", "started_at": "2026-11-13T00:00:00Z", "ok": False,
+               "receipt": receipt, "code": "E_PARTIAL", "message": "The change took effect only in part.",
+               "details": {"receipt": dict(receipt), "dispatch_state": "dispatched"}}
+        self.assertTrue(shorten_record(Run(), job, 6000))
+        self.assertLessEqual(len(json.dumps(job, ensure_ascii=False, separators=(",", ":"))), 6000)
+        self.assertEqual((job["state"], job["code"]), ("failed", "E_PARTIAL"))
+        huge = dict(record, preview={"action": "x" * 9000})
+        self.assertTrue(shorten_record(Run(), huge, 6000))
+        self.assertEqual((huge["operation_id"], huge["state"]), ("op_1", "completed"))
+        self.assertNotIn("preview", huge)
+
+
 if __name__ == "__main__":
     unittest.main()

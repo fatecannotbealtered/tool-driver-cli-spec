@@ -21,6 +21,7 @@
     "planned_at": {"$ref": "error.schema.json#/$defs/utc"},
     "dispatched_at": {"$ref": "error.schema.json#/$defs/utc"},
     "finished_at": {"$ref": "error.schema.json#/$defs/utc"},
+    "output": {"description": "The new file operation get --output wrote the whole record to; the response itself may be shortened (DCLI-008).", "type": "string", "minLength": 1},
     "resolution": {
       "description": "How an outcome-unknown operation was resolved: by reading the target back (read_back, with the observed values) or, only when read-back is impossible, by the Agent with evidence.",
       "type": "object",

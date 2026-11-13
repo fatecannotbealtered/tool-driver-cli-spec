@@ -653,16 +653,24 @@ def loose_files(facts: Facts) -> set[str]:
     application runs, one started on its own, or one imported by a name built at run time. A trace
     cannot tell whether a run used them, so they always count whole (DVER-043)."""
     modules: dict[str, str] = {}
+    texts: dict[str, str] = {}
     for path in project_files(facts.root, facts.pkg):
         rel = path.relative_to(facts.root).as_posix()
         if path.suffix == ".py" and not rel.startswith(f"{facts.pkg}/_driver/"):
             parts = rel[:-3].split("/")
             modules[".".join(parts[:-1] if parts[-1] == "__init__" else parts)] = rel
+            try:
+                texts[rel] = read(path)
+            except (OSError, ValueError):
+                pass
+    key = hashlib.sha256(json.dumps([modules, texts], sort_keys=True).encode("utf-8")).hexdigest()
+    if key in _LOOSE:
+        return set(_LOOSE[key])
     imported: set[str] = set()
     for name, rel in modules.items():
         try:
-            tree = ast.parse(read(facts.root / rel))
-        except (OSError, ValueError, SyntaxError):
+            tree = ast.parse(texts[rel])
+        except (KeyError, ValueError, SyntaxError):
             continue
         base = name if rel.endswith("/__init__.py") else name.rpartition(".")[0]
         for node in ast.walk(tree):
@@ -677,7 +685,14 @@ def loose_files(facts: Facts) -> set[str]:
             for target in targets:
                 parts = target.split(".")
                 imported.update(modules[m] for m in (".".join(parts[:i]) for i in range(1, len(parts) + 1)) if m in modules)
-    return {rel for rel in modules.values() if rel not in imported and not rel.startswith(f"{facts.pkg}/commands/")}
+    _LOOSE[key] = {rel for rel in modules.values() if rel not in imported and not rel.startswith(f"{facts.pkg}/commands/")}
+    return set(_LOOSE[key])
+
+
+# A behavior matrix takes a snapshot before each row; a file whose text did not change is not
+# read as code again (DVER-043).
+_LOOSE: dict[str, set[str]] = {}
+_CODE: dict[str, list[str]] = {}
 
 
 def code_snapshot(facts: Facts) -> dict[str, Any]:
@@ -692,7 +707,10 @@ def code_snapshot(facts: Facts) -> dict[str, Any]:
                 text = read(path)
             except (OSError, ValueError):
                 text = "unreadable"
-            python[rel] = [hashlib.sha256(_code(text, functions).encode("utf-8")).hexdigest() for functions in (True, False)]
+            seen = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if seen not in _CODE:
+                _CODE[seen] = [hashlib.sha256(_code(text, functions).encode("utf-8")).hexdigest() for functions in (True, False)]
+            python[rel] = list(_CODE[seen])
     others = [p for p in _adapter_files(facts) if p.suffix != ".py" or p.relative_to(facts.root).parts[0] == "plugin"
               or p.relative_to(facts.root).as_posix() in loose]
     return {"python": python, "others": files_digest(facts.root, others, _manifest_methods) + _dependencies(facts)}
@@ -734,8 +752,8 @@ def guidance_digest(facts: Facts) -> str:
 
 
 def guidance_snapshot(facts: Facts) -> dict[str, str]:
-    """Each file of the tool's Skills and builtin knowledge as its author wrote it, taken before a
-    question runs so that a change during it cannot pass (DSKL-043)."""
+    """Each file of the tool's Skills and builtin knowledge as its author wrote it, and the
+    knowledge index, taken before a question runs so that a change during it cannot pass (DSKL-043)."""
     out = {}
     for path in project_files(facts.root, "skills", "knowledge"):
         try:
@@ -743,21 +761,32 @@ def guidance_snapshot(facts: Facts) -> dict[str, str]:
         except (OSError, ValueError):
             text = "unreadable"
         out[path.relative_to(facts.root).as_posix()] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    out[KNOWLEDGE_INDEX] = knowledge_index(facts)
     return out
+
+
+# What `knowledge list` shows of every builtin entry, as one item of an evaluation result's guidance.
+KNOWLEDGE_INDEX = "knowledge index"
+INDEX_FIELDS = ("id", "title", "kind", "applies_to", "tags")
+
+
+def knowledge_index(facts: Facts) -> str:
+    entries = sorted(([front.get(k) for k in INDEX_FIELDS] for _, front, _ in knowledge_entries(facts)), key=str)
+    return hashlib.sha256(json.dumps(entries, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
 
 def question_guidance(facts: Facts, commands: list[str], seen: str) -> list[str]:
     """The guidance an evaluation result depends on (DSKL-043), a folder written with a final `/`:
-    all of skills/, since the Agent may load any Skill, even one added later; all of knowledge/
-    when the run listed or searched it, since the answer depends on every entry; else the
-    knowledge entries the question's commands name or whose ID showed in the run's calls or the
-    tool's output, ``seen``."""
-    if re.search(r"\bknowledge (list|search)\b", seen):
-        return ["knowledge/", "skills/"]
+    all of skills/, since the Agent may load any Skill, even one added later; the knowledge index
+    when the run listed or searched the knowledge, since a list shows every entry by it and a new
+    entry may show; and the knowledge entries the question's commands name or whose ID showed in
+    the run's calls or the tool's output, ``seen``, which holds no list output: a list shows no
+    entry's body."""
+    index = [KNOWLEDGE_INDEX] if re.search(r"\bknowledge (list|search)\b", seen) else []
     named = {k for c in facts.commands if c["path"] in commands for k in c.get("related_knowledge") or []}
     entries = [path.relative_to(facts.root).as_posix() for path, front, _ in knowledge_entries(facts)
                if str(front.get("id") or "") and (str(front["id"]) in named or str(front["id"]) in seen)]
-    return sorted(entries) + ["skills/"]
+    return sorted(entries + index) + ["skills/"]
 
 
 def command_digest(facts: Facts, command: str, described: bool = False, sources: dict[str, Any] | None = None,

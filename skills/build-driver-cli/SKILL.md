@@ -13,7 +13,7 @@ description: >-
   Not for using a driver tool to do work in an application; use that tool's own Skill, such as kicad-cli.
   不负责用驱动工具在软件里干活，那要用该工具自己的 Skill，比如 kicad-cli。
 metadata:
-  version: 1.3.0
+  version: 1.3.1
 ---
 
 # build-driver-cli
