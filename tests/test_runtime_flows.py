@@ -1548,5 +1548,144 @@ class Fixes131(unittest.TestCase):
         self.assertNotIn("preview", huge)
 
 
+class Fixes132(unittest.TestCase):
+    """What the tools found on 1.3.1."""
+
+    MOVE = Fixes104.MOVE_R1
+
+    def test_a_settled_record_too_long_to_show_is_shortened_not_refused(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result", "result": {"change": "unknown"}})
+            out = case.run(*self.MOVE)
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:400])
+            op = out.details["lookup"].split()[-1]
+            path = case.state_dir / "operations" / f"{op}.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["receipt"]["notes"] = [f"note {n} " + "x" * 90 for n in range(120)]
+            path.write_text(json.dumps(record), encoding="utf-8")
+            resolved = case.run("operation", "resolve", "--id", op)
+            self.assertTrue(resolved.ok, resolved.stdout[:400])
+            self.assertEqual(resolved.data["resolution"]["outcome"], "applied")
+            self.assertEqual(schemas.errors(resolved.data, "operation.schema.json"), [])
+            notice = [n for n in resolved.envelope["meta"]["notices"] if n["type"] == "shortened"]
+            self.assertIn(f"operation get --id {op} --output <file>", notice[0]["message"])
+            self.assertTrue(case.run(*self.MOVE[:-4], "--x", "4mm", "--y", "2mm").ok)  # the target is free
+
+    def test_a_write_whose_reply_is_too_long_still_says_it_succeeded(self):
+        rows = [f"row {n} " + "x" * 40 for n in range(300)]
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result", "result": {"result": {"rows": rows}}})
+            out = case.run(*self.MOVE)
+            self.assertTrue(out.ok, out.stdout[:400])
+            self.assertEqual(out.data["receipt"]["outcome"]["change"], "applied")
+            self.assertEqual(schemas.errors(out.data, "receipt.schema.json"), [])
+            notice = [n for n in out.envelope["meta"]["notices"] if n["type"] == "shortened"]
+            self.assertIn(f"operation get --id {out.data['operation_id']} --output <file>", notice[0]["message"])
+            path = os.path.join(case.tmp, "op.json")
+            self.assertTrue(case.run("operation", "get", "--id", out.data["operation_id"], "--output", path).ok)
+            self.assertEqual(json.loads(Path(path).read_text(encoding="utf-8"))["result"]["rows"], rows)
+
+    def test_a_shortened_reply_keeps_a_long_jobs_handle(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.writes import fit_reply
+
+        class Run:
+            contract = {"receipt": {"listed_files": 20}, "envelope": {"limits": {"success_chars": 8000}}}
+            notices: list = []
+
+            def cmd(self, path, flags):
+                return path
+
+        job = {"id": "job_1", "state": "running", "poll": "demo-cli job get --job job_1 --wait 60s"}
+        data = {"operation_id": "op_1", "receipt": {"operation_id": "op_1", "outcome": {"change": "not_applicable"}},
+                "result": {"rows": ["x" * 50] * 300, "job": job}}
+        fit_reply(Run(), data, {"operation_id": "op_1", "_job": job})
+        self.assertEqual(data["result"]["job"], job)
+        self.assertLessEqual(len(json.dumps(data)), 8000)
+
+    def test_a_dimension_the_contract_does_not_have_is_named_as_the_adapters_defect(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result", "result": {"persistence": "unsaved"}})
+            out = case.run(*self.MOVE)
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:400])
+            notice = [n for n in out.envelope["meta"]["notices"] if n["type"] == "adapter_defect"]
+            self.assertIn('persistence "unsaved"', notice[0]["message"])
+            self.assertIn("unchanged", notice[0]["message"])
+            index = out.envelope["meta"]["notices"].index(notice[0])
+            self.assertIn(f"$.meta.notices[{index}].message", out.envelope["meta"]["untrusted"])
+            self.assertIn("defect of the adapter", out.details["receipt"]["notes"][0])
+
+    def test_a_long_jobs_dimension_the_contract_does_not_have_is_named_too(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "analysis run", "action": "job", "steps": 1})
+            case.control("fault", rule={"method": "job_status", "action": "result", "result": {"persistence": "unsaved"}, "times": 0})
+            out = case.run("analysis", "run", "--session", "fake-1", "--doc", "doc-1", "--depth", "3")
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            done = case.run("job", "get", "--job", job, "--wait", "60s")
+            self.assertEqual(done.data["receipt"]["outcome"]["persistence"], "unknown", done.stdout[:600])
+            notice = [n for n in done.envelope["meta"]["notices"] if n["type"] == "adapter_defect"]
+            self.assertIn('persistence "unsaved"', notice[0]["message"])
+            self.assertTrue(any("defect of the adapter" in n for n in done.data["receipt"]["notes"]))
+
+    def test_a_resolve_with_long_evidence_keeps_how_it_was_settled(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "close", "apply_first": True})
+            out = case.run(*self.MOVE)
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:400])
+            case.control("edit", document="doc-1", object="R1", field="x_mm", value=99.0)
+            op = out.details["lookup"].split()[-1]
+            done = case.run("operation", "resolve", "--id", op, "--outcome", "partial", "--evidence", "x is 99 mm. " * 700)
+            self.assertTrue(done.ok, done.stdout[:400])
+            self.assertEqual((done.data["resolution"]["outcome"], done.data["resolution"]["resolved_by"]), ("partial", "agent"))
+            self.assertEqual(schemas.errors(done.data, "operation.schema.json"), [])
+
+    def test_a_job_the_worker_runs_names_the_adapters_defect(self):
+        with Case(subject()) as case:
+            path = os.path.join(case.tmp, "drawing.pdf")
+            env = {"SAMPLE_CLI_LONG_EXPORT": "1"}
+            case.control("fault", rule={"method": "apply", "command": "drawing export", "action": "result",
+                                        "result": {"persistence": "unsaved"}})
+            out = case.run("drawing", "export", "--session", "fake-1", "--doc", "doc-1", "--output", path, env=env)
+            self.assertTrue(out.ok, out.stdout[:400])
+            job = out.data["result"]["job"]["id"]
+            for _ in range(2):  # every time job get is asked
+                done = case.run("job", "get", "--job", job, "--wait", "60s", env=env)
+                self.assertEqual(done.data["receipt"]["outcome"]["persistence"], "unknown", done.stdout[:600])
+                notice = [n for n in done.envelope["meta"]["notices"] if n["type"] == "adapter_defect"]
+                self.assertEqual(len(notice), 1, done.stdout[:600])
+                self.assertIn('persistence "unsaved"', notice[0]["message"])
+
+    def test_a_batch_names_each_defect_once_and_fits(self):
+        with Case(subject()) as case:
+            case.control("fault", rule={"method": "apply", "command": "part move", "action": "result",
+                                        "result": {"persistence": "unsaved"}, "times": 0})
+            ids = [f"R{n}" for n in range(1, 4)]
+            argv = [*MOVE, "--ids", ",".join(ids), "--x", "3mm", "--y", "4mm"]
+            out = case.run(*argv)
+            if out.code == "E_CONFIRMATION_REQUIRED":
+                out = case.run(*argv, "--confirm", out.details["confirm_token"])
+            self.assertEqual(out.code, "E_OUTCOME_UNKNOWN", out.stdout[:600])
+            self.assertLessEqual(len(out.stdout.strip()), 2000)
+            notice = [n for n in out.envelope["meta"]["notices"] if n["type"] == "adapter_defect"]
+            self.assertEqual(len(notice), 1, out.stdout[:600])
+
+    def test_reported_dimensions(self):
+        sys.path.insert(0, str(REPO / "sdk" / "python"))
+        from _driver.writes import reported
+
+        contract = json.loads((REPO / "contract" / "driver-contract.json").read_text(encoding="utf-8"))
+        values, notes = reported(contract, {"change": "applied", "delivery": "not_applicable"}, "unknown", True)
+        self.assertEqual(values, ["applied", "not_applicable", "unknown"])
+        self.assertIn("no persistence", notes[0])
+        values, notes = reported(contract, {"change": "applied"}, "not_applicable", False)
+        self.assertEqual((values, notes), (["applied", "not_applicable", "not_applicable"], []))
+        import enum
+
+        values, notes = reported(contract, {"change": enum.Enum("Change", "APPLIED").APPLIED}, "unknown", False)
+        self.assertEqual(values[0], "unknown")
+        self.assertIn("Change.APPLIED", notes[0])
+
+
 if __name__ == "__main__":
     unittest.main()

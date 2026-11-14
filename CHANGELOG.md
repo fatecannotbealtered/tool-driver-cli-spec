@@ -4,6 +4,15 @@ All notable changes to tool-driver-cli-spec are recorded here. The format follow
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-14
+
+Fixes from the Xpedition tool on 1.3.1. Nothing to change in a tool after syncing; an adapter that reports a value the contract does not have now sees it named. Records, reports and evaluation results from before keep counting.
+
+### Fixed
+
+- `operation resolve` recorded the outcome and freed the target, then answered `E_USAGE` when the record was too long for one response, so the Agent took the settled write for a failure. The reply of a call that changed something, `operation resolve` or a write, is now shortened rather than refused, with a notice that names `operation get --output`, or `job get --output` for a long job, whose handle stays. A write's record keeps its whole result for that file, and a resolve's reply keeps how the outcome was settled (DCLI-008).
+- A change, delivery or persistence an adapter reported with a value the contract does not have, such as persistence `unsaved`, turned the outcome unknown without a word, so the defect looked like the application's. The receipt's notes and a notice of type `adapter_defect` now name the field, the value and the values allowed, for a write, the start of a long job and its end, also in a job the runtime's worker runs, where `job get` shows the notice each time; and so they do when `apply` leaves a dimension out. A batch names each defect once. The outcome stays unknown and the target locked, since the change may have been made (DCLI-062).
+
 ## [1.3.1] - 2026-11-13
 
 Fixes from the tools on 1.3.0. After syncing, an adapter that can see which change the application would undo checks the new `undoes` of the `undo` request and refuses an undo that would take back another change; other adapters keep working unchanged. Records, reports and evaluation results from before keep counting.

@@ -19,7 +19,7 @@ from .records import parse_utc, public, utc_now
 from .registry import Command, Flag
 from .runtime import Run
 from .update import SEMVER, newer
-from .writes import read_back, same
+from .writes import read_back, same, shorten_record, slim_receipt
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -490,8 +490,6 @@ def _record(run: Run, operation_id: str) -> dict[str, Any]:
 
 
 def operation_get(run: Run) -> Result:
-    from .writes import shorten_record, slim_receipt
-
     record = _record(run, run.call.values["--id"])
     data = public(record)
     path = run.call.values.get("--output")
@@ -530,8 +528,6 @@ def _record_untrusted() -> list[str]:
 
 
 def operation_list(run: Run) -> Result:
-    from .writes import shorten_record
-
     call = run.call
     state = call.values.get("--state", "all")
     batch = call.values.get("--batch")
@@ -587,7 +583,16 @@ def operation_resolve(run: Run) -> Result:
     with run.mutex.hold():  # the outcome is recorded and the target unlocked in one step
         run.records.save(record)
         run.locks._remove(operation_id)
-    return Result(public(record), _record_untrusted())
+    # The outcome is recorded: a record too long to show is shortened, never refused, since a
+    # refusal reads as a failure (DCLI-035).
+    data = public(record)
+    if isinstance(data.get("receipt"), dict):
+        data["receipt"] = slim_receipt(run, data["receipt"])
+    if shorten_record(run, data, _room(run)):
+        command = run.cmd("operation get", [("--id", operation_id)]) + " --output <file>"
+        run.notices.append({"type": "shortened", "severity": "info",
+                            "message": f"Settled; shortened to fit the response. `{command}` writes the whole record."})
+    return Result(data, _record_untrusted())
 
 
 def _read_outcome(run: Run, record: dict[str, Any]) -> tuple[str | None, dict[str, Any], str]:
