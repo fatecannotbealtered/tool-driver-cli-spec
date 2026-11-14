@@ -2,7 +2,7 @@
 
 English | [中文](DRIVER-CLI-SPEC_zh.md)
 
-> Version 1.3.1 · Clauses DCLI-001 to DCLI-281
+> Version 1.3.2 · Clauses DCLI-001 to DCLI-281
 
 ## How to Read
 
@@ -169,10 +169,10 @@ Check: 🤖 Runtime unit tests for dotted names and the notices; 👀 review of 
 
 ### DCLI-008 Response size
 
-Called with default arguments, a command MUST keep a success envelope within 8000 characters and an error envelope within 2000 characters, counting the whole envelope. An `E_CONFIRMATION_REQUIRED` envelope carries a preview and MUST keep within the success limit, 8000 characters (DCLI-054). Lists stay within the limits by paging (DCLI-006). A command whose result can be too large to fit, such as file content or a long log, MUST offer `--output <path>`: it writes the full result to that file, and the response holds only a summary and the file path. A dry run's preview is shortened first, as a confirmation's is (DCLI-054); when it still does not fit, the next action asks for fewer objects in one call. A job or an operation record too long to show is shortened, as DCLI-035 sets, with a notice that names `job get --output` or `operation get --output`, which write it whole; with `--output` the call succeeds once the file is written, and the response holds what fits and the file's path. Any other success envelope that is still too long fails with `E_USAGE`, whose next action names only what the command offers: `--fields`, `--limit` for a list, and `--output` for a read that has it. After a write that ran, it says so and names the operation, so that the Agent does not send the write again.
+Called with default arguments, a command MUST keep a success envelope within 8000 characters and an error envelope within 2000 characters, counting the whole envelope. An `E_CONFIRMATION_REQUIRED` envelope carries a preview and MUST keep within the success limit, 8000 characters (DCLI-054). Lists stay within the limits by paging (DCLI-006). A command whose result can be too large to fit, such as file content or a long log, MUST offer `--output <path>`: it writes the full result to that file, and the response holds only a summary and the file path. A dry run's preview is shortened first, as a confirmation's is (DCLI-054); when it still does not fit, the next action asks for fewer objects in one call. A job or an operation record too long to show is shortened, as DCLI-035 sets, with a notice that names `job get --output` or `operation get --output`, which write it whole; with `--output` the call succeeds once the file is written, and the response holds what fits and the file's path. The reply of a call that changed something, a write or `operation resolve`, MUST NOT be refused for its length, since a refusal reads as a failure and the Agent may send the change again: it is shortened the same way, keeping a long job's handle; the operation record of a write that has ended keeps the whole result, and a notice names `operation get --output`, or `job get --output` for a long job. Any other success envelope that is still too long fails with `E_USAGE`, whose next action names only what the command offers: `--fields`, `--limit` for a list, and `--output` for a read that has it.
 
 Why: Every character the tool returns costs the Agent context; a fixed limit keeps each call cheap.
-Check: 🤖 General conformance test R04 checks the size limits; runtime unit tests for a job and a record too long to show.
+Check: 🤖 General conformance test R04 checks the size limits; runtime unit tests for a job, a record and the reply of a write or a resolve too long to show.
 
 ## Errors
 
@@ -825,8 +825,10 @@ A tool MUST NOT choose `ok` or the error code of a write itself. The runtime MUS
 
 Rule 8 keeps "changed but not verified" from counting as a success. For the same reason, `verification` MUST NOT be `not_applicable` when anything was applied, saved or delivered (DCLI-057).
 
-Why: When the runtime derives `ok` from facts, no tool can report success that it has not seen.
-Check: 🤖 Driver conformance tests D07 and D08; runtime unit tests cover every rule.
+A change, delivery or persistence the adapter reports with a value the contract does not have, or that `apply` leaves out, counts as `unknown`, since the change may have been made. The runtime MUST then name the field, the value and the values allowed, in the receipt's notes and in a notice of type `adapter_defect`, so that the defect shows as the adapter's and not as the application's.
+
+Why: When the runtime derives `ok` from facts, no tool can report success that it has not seen. An outcome made unknown without a word sends the developer looking in the application for a fault that is in the adapter.
+Check: 🤖 Driver conformance tests D07 and D08; runtime unit tests cover every rule and the values the contract does not have.
 
 ### DCLI-063 Outcome unknown
 

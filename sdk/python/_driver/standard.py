@@ -19,7 +19,8 @@ from .records import utc_now
 from .registry import Command, Flag
 from .runtime import READ_DEADLINE_MS, SESSION_DEADLINE_MS, Run, Where, parallel
 from .targets import file_key, normalize
-from .writes import Engine, Verification, WriteSpec, combine, dispatch, read_back, record_state, shorten_record, slim_receipt, slim_result, verify_files
+from .writes import (Engine, Verification, WriteSpec, combine, defect_notices, dispatch, read_back, record_state, reported,
+                     shorten_record, slim_receipt, slim_result, verify_files)
 
 if TYPE_CHECKING:
     from .tool import Tool
@@ -400,9 +401,12 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any], made: 
     job, state = record["_job"], status["state"]
     execution = {"completed": "completed", "partial": "completed", "failed": "failed", "cancelled": "interrupted",
                  "unknown": "unknown"}[state]
-    dims = run.contract["receipt"]["dimensions"]
-    change, delivery, persistence = (status.get(d) if status.get(d) in dims[d] else "unknown"
-                                     for d in ("change", "delivery", "persistence"))
+    # A job's status may leave a dimension out, but apply in a worker may not; a value the
+    # contract does not have is the adapter's defect, which job get shows every time it is asked.
+    (change, delivery, persistence), wrong = reported(run.contract, status, "unknown", bool(status.get("_required")))
+    if wrong:
+        others = [n for n in job.get("notices") or [] if n.get("type") != "adapter_defect"]
+        job["notices"] = defect_notices(wrong) + others
     if state == "cancelled" and "change" not in status:
         change = "not_applied"
     if state in ("cancelled", "failed"):
@@ -421,7 +425,7 @@ def _settle_job(run: Run, record: dict[str, Any], status: dict[str, Any], made: 
     receipt["outcome"] = {"execution": execution, "change": change, "delivery": delivery, "persistence": persistence,
                           "verification": verification.status}
     receipt["observed"], receipt["mismatched"] = verification.observed, verification.mismatched
-    receipt["notes"] = [f"Long job {job['id']} ended {state}."] + verification.notes
+    receipt["notes"] = [f"Long job {job['id']} ended {state}."] + wrong + verification.notes
     if isinstance(status.get("native_message"), str):
         receipt["notes"].append(f"The application said: {status['native_message']}")
     record["receipt"] = receipt
@@ -666,10 +670,12 @@ def run_standard_job(run: Run, record: dict[str, Any]) -> None:
 
 
 def _keep_notices(record: dict[str, Any], run: Run) -> None:
-    """Notices the adapter gave in the worker stay with the job; job get shows them (DCLI-260)."""
+    """Notices the adapter gave in the worker stay with the job, beside its defects; job get shows
+    them (DCLI-260)."""
     kept = [n for n in run.notices if n.get("type") == "application"]
-    if kept:
-        record["_job"]["notices"] = kept
+    defects = [n for n in record["_job"].get("notices") or [] if n.get("type") == "adapter_defect"]
+    if kept or defects:
+        record["_job"]["notices"] = defects + kept
 
 
 def _job_dispatch(run: Run, apply: Any, strict: bool) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -739,6 +745,8 @@ def _job_dispatch_once(run: Run, apply: Any, strict: bool) -> tuple[dict[str, An
             if not strict:
                 for dim in ("change", "delivery", "persistence"):
                     status.setdefault(dim, "not_applicable")
+            else:
+                status["_required"] = True  # apply reports all three (DCLI-062)
     if not isinstance(wait_ms, int) or isinstance(wait_ms, bool):
         wait_ms = 500
     return status, facts if isinstance(facts, dict) else {}, wait_ms
